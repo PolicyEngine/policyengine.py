@@ -56,6 +56,8 @@ EXCEPTION_METADATA = {
     "exception_registry_sha256",
     "applied_exceptions",
     "budget_inputs_result_sha256",
+    "probe_result_sha256",
+    "probe_evidence_sha256",
 }
 
 
@@ -90,6 +92,20 @@ def _entry(**overrides):
         "issue": "PolicyEngine/policyengine-uk-data#573",
         "decided_under": "cos d1344",
         "review": "Independent review required before adoption.",
+        "approved_lineage": "Never supplied usably by any certified data release.",
+        "publication": "Not computable while the input is unavailable.",
+        "probe": {
+            "input_variable": overrides.get("requires_missing_inputs", [INPUT])[0],
+            "input_entity": "household",
+            "year": 2026,
+            "positive_input_gbp": 300_000,
+            "output_variable": "sdlt_on_residential_property_transactions",
+            "parameter": "gov.hmrc.stamp_duty.residential.purchase.additional.rate",
+            "rate_increment": 0.02,
+            "expected_change_gbp": 6_000,
+            "absolute_tolerance_gbp": 1,
+            "region": "LONDON",
+        },
         **overrides,
     }
 
@@ -98,8 +114,18 @@ def _registry(*entries):
     return ReplayExceptionRegistry.model_validate({"exceptions": list(entries)})
 
 
-def _budget_inputs(missing=(INPUT,), *, status="needs_review", newly_missing=None):
+def _budget_inputs(
+    missing=(INPUT,), *, status="needs_review", newly_missing=None, previous_status=None
+):
     evidence = {
+        "previous_input_status": (
+            {
+                name: {"in_model": False, "in_data": False, "usable": False}
+                for name in {*missing, INPUT}
+            }
+            if previous_status is None
+            else previous_status
+        ),
         "missing_inputs": sorted(missing),
         "newly_missing_inputs": sorted(
             missing if newly_missing is None else newly_missing
@@ -118,6 +144,39 @@ def _budget_inputs(missing=(INPUT,), *, status="needs_review", newly_missing=Non
         },
     )
     return result, evidence
+
+
+def _probe(registry=None, request=None, *, attempt_id="test-attempt"):
+    """Build same-attempt evidence matching every registered probe specification."""
+    if registry is None:
+        registry, _ = qualification._replay_exceptions()
+    if request is None:
+        request = ReplayQualificationRequest.model_validate(
+            golden("qualification_request_golden")
+        )
+    evidence = {
+        "attempt_id": attempt_id,
+        "candidate_model_version": request.candidate.policyengine_uk.version,
+        "probes": [
+            {
+                "exception_id": entry.id,
+                "spec_sha256": content_sha256(entry.probe.model_dump(mode="json")),
+                "status": "pass",
+                "positive_change_gbp": entry.probe.expected_change_gbp,
+                "zero_change_gbp": 0,
+            }
+            for entry in registry.exceptions
+        ],
+    }
+    return (
+        GateResult(
+            gate_id="replay_probe",
+            status="pass",
+            summary="Synthetic positive-input and zero-input probes passed.",
+            evidence_sha256=content_sha256(evidence),
+        ),
+        evidence,
+    )
 
 
 def _failed_receipt(year=2026, *, extra_failures=(), rows=None):
@@ -148,19 +207,37 @@ def _failed_receipt(year=2026, *, extra_failures=(), rows=None):
     return _sealed(document)
 
 
-def _judge(document, *, registry=None, budget=None, request=None, evaluator=None):
+def _judge(
+    document,
+    *,
+    registry=None,
+    budget=None,
+    probe="default",
+    request=None,
+    evaluator=None,
+    attempt_id="test-attempt",
+):
     request = request or ReplayQualificationRequest.model_validate(
         golden("qualification_request_golden")
     )
     result, evidence = budget if budget is not None else _budget_inputs()
     evaluator = evaluator or evaluate_replay_receipt
+    registry = registry if registry is not None else _registry(_entry())
+    probe_result, probe_evidence = (
+        _probe(registry, request, attempt_id=attempt_id)
+        if probe == "default"
+        else probe
+    )
     return evaluator(
         request,
         _status(request.request_id, document),
         ReplayReceipt.from_document(document),
-        exception_registry=registry if registry is not None else _registry(_entry()),
+        exception_registry=registry,
         budget_inputs_result=result,
         budget_inputs_evidence=evidence,
+        probe_result=probe_result,
+        probe_evidence=probe_evidence,
+        attempt_id=attempt_id,
     )
 
 
@@ -250,6 +327,8 @@ def test_applied_exceptions_always_require_a_named_review(
     items = gate.details["review_items"]
     assert any(
         item.get("exception_id") == "test-purchase-input"
+        and item.get("publication") == _entry()["publication"]
+        and item.get("approved_lineage") == _entry()["approved_lineage"]
         and item.get("cause") == _entry()["cause"]
         and INPUT in item.get("requires_missing_inputs", [])
         for item in items
@@ -424,10 +503,15 @@ def _real_receipt():
 
 
 def _real_budget():
-    return (
-        GateResult.model_validate(_json("uk2.134.7_budget_inputs.result.json")),
-        _json("uk2.134.7_budget_inputs.json"),
-    )
+    """Add explicit never-usable lineage to copies of the archived evidence."""
+    evidence = _json("uk2.134.7_budget_inputs.json")
+    evidence["previous_input_status"] = {
+        INPUT: {"in_model": False, "in_data": False, "usable": False}
+    }
+    result = GateResult.model_validate(_json("uk2.134.7_budget_inputs.result.json"))
+    return result.model_copy(
+        update={"evidence_sha256": content_sha256(evidence)}
+    ), evidence
 
 
 def test_real_21347_failed_receipt_has_exactly_five_reviewed_measure_years():
@@ -435,12 +519,16 @@ def test_real_21347_failed_receipt_has_exactly_five_reviewed_measure_years():
     request, document = _real_receipt()
     budget = _real_budget()
     receipt = ReplayReceipt.from_document(document)
+    probe_result, probe_evidence = _probe(request=request)
     gate = evaluate_replay_receipt(
         request,
         _status(request.request_id, document),
         receipt,
         budget_inputs_result=budget[0],
         budget_inputs_evidence=budget[1],
+        probe_result=probe_result,
+        probe_evidence=probe_evidence,
+        attempt_id="test-attempt",
     )
     assert gate.status == "needs_review", gate.summary
     applied = gate.details["applied_exceptions"]
@@ -452,6 +540,11 @@ def test_real_21347_failed_receipt_has_exactly_five_reviewed_measure_years():
         for item in applied
     )
     assert gate.details["regressions"] == []
+    assert all(item["publication"] for item in applied)
+    assert gate.details["probe_result_sha256"] == content_sha256(
+        probe_result.canonical_payload()
+    )
+    assert gate.details["probe_evidence_sha256"] == content_sha256(probe_evidence)
     assert gate.details["budget_inputs_result_sha256"] == content_sha256(
         budget[0].canonical_payload()
     )
@@ -483,12 +576,16 @@ def test_real_21347_receipt_fails_when_exception_conditions_no_longer_hold(chang
             {"code": "event_outputs_missing", "detail": "Synthetic unrelated failure."}
         )
         document = _sealed(document)
+    probe_result, probe_evidence = _probe(request=request)
     gate = evaluate_replay_receipt(
         request,
         _status(request.request_id, document),
         ReplayReceipt.from_document(document),
         budget_inputs_result=result,
         budget_inputs_evidence=evidence,
+        probe_result=probe_result,
+        probe_evidence=probe_evidence,
+        attempt_id="test-attempt",
     )
     assert gate.status == "fail"
 
@@ -767,3 +864,191 @@ def test_diff_only_invariant_kills_mutant_removing_zero_total_exception():
     )
     with pytest.raises(AssertionError):
         _assert_diff_only_exception(evaluator=mutant)
+
+
+@settings(max_examples=80, deadline=None)
+@given(
+    value=st.floats(allow_nan=False, allow_infinity=False).filter(
+        lambda value: value != 0
+    ),
+    level=st.sampled_from(["measure_year", "source_row"]),
+    base_known_gap=st.booleans(),
+)
+def test_any_nonzero_candidate_effect_prevents_an_exception(
+    value, level, base_known_gap
+):
+    document = _failed_receipt()
+    row = copy.deepcopy(document["diff"]["flagged_rows"][0])
+    row.update(level=level, key="total" if level == "measure_year" else "source-1")
+    row["head_gbp"] = value
+    if level == "measure_year":
+        document["diff"]["flagged_rows"][0] = row
+    else:
+        document["diff"]["flagged_rows"].append(row)
+        for flag in row["flags"]:
+            document["diff"]["flag_counts"][flag] += 1
+    if base_known_gap:
+        document["diff"]["base_events"] = {EVENT: _base_event(inert=[(MEASURE, 2026)])}
+    gate = _judge(_sealed(document))
+    assert gate.status == "fail"
+    assert gate.details["applied_exceptions"] == []
+    assert gate.details["regressions"]
+
+
+@settings(max_examples=40, deadline=None)
+@given(
+    year=st.integers(2025, 2029),
+    missing=st.sets(st.sampled_from([INPUT, "another_input", "noise"])),
+)
+def test_a_previously_usable_input_never_authorizes_the_exception(year, missing):
+    gate = _judge(
+        _failed_receipt(year),
+        registry=_registry(_entry(years=[year])),
+        budget=_budget_inputs(
+            sorted(missing | {INPUT}),
+            previous_status={
+                INPUT: {"in_model": True, "in_data": True, "usable": True}
+            },
+        ),
+    )
+    assert gate.status == "fail"
+    assert gate.details["applied_exceptions"] == []
+    assert "fresh registry decision" in str(gate.model_dump()).lower()
+
+
+def test_missing_previous_input_lineage_fails_closed():
+    gate = _judge(_failed_receipt(), budget=_budget_inputs(previous_status={}))
+    assert gate.status == "fail"
+    assert gate.details["applied_exceptions"] == []
+
+
+def _invalid_probe(change, registry=None, request=None):
+    result, evidence = _probe(registry or _registry(_entry()), request)
+    if change == "missing_result":
+        return None, evidence
+    if change == "missing_evidence":
+        return result, None
+    if change == "wrong_digest":
+        return result.model_copy(update={"evidence_sha256": "0" * 64}), evidence
+    if change == "wrong_gate":
+        return result.model_copy(update={"gate_id": "other_probe"}), evidence
+    if change == "failed_result":
+        return result.model_copy(update={"status": "fail"}), evidence
+    if change == "failed_probe":
+        evidence["probes"][0]["status"] = "fail"
+    elif change == "missing_probe":
+        evidence["probes"] = []
+    elif change == "wrong_spec":
+        evidence["probes"][0]["spec_sha256"] = "0" * 64
+    elif change == "wrong_attempt":
+        evidence["attempt_id"] = "another-attempt"
+    elif change == "wrong_model":
+        evidence["candidate_model_version"] = "0.0.0"
+    elif change == "zero_control_moves":
+        evidence["probes"][0]["zero_change_gbp"] = 1
+    elif change == "positive_control_inert":
+        evidence["probes"][0]["positive_change_gbp"] = 0
+    else:
+        raise AssertionError(change)
+    return result.model_copy(
+        update={"evidence_sha256": content_sha256(evidence)}
+    ), evidence
+
+
+PROBE_FAILURES = [
+    "missing_result",
+    "missing_evidence",
+    "wrong_digest",
+    "wrong_gate",
+    "failed_result",
+    "failed_probe",
+    "missing_probe",
+    "wrong_spec",
+    "wrong_attempt",
+    "wrong_model",
+    "zero_control_moves",
+    "positive_control_inert",
+]
+
+
+@settings(max_examples=45, deadline=None)
+@given(change=st.sampled_from(PROBE_FAILURES), year=st.integers(2025, 2029))
+def test_failing_missing_or_unbound_probe_never_authorizes_an_exception(change, year):
+    registry = _registry(_entry(years=[year]))
+    gate = _judge(
+        _failed_receipt(year), registry=registry, probe=_invalid_probe(change, registry)
+    )
+    assert gate.status == "fail"
+    assert gate.details["applied_exceptions"] == []
+
+
+def test_real_21347_receipt_fails_without_a_positive_input_probe():
+    request, document = _real_receipt()
+    registry, _ = qualification._replay_exceptions()
+    gate = _judge(
+        document,
+        registry=registry,
+        request=request,
+        budget=_real_budget(),
+        probe=(None, None),
+    )
+    assert gate.status == "fail"
+    assert gate.details["applied_exceptions"] == []
+
+
+def test_nonzero_effect_invariant_kills_skip_coherence_mutant():
+    mutant = _source_mutant(
+        'and row.level in ("measure_year", "source_row")\n'
+        "        and row.head_gbp not in (None, 0)",
+        'and row.level in ("measure_year", "source_row")\n        and False',
+    )
+    document = _failed_receipt(
+        rows=[
+            {
+                "flags": ["structural", "inertness"],
+                "base_gbp": 2.5e9,
+                "head_gbp": 1_000_000_000,
+            }
+        ]
+    )
+    gate = _judge(document, evaluator=mutant)
+    with pytest.raises(AssertionError):
+        assert gate.status == "fail"
+
+
+def test_previously_usable_invariant_kills_skip_lineage_mutant():
+    mutant = _source_mutant("if lineage_problem is not None:", "if False:")
+    budget = _budget_inputs(
+        previous_status={
+            INPUT: {"in_model": True, "in_data": True, "usable": True},
+        }
+    )
+    gate = _judge(_failed_receipt(), budget=budget, evaluator=mutant)
+    with pytest.raises(AssertionError):
+        assert gate.status == "fail"
+
+
+def test_failing_probe_invariant_kills_skip_probe_mutant():
+    mutant = _source_mutant(
+        """if not _replay_probe_passes(
+                entry, request, probe_result, probe_evidence, attempt_id
+            ):""",
+        "if False:",
+    )
+    gate = _judge(
+        _failed_receipt(), evaluator=mutant, probe=_invalid_probe("failed_probe")
+    )
+    with pytest.raises(AssertionError):
+        assert gate.status == "fail"
+
+
+def test_same_attempt_invariant_kills_accept_another_attempt_mutant(monkeypatch):
+    mutant = _source_mutant(
+        '        or evidence.get("attempt_id") != attempt_id\n',
+        "",
+        function=qualification._replay_probe_passes,
+    )
+    monkeypatch.setattr(qualification, "_replay_probe_passes", mutant)
+    gate = _judge(_failed_receipt(), probe=_invalid_probe("wrong_attempt"))
+    with pytest.raises(AssertionError):
+        assert gate.status == "fail"

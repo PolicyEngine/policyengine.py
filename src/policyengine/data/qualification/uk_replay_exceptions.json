@@ -1,5 +1,5 @@
 {
-  "_comment": "Narrow data-limited exceptions for the UK replay qualification gate, reviewed like code under cos d1344. An entry requires the same attempt's budget_inputs result to confirm its required inputs are missing, and always requires a named reviewer's acceptance. The 17 October 2026 decision remains proposed pending independent review agreement; the review metadata records that status.",
+  "_comment": "Narrow data-limited exceptions for the UK replay qualification gate, reviewed like code under cos d1344. An entry requires coherent zero candidate effects, never-usable input lineage from budget_inputs, and a passing positive-input probe from the same attempt. It always requires a named reviewer's acceptance. The 17 October 2026 decision remains proposed pending independent review agreement; the review metadata records that status.",
   "exceptions": [
     {
       "id": "ab2024-sdlt-hrad-purchase-input",
@@ -21,6 +21,20 @@
       ],
       "cause": "policyengine-uk#2241 charges SDLT higher rates on purchases, which uk-data does not yet impute.",
       "issue": "PolicyEngine/policyengine-uk-data#573 (cos d1354)",
+      "approved_lineage": "never supplied by any certified uk-data release up to and including 1.58.2.",
+      "publication": "not computable, in PolicyEngine/uk-autumn-budget-dashboard-2026 (data-limited handling, PR #51; Budget-day runbook, PR #14).",
+      "probe": {
+        "input_variable": "additional_residential_property_purchased",
+        "input_entity": "household",
+        "year": 2026,
+        "positive_input_gbp": 300000,
+        "output_variable": "sdlt_on_residential_property_transactions",
+        "parameter": "gov.hmrc.stamp_duty.residential.purchase.additional.rate",
+        "rate_increment": 0.02,
+        "expected_change_gbp": 6000,
+        "absolute_tolerance_gbp": 0.1,
+        "region": "LONDON"
+      },
       "decided_under": "cos d1344; Budget coordinator's data-limited exception proposal of 17 October 2026",
       "review": "Proposed; the decision record requires independent review agreement before adoption and does not yet record that agreement."
     }

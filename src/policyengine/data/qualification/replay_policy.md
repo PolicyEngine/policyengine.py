@@ -76,18 +76,41 @@ measure-year as inert (exactly £0) or missing (no value).
 ## Data-limited exceptions
 
 `uk_replay_exceptions.json` lists narrowly scoped exceptions for regressions
-caused by inputs absent from the candidate's data. The registry is reviewed
-like code. Each entry records an id, failure codes, event, measure key,
-years, required missing inputs, cause, tracking issue, governing decision
-and review status.
+caused by inputs absent from the candidate's data. Missingness alone does
+not establish cause. The registry is reviewed like code. Each entry records
+an id, failure codes, event, measure key, years, required missing inputs,
+cause, tracking issue, approved lineage, positive-input probe specification,
+publication designation, governing decision and review status.
 
 An exception applies only when its code, event, measure key and year all
 match, and the same qualification attempt's `budget_inputs` gate result
 and its evidence report every required input as missing from the
-candidate's data. Newly missing inputs and inputs missing in both pairs
-can satisfy that condition; a degenerate but present input cannot. When
-the data gains an input, or the measure-year falls outside the entry's
-years, the exception stops applying automatically.
+candidate's data. A degenerate but present input cannot satisfy that
+condition. The same evidence must show that the previous certified pair
+never supplied the input usably: its model did not define the input, or
+its data lacked the input column. A previous pair with both the variable
+and column present requires a fresh reviewed registry decision and fails,
+including when the previous column was degenerate. The approved
+SDLT lineage is that no certified uk-data release through 1.58.2 supplied
+the input. When the data gains an input, or the measure-year falls outside
+the entry's years, the exception stops applying automatically.
+
+Every excepted measure-year must have a candidate effect of exactly £0
+at the measure-total level and on every source row. Any nonzero candidate
+effect is a contradiction and fails, independently of any base known gap.
+
+The gates job also runs the registry's positive-input probe directly on the
+exact installed candidate model, using one synthetic household and no
+survey data. For the SDLT exception, an England household buys an additional
+residential property for £300,000 in 2026. The reform adds 0.02 to every
+band of `gov.hmrc.stamp_duty.residential.purchase.additional.rate`. Its
+`sdlt_on_residential_property_transactions` output must increase by £6,000
+within £0.10, and must be exactly unchanged when the purchase input is £0.
+An import error, missing variable or parameter, or any other inability to
+run the probe records failure. An exception requires a passing probe from
+the same attempt (identified by both pair id and attempt key), bound to the
+candidate model version and probe specification by digests. Finalization
+re-reads the evidence and verifies its digest, as it does for `budget_inputs`.
 
 Matching `construction_inert` integrity failures and `lost_response`
 regressions (candidate inertness or a measure-year total of £0 against a
@@ -101,10 +124,16 @@ does not excuse a missing result.
 
 An applied exception always requires review and can never qualify a
 candidate automatically. Promotion requires a named reviewer to accept
-the exact qualification receipt. The gate records every applied
-exception's id, event, measure key, year and matched codes, the registry's
-SHA-256, and the digest of the same attempt's `budget_inputs` result it
-relied on. Every result that reads the registry records its digest.
+the exact qualification receipt. Applied-exception review items carry the
+registry's publication designation, and the named reviewer's acceptance
+explanation must restate it. For SDLT the designation is: not computable,
+in PolicyEngine/uk-autumn-budget-dashboard-2026 (data-limited handling,
+PR #51; Budget-day runbook, PR #14).
+
+The gate records every applied exception's id, event, measure key, year
+and matched codes, the registry's SHA-256, and the digests of the same
+attempt's `budget_inputs` and probe results it relied on. Every result
+that reads the registry records its digest.
 
 ## Review
 

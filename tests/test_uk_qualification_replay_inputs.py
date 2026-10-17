@@ -64,6 +64,178 @@ def _replay_documents():
     return request, status, receipt
 
 
+def _probe_evidence(attempt, request=None):
+    from tests.test_replay_exceptions import _probe
+
+    if not (attempt / "candidate.json").exists():
+        write_json(
+            attempt / "candidate.json", {"pair": make_pair().canonical_payload()}
+        )
+    result, evidence = _probe(
+        request=request, attempt_id=uk_qualification.attempt_evidence_id(attempt)
+    )
+    uk_qualification.write_gate_results(attempt, [result], {"replay_probe": evidence})
+    return result, evidence
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "none",
+        "no_result",
+        "no_evidence",
+        "changed_evidence",
+        "another_attempt",
+        "wrong_gate",
+        "invalid_json",
+    ],
+)
+def test_attempt_probe_evidence_is_digest_bound_and_attempt_bound(tmp_path, damage):
+    result, evidence = _probe_evidence(tmp_path)
+    result_path = tmp_path / "gates/replay_probe.result.json"
+    evidence_path = tmp_path / "gates/replay_probe.json"
+    if damage == "no_result":
+        result_path.unlink()
+    elif damage == "no_evidence":
+        evidence_path.unlink()
+    elif damage == "changed_evidence":
+        write_json(evidence_path, {**evidence, "probes": []})
+    elif damage == "another_attempt":
+        replacement = {**evidence, "attempt_id": "a-different-attempt"}
+        write_json(evidence_path, replacement)
+        write_json(
+            result_path,
+            {
+                **result.canonical_payload(),
+                "evidence_sha256": content_sha256(replacement),
+            },
+        )
+    elif damage == "wrong_gate":
+        write_json(result_path, {**result.canonical_payload(), "gate_id": "other"})
+    elif damage == "invalid_json":
+        evidence_path.write_text("invalid JSON")
+    actual = uk_qualification.load_attempt_replay_probe(tmp_path)
+    assert actual == ((result, evidence) if damage == "none" else (None, None))
+
+
+def test_probe_evidence_never_falls_back_to_another_attempt(tmp_path):
+    _probe_evidence(tmp_path / "older")
+    assert uk_qualification.load_attempt_replay_probe(tmp_path / "current") == (
+        None,
+        None,
+    )
+
+
+def test_probe_cannot_cross_pairs_with_the_same_attempt_directory_name(tmp_path):
+    source = tmp_path / "pair_one" / "attempts" / "same-base-commit"
+    target = tmp_path / "pair_two" / "attempts" / "same-base-commit"
+    result, evidence = _probe_evidence(source)
+    write_json(
+        target / "candidate.json",
+        {"pair": make_pair(model="2.134.7").canonical_payload()},
+    )
+    uk_qualification.write_gate_results(target, [result], {"replay_probe": evidence})
+    assert uk_qualification.attempt_evidence_id(source) != (
+        uk_qualification.attempt_evidence_id(target)
+    )
+    assert uk_qualification.load_attempt_replay_probe(target) == (None, None)
+
+
+def test_read_replay_threads_probe_evidence(tmp_path, monkeypatch):
+    request, status, receipt = _replay_documents()
+    result, evidence = _probe_evidence(tmp_path)
+    calls = []
+
+    def evaluate(*args, **kwargs):
+        calls.append(kwargs)
+        return GateResult(gate_id="replay", status="needs_review", summary="review")
+
+    monkeypatch.setattr(uk_qualification, "evaluate_replay_receipt", evaluate)
+    uk_qualification.read_replay(
+        request,
+        fetch=lambda ref, path: json.dumps(
+            status.document() if path.endswith("STATUS.json") else receipt.document()
+        ).encode(),
+        state_ref="replay-state",
+        probe_result=result,
+        probe_evidence=evidence,
+        attempt_id=uk_qualification.attempt_evidence_id(tmp_path),
+    )
+    assert calls[0]["probe_result"] == result
+    assert calls[0]["probe_evidence"] == evidence
+    assert calls[0]["attempt_id"] == uk_qualification.attempt_evidence_id(tmp_path)
+
+
+def test_gates_command_persists_probe_from_installed_candidate(tmp_path, monkeypatch):
+    from policyengine.provenance import replay_probe, uk_candidate
+
+    spec = importlib.util.spec_from_file_location(
+        "check_uk_probe_gates",
+        Path(__file__).resolve().parents[1] / "scripts/check_uk_candidate.py",
+    )
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    pair = make_pair()
+    attempt = tmp_path / "attempt"
+    result, evidence = _probe_evidence(attempt)
+    # Remove prewritten files so the command itself must produce both.
+    for path in (attempt / "gates").iterdir():
+        path.unlink()
+    monkeypatch.setattr(
+        cli,
+        "_attempt",
+        lambda args: (attempt, {"pair": pair.canonical_payload()}, HARNESS),
+    )
+    monkeypatch.setattr(cli, "git", lambda *args: HARNESS.git_commit)
+    monkeypatch.setattr(cli, "config", lambda: {})
+    monkeypatch.setattr(
+        cli, "resolved_from", lambda payload: SimpleNamespace(pair=pair)
+    )
+    monkeypatch.setattr(uk_candidate, "run_candidate_gates", lambda *a, **k: ([], {}))
+    calls = []
+
+    def run(**kwargs):
+        calls.append(kwargs)
+        return result, evidence
+
+    monkeypatch.setattr(replay_probe, "run_replay_probes", run)
+    assert cli.cmd_gates(SimpleNamespace(work_dir=str(tmp_path))) == 0
+    assert calls == [
+        {
+            "attempt_id": uk_qualification.attempt_evidence_id(attempt),
+            "candidate_model_version": pair.model.version,
+        }
+    ]
+    assert uk_qualification.load_attempt_replay_probe(attempt) == (result, evidence)
+    assert uk_qualification.load_gate_results(attempt) == []
+
+
+def test_exception_acceptance_requires_publication_designation():
+    from tests.qualification_fixtures import make_receipt
+
+    publication = "not computable, in the Budget dashboard and runbook."
+    replay = GateResult(
+        gate_id="replay",
+        status="needs_review",
+        summary="Data-limited exception",
+        details={"applied_exceptions": [{"publication": publication}]},
+    )
+    receipt = make_receipt(
+        gate_results=[replay if gate.gate_id == "replay" else gate for gate in gates()]
+    )
+    kwargs = {
+        "reviewer": "reviewer",
+        "accepted_receipt_sha256": receipt.unreviewed_sha256,
+        "accepted_at": "2026-10-17T10:00:00Z",
+    }
+    with pytest.raises(ValueError, match="publication designation"):
+        uk_qualification.accept_review(receipt, explanation="Accepted", **kwargs)
+    reviewed = uk_qualification.accept_review(
+        receipt, explanation=f"Accepted with publication: {publication}", **kwargs
+    )
+    assert reviewed.promotable
+
+
 @pytest.mark.parametrize(
     "damage",
     ["none", "no_result", "no_evidence", "changed_evidence", "wrong_gate", "no_digest"],
@@ -126,6 +298,9 @@ def test_read_replay_threads_budget_input_evidence(tmp_path, monkeypatch):
     assert calls[0][1] == {
         "budget_inputs_result": result,
         "budget_inputs_evidence": evidence,
+        "probe_result": None,
+        "probe_evidence": None,
+        "attempt_id": None,
     }
 
 
@@ -156,7 +331,12 @@ def test_finalize_reevaluates_replay_with_current_attempt_inputs(
         write_json(attempt / "gates/budget_inputs.json", {"missing_inputs": []})
     calls = []
 
-    def evaluate(*args, budget_inputs_result, budget_inputs_evidence):
+    def evaluate(*args, budget_inputs_result, budget_inputs_evidence, **kwargs):
+        assert kwargs == {
+            "probe_result": None,
+            "probe_evidence": None,
+            "attempt_id": uk_qualification.attempt_evidence_id(attempt),
+        }
         calls.append((budget_inputs_result, budget_inputs_evidence))
         return GateResult(
             gate_id="replay",
@@ -196,6 +376,7 @@ def test_poll_replay_reads_same_attempt_inputs(tmp_path, monkeypatch):
     spec.loader.exec_module(cli)
     request, status, receipt = _replay_documents()
     result, evidence = _input_evidence(tmp_path)
+    write_json(tmp_path / "candidate.json", {"pair": make_pair().canonical_payload()})
     write_json(tmp_path / "replay/request.json", request.document())
     monkeypatch.setattr(
         cli,
@@ -227,6 +408,9 @@ def test_poll_replay_reads_same_attempt_inputs(tmp_path, monkeypatch):
             "state_ref": "state",
             "budget_inputs_result": result,
             "budget_inputs_evidence": evidence,
+            "probe_result": None,
+            "probe_evidence": None,
+            "attempt_id": uk_qualification.attempt_evidence_id(tmp_path),
         }
     ]
 
@@ -341,6 +525,7 @@ def test_finalize_real_failed_receipt_uses_same_attempt_input_evidence(tmp_path)
         attempt, [budget_result], {"budget_inputs": budget_evidence}
     )
     request, receipt = _real_receipt()
+    _probe_evidence(attempt, request)
     write_json(attempt / "replay/request.json", request.document())
     write_json(
         attempt / "replay/status.json", _status(request.request_id, receipt).document()

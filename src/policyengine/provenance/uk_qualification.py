@@ -929,6 +929,9 @@ def read_replay(
     state_ref: str,
     budget_inputs_result: GateResult | None = None,
     budget_inputs_evidence: Mapping[str, Any] | None = None,
+    probe_result: GateResult | None = None,
+    probe_evidence: Mapping[str, Any] | None = None,
+    attempt_id: str | None = None,
 ) -> tuple[GateResult, Optional[ReplayStatus], Optional[ReplayReceipt]]:
     """Read the scorecard's status and, when terminal, its receipt.
 
@@ -968,6 +971,9 @@ def read_replay(
             receipt,
             budget_inputs_result=budget_inputs_result,
             budget_inputs_evidence=budget_inputs_evidence,
+            probe_result=probe_result,
+            probe_evidence=probe_evidence,
+            attempt_id=attempt_id,
         ),
         status,
         receipt,
@@ -1031,6 +1037,18 @@ def accept_review(
         raise ValueError(
             "The acceptance names different receipt bytes "
             f"({accepted_receipt_sha256}, current {receipt.unreviewed_sha256})."
+        )
+    publications = {
+        item["publication"]
+        for gate in receipt.gates
+        if gate.gate_id == "replay"
+        for item in gate.details.get("applied_exceptions", [])
+        if isinstance(item.get("publication"), str)
+    }
+    if any(publication not in explanation for publication in publications):
+        raise ValueError(
+            "Acceptance must restate each data-limited exception's publication "
+            "designation: " + "; ".join(sorted(publications))
         )
     return receipt.model_copy(
         update={
@@ -1121,6 +1139,9 @@ def load_gate_results(attempt_dir: Path) -> list[GateResult]:
     results = [
         GateResult.model_validate(read_json(path))
         for path in sorted((attempt_dir / "gates").glob("*.result.json"))
+        # The synthetic probe authorizes an exception; it is not an additional
+        # independent gate for candidates that do not need an exception.
+        if path.name != "replay_probe.result.json"
     ]
     replay = attempt_dir / "replay" / "replay.result.json"
     if replay.exists():
@@ -1149,6 +1170,39 @@ def load_attempt_budget_inputs(
         or not isinstance(evidence, Mapping)
         or result.evidence_sha256 != content_sha256(evidence)
     ):
+        return None, None
+    return result, evidence
+
+
+def attempt_evidence_id(attempt_dir: Path) -> str:
+    """Stable identity across job checkouts, including the exact candidate pair.
+
+    Attempt directory names alone repeat across pairs at the same base commit.
+    """
+
+    candidate = read_json(attempt_dir / "candidate.json")
+    pair = CandidatePair.model_validate(candidate["pair"])
+    return f"{pair.pair_id}/{attempt_dir.name}"
+
+
+def load_attempt_replay_probe(
+    attempt_dir: Path,
+) -> tuple[GateResult | None, Mapping[str, Any] | None]:
+    """Read this attempt's probe, never a cached result from another attempt."""
+
+    result_path = attempt_dir / "gates" / "replay_probe.result.json"
+    evidence_path = attempt_dir / "gates" / "replay_probe.json"
+    try:
+        result = GateResult.model_validate(read_json(result_path))
+        evidence = read_json(evidence_path)
+        if (
+            result.gate_id != "replay_probe"
+            or not isinstance(evidence, Mapping)
+            or evidence.get("attempt_id") != attempt_evidence_id(attempt_dir)
+            or result.evidence_sha256 != content_sha256(evidence)
+        ):
+            return None, None
+    except (OSError, ValueError, TypeError, KeyError):
         return None, None
     return result, evidence
 
@@ -1201,12 +1255,16 @@ def finalize_attempt(
             # Reevaluate the received bytes with this attempt's input evidence;
             # a cached replay result must not bypass its missing-input condition.
             budget_result, budget_evidence = load_attempt_budget_inputs(attempt_dir)
+            probe_result, probe_evidence = load_attempt_replay_probe(attempt_dir)
             replay_gate = evaluate_replay_receipt(
                 request,
                 status,
                 ReplayReceipt.from_document(read_json(replay_receipt_path)),
                 budget_inputs_result=budget_result,
                 budget_inputs_evidence=budget_evidence,
+                probe_result=probe_result,
+                probe_evidence=probe_evidence,
+                attempt_id=attempt_evidence_id(attempt_dir),
             )
             replay_reevaluated = True
             gates = [gate for gate in gates if gate.gate_id != "replay"]

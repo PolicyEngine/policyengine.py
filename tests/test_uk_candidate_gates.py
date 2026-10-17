@@ -2754,6 +2754,78 @@ def test_previous_evidence_belongs_to_the_receipts_attempt(tmp_path):
 
 
 @pytest.mark.parametrize(
+    "damage",
+    [
+        "none",
+        "empty_status",
+        "missing_counts",
+        "wrong_model_count",
+        "wrong_input_count",
+        "wrong_data_count",
+        "missing_list",
+    ],
+)
+def test_previous_lineage_requires_a_complete_variable_enumeration(tmp_path, damage):
+    name = "additional_residential_property_purchased"
+    inputs = {
+        "model_variables": 1,
+        "model_input_variables": 1,
+        "dataset_columns": 0,
+        "missing_inputs": [name],
+        "unusable_critical": [],
+        "input_status": {
+            name: {
+                "in_model": True,
+                "is_input": True,
+                "in_data": False,
+                "usable": False,
+            }
+        },
+    }
+    if damage == "empty_status":
+        inputs["input_status"] = {}
+    elif damage == "missing_counts":
+        inputs.pop("model_variables")
+    elif damage == "wrong_model_count":
+        inputs["model_variables"] = 2
+    elif damage == "wrong_input_count":
+        inputs["model_input_variables"] = 2
+    elif damage == "wrong_data_count":
+        inputs["dataset_columns"] = 1
+    elif damage == "missing_list":
+        inputs["missing_inputs"] = []
+    evidence = {
+        "supported_years": {"supported_years": [2025, 2026]},
+        "budget_inputs": inputs,
+    }
+    pair = make_pair()
+    _write_previous_receipt(tmp_path, pair, evidence)
+    actual = gates_module._previous_gate_evidence(tmp_path, _previous_identity(pair))
+    assert actual == (evidence if damage == "none" else {})
+
+
+def test_formula_backed_supplied_variable_is_recorded_as_previously_usable(tmp_path):
+    _, evidence = budget_inputs(
+        make_pair(),
+        tmp_path / "unused.h5",
+        model_input_variables=["pure_input"],
+        model_variables=["pure_input", "formula_backed_variable"],
+        critical_inputs=[],
+        accepted_gaps={},
+        previous_missing_inputs=None,
+        previous_unusable_critical=None,
+        tables={"household": pd.DataFrame({"formula_backed_variable": [0, 300_000]})},
+    )
+    assert evidence["input_status"]["formula_backed_variable"] == {
+        "in_model": True,
+        "is_input": False,
+        "in_data": True,
+        "usable": True,
+    }
+    assert evidence["model_variables"] == 2
+
+
+@pytest.mark.parametrize(
     "corruption", ["digest", "shape", "receipt", "missing identity"]
 )
 def test_unverified_previous_evidence_is_recomputed(tmp_path, corruption):
@@ -2782,9 +2854,9 @@ def test_unverified_previous_evidence_is_recomputed(tmp_path, corruption):
     assert gates_module._previous_gate_evidence(tmp_path, previous) == {}
 
 
-@pytest.mark.parametrize("corrupt_baseline", [False, True])
+@pytest.mark.parametrize("baseline_kind", ["valid", "corrupt", "legacy"])
 def test_orchestration_hashes_every_finalized_gate_evidence(
-    tmp_path, monkeypatch, corrupt_baseline
+    tmp_path, monkeypatch, baseline_kind
 ):
     from policyengine.provenance import dataset_materialization
     from policyengine.provenance.qualification_ledger import write_json
@@ -2806,11 +2878,20 @@ def test_orchestration_hashes_every_finalized_gate_evidence(
         SimpleNamespace(system=SimpleNamespace(variables={})),
     )
     baseline = {
-        "budget_inputs": {"missing_inputs": [], "unusable_critical": []},
+        "budget_inputs": {
+            "missing_inputs": [],
+            "unusable_critical": [],
+            "input_status": {},
+            "model_variables": 0,
+            "model_input_variables": 0,
+            "dataset_columns": 0,
+        },
         "supported_years": {"supported_years": [2025]},
     }
+    if baseline_kind == "legacy":
+        baseline["budget_inputs"].pop("input_status")
     _, attempt = _write_previous_receipt(tmp_path, pair, baseline)
-    if corrupt_baseline:
+    if baseline_kind == "corrupt":
         write_json(
             attempt / "gates" / "supported_years.json", {"supported_years": [2024]}
         )
@@ -2822,6 +2903,7 @@ def test_orchestration_hashes_every_finalized_gate_evidence(
             "missing_inputs": [],
             "unusable_critical": [],
             "supported_years": [2025],
+            "input_status": {},
         }
 
     monkeypatch.setattr(gates_module, "run_inputs_snapshot", snapshot)
@@ -2887,10 +2969,10 @@ def test_orchestration_hashes_every_finalized_gate_evidence(
         != gates_module.evidence_sha256(evidence[result.gate_id])
     ]
     assert mismatches == []
-    assert snapshots == (["python"] if corrupt_baseline else [])
+    assert snapshots == (["python"] if baseline_kind != "valid" else [])
     assert evidence["budget_inputs"]["previous_source"] == (
         f"computed with policyengine {HARNESS.policyengine_version}"
-        if corrupt_baseline
+        if baseline_kind != "valid"
         else "ledger"
     )
 
@@ -2928,12 +3010,14 @@ def test_inputs_runner_agrees_with_the_gates(
         "household_weight",
         "missing_x",
     ]
+    model_variables = [*inputs, "rent_person"]
     snapshot = run_inputs_snapshot(
         sys.executable,
         critical=critical,
         out=directory / "snapshot.json",
         dataset_path=path,
         model_input_variables=inputs,
+        model_variables=model_variables,
         projected_years=projected,
     )
     tables = dataset_columns(path)
@@ -2941,6 +3025,7 @@ def test_inputs_runner_agrees_with_the_gates(
         make_pair(),
         path,
         model_input_variables=inputs,
+        model_variables=model_variables,
         critical_inputs=critical,
         accepted_gaps={},
         previous_missing_inputs=None,
@@ -2949,6 +3034,7 @@ def test_inputs_runner_agrees_with_the_gates(
     )
     assert snapshot["missing_inputs"] == evidence["missing_inputs"]
     assert snapshot["unusable_critical"] == evidence["unusable_critical"]
+    assert snapshot["input_status"] == evidence["input_status"]
     _, years = supported_years(
         make_pair(),
         path,
