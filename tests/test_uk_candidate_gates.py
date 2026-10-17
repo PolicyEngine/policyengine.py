@@ -1183,7 +1183,7 @@ def test_mandatory_freeze_assertion_cannot_borrow_pending_authorization(override
         and row["route"] == "country.reform_dict"
         and row.get("check")
         == "parameter:gov.hmrc.income_tax.allowances.personal_allowance.amount:2034"
-        # The mandatory one of the two 2034 checks (the other awaits d1344).
+        # The gating 2034 check (contract 1.1.0 also had one awaiting d1344).
         and row["status"] == "pass"
         and row.get("decision_id") is None
     )
@@ -3749,3 +3749,183 @@ def test_metrics_with_nan_values_fail_rather_than_crash():
     )
     assert result.status == "fail"
     assert result.evidence_sha256
+
+
+# Same-label assertions. Contract 1.1.0 read the 2034 allowance twice (one
+# gating check, one pending d1344), so its full run exercised the gate's
+# resolution of rows that share a label. 2.0.0 has no such pair, so these
+# tests declare one on top of the real runner and its real 2.0.0 run.
+
+_SAME_LABEL = "parameter:gov.hmrc.income_tax.allowances.personal_allowance.amount:2034"
+_SAME_LABEL_ORACLE = "a second reading of the 2034 allowance, pending d1344"
+
+
+def _with_same_label_rows(report):
+    """Add the rows the runner would emit for a second, pending check on
+    ``_SAME_LABEL``: pending on the country routes, the declared parameter
+    exemption on the in-process wrappers, none on api.sim_api (whose whole
+    route is exempt)."""
+
+    from policyengine.tax_benefit_models.uk import budget_reform_contract as runner
+
+    freeze = next(case for case in runner.CASES if case.id == "extended_freeze")
+    extra_id = f"{_SAME_LABEL}:{len(freeze.checks)}"
+    rows = []
+    for row in report["cases"]:
+        rows.append(row)
+        if row["case_id"] == "extended_freeze" and row.get("check") == _SAME_LABEL:
+            second = dict(row, assertion_id=extra_id)
+            if row["status"] == "pass":
+                second.update(
+                    status="pending",
+                    decision_id="d1344",
+                    oracle=_SAME_LABEL_ORACLE,
+                )
+            rows.append(second)
+    report["cases"] = rows
+    return report
+
+
+def _gate_with_same_label(report):
+    """Gate ``report`` against the real runner plus the second check."""
+    import dataclasses
+    import importlib
+    import types
+
+    from policyengine.tax_benefit_models.uk import budget_reform_contract as runner
+
+    cases = list(runner.CASES)
+    index = next(i for i, case in enumerate(cases) if case.id == "extended_freeze")
+    freeze = cases[index]
+    gating = next(
+        check
+        for check in freeze.checks
+        if f"{check.target}:{check.name}:{check.year}" == _SAME_LABEL
+    )
+    second = dataclasses.replace(gating, oracle=_SAME_LABEL_ORACLE, pending="d1344")
+    cases[index] = dataclasses.replace(freeze, checks=(*freeze.checks, second))
+    proxy = types.ModuleType(runner.__name__)
+    proxy.__dict__.update(vars(runner))
+    proxy.CASES = tuple(cases)
+    proxy.run_budget_reform_contract = lambda **kwargs: _recount(report)
+
+    def importer(name):
+        return proxy if name == runner.__name__ else importlib.import_module(name)
+
+    return reform_contract(
+        entrypoint=ENTRY,
+        importer=importer,
+        expected_versions=report["versions"],
+        expected_dataset_sha256=CERTIFIED_SHA,
+        seed=0,
+        max_examples=20,
+        dataset_path=Path("enhanced_frs_2024_25.h5"),
+    )[0]
+
+
+def _same_label_rows(report, route="country.reform_dict"):
+    return [
+        row
+        for row in report["cases"]
+        if row["case_id"] == "extended_freeze"
+        and row["route"] == route
+        and row.get("check") == _SAME_LABEL
+    ]
+
+
+def _strip_ids(report):
+    for row in report["cases"]:
+        row.pop("assertion_id", None)
+
+
+@pytest.mark.parametrize("strip_ids", [False, True])
+def test_same_label_assertions_resolve_by_id_or_by_oracle_and_order(strip_ids):
+    report = _with_same_label_rows(_fixture("full_released_uk_2.135.0.json"))
+    assert len(_same_label_rows(report)) == 2
+    assert len(_same_label_rows(report, "wrapper.household")) == 2
+    if strip_ids:
+        _strip_ids(report)
+    result = _gate_with_same_label(report)
+    assert result.status == "pass", result.summary
+
+
+@pytest.mark.parametrize("strip_ids", [False, True])
+def test_same_label_mandatory_and_pending_statuses_cannot_swap(strip_ids):
+    report = _with_same_label_rows(_fixture("full_released_uk_2.135.0.json"))
+    mandatory, pending = _same_label_rows(report)
+    mandatory.update(status="pending", decision_id="d1344")
+    pending.update(status="pass", decision_id=None)
+    if strip_ids:
+        _strip_ids(report)
+    assert _gate_with_same_label(report).status == "error"
+
+
+@pytest.mark.parametrize("strip_ids", [False, True])
+@pytest.mark.parametrize("replace_status", ["pass", "pending"])
+def test_same_label_duplicate_cannot_satisfy_the_other_category(
+    replace_status, strip_ids
+):
+    report = _with_same_label_rows(_fixture("full_released_uk_2.135.0.json"))
+    mandatory, pending = _same_label_rows(report)
+    source, replaced = (
+        (mandatory, pending) if replace_status == "pass" else (pending, mandatory)
+    )
+    report["cases"][report["cases"].index(replaced)] = dict(source)
+    if strip_ids:
+        _strip_ids(report)
+    result = _gate_with_same_label(report)
+    assert result.status == "error", result.summary
+    assert any(
+        "assertion multiplicities differ" in p for p in result.details["problems"]
+    )
+
+
+def test_same_label_rows_without_an_oracle_or_id_cannot_resolve():
+    report = _with_same_label_rows(_fixture("full_released_uk_2.135.0.json"))
+    for row in _same_label_rows(report):
+        row.pop("assertion_id", None)
+        row.pop("oracle", None)
+    result = _gate_with_same_label(report)
+    assert result.status == "error", result.summary
+    assert any(
+        "no unique declared assertion identity" in p for p in result.details["problems"]
+    )
+
+
+def test_same_label_unsupported_rows_are_each_consumed_once():
+    report = _with_same_label_rows(_fixture("full_released_uk_2.135.0.json"))
+    _strip_ids(report)
+    first, second = _same_label_rows(report, "wrapper.household")
+    report["cases"].remove(second)
+    result = _gate_with_same_label(report)
+    assert result.status == "error", result.summary
+    assert any(
+        "assertion multiplicities differ" in p for p in result.details["problems"]
+    )
+
+
+def test_a_pending_assertion_reported_pass_cannot_qualify():
+    """A check declared pending is reported pending; a pass in its place is
+    counted against the pending category, not accepted as an extra pass."""
+    report = _fixture("full_released_uk_2.135.0.json")
+    row = next(row for row in report["cases"] if row["status"] == "pending")
+    row.update(status="pass", decision_id=None)
+    result = _run_released_contract(_recount(report))
+    assert result.status == "error", result.summary
+    assert any(
+        p.startswith("pending assertion multiplicities differ")
+        for p in result.details["problems"]
+    )
+
+
+def test_an_assertion_id_with_another_oracle_cannot_qualify():
+    report = _fixture("full_released_uk_2.135.0.json")
+    row = next(
+        row for row in report["cases"] if row["status"] == "pass" and row.get("oracle")
+    )
+    row["oracle"] = "an oracle the runner does not declare for this assertion"
+    result = _run_released_contract(report)
+    assert result.status == "error", result.summary
+    assert any(
+        "no unique declared assertion identity" in p for p in result.details["problems"]
+    )
