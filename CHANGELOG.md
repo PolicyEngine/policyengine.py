@@ -1,3 +1,10 @@
+## [6.7.1] - 2026-10-17
+
+### Fixed
+
+- The UK Budget reform contract's population rows no longer report a count of survey records from 1 to 9 (it reads "fewer than 10"), or a total over fewer than 10 changed records, and they state each condition they test as a flat true/false finding in `detail`.
+
+
 ## [6.7.0] - 2026-10-16
 
 ### Added
