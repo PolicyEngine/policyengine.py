@@ -2004,3 +2004,18 @@ def test_outputs_that_depend_on_query_order_fail_the_order_check(monkeypatch):
     order = status[(population.POPULATION_QUERY_ORDER, "unreformed")]
     assert order["status"] == "fail"
     assert order["detail"]["income_tax:2026_matches"] is False
+
+
+def test_the_household_route_runs_where_country_imports_are_skipped(monkeypatch):
+    """scripts/check_uk_candidate.py sets POLICYENGINE_SKIP_COUNTRY_IMPORTS, so
+    ``policyengine.uk`` is None in the qualification gate; every household-route
+    row there errored with "'NoneType' object has no attribute
+    'calculate_household'"."""
+    import policyengine
+
+    monkeypatch.setattr(policyengine, "uk", None)
+    case = next(case for case in CASES if case.id == "april_rate_change")
+    rows = evaluate_case(case, "wrapper.household")
+    statuses = {row["status"] for row in rows}
+    # The route reads variables, not parameters, which it reports unsupported.
+    assert "pass" in statuses and statuses <= {"pass", "unsupported"}, rows
