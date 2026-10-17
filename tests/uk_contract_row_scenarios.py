@@ -1,9 +1,12 @@
 """Report rows from ``evaluate_case`` over fixed fake routes.
 
 ``test_uk_budget_reform_contract.py`` compares these rows, without their
-``assertion_id``, with rows recorded from main's runner at ``503d4998``
+``assertion_id``, with recorded rows
 (``fixtures/uk_contract/evaluate_case_rows.json``), so labelling the rows cannot
-change any verdict, expected value or actual value. The real cases exercise
+change any verdict, expected value or actual value. The rows were recorded
+from main's runner at ``503d4998`` and recorded again for contract 2.0.0
+(cos d1344), whose only row changes are the extended freeze's checks after
+2033-34. The real cases exercise
 fixed fake routes; focused cases cover matching comparisons, tolerances,
 missing values, matching pending checks and expected rejections. To record
 the fixture again, put a source tree holding main's runner first on

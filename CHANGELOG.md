@@ -1,3 +1,10 @@
+## [6.7.2] - 2026-10-17
+
+### Fixed
+
+- The UK Budget reform contract's household route imports the UK model module directly, so it runs in the qualification gate, whose scripts skip the country imports that set `policyengine.uk`; every household-route row there had errored.
+
+
 ## [6.7.1] - 2026-10-17
 
 ### Fixed
