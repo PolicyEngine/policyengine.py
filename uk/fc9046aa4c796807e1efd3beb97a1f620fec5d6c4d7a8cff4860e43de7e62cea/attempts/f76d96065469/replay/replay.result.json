@@ -1,0 +1,59 @@
+{
+  "details": {
+    "integrity": "failed",
+    "integrity_failures": [
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2025
+      },
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2026
+      },
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2027
+      },
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2028
+      },
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2029
+      }
+    ],
+    "known_gaps": [],
+    "policy": "d1344-replay-regressions-v1",
+    "policy_sha256": "65ecaf44289624b6aae001068099250e789424854ed2b29ead86b71845a7dfa0",
+    "receipt_commit": "16439a6eb8411b013a48bddab0cd802c2433f04b",
+    "receipt_sha256": "27d64a4742b37bebba23cd122889a2affbba79a4b217a584d203ab26b6717b8a",
+    "regressions": [
+      {
+        "kind": "failed",
+        "why": "Replay integrity failed: construction_inert"
+      }
+    ],
+    "request_id": "b989d471f90e7cca4ee62f987a43a7255c6b9180d81f6bc2155e0919f6928b77",
+    "review_items": [],
+    "status": "failed"
+  },
+  "gate_id": "replay",
+  "status": "fail",
+  "summary": "Replay integrity failed: construction_inert"
+}
