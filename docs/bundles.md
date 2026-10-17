@@ -147,9 +147,7 @@ python scripts/bundle.py certify-data \
   --model-version <policyengine-us-version>
 ```
 
-**Temporarily**, state and congressional-district regions filter the certified national dataset (`populace_us_2024`), as in policyengine 6.2.1. The certified ACS-local release has no source-backed SPM independence, so canonical SPM refuses thousands of its SPM units (PolicyEngine/microcosm#1263, PolicyEngine/policyengine-sim-api#747). They move back to the ACS-local dataset with a release whose SPM units all have a classified adult.
-
-When they use it, US state and congressional-district regions scope one certified ACS-local
+US state and congressional-district regions scope one certified ACS-local
 Populace dataset with row filters. Pass its non-default local-area release
 manifest through `--regional-manifest-uri`; certification adds the pinned H5
 artifact to `data_releases.us.datasets` and writes both regional path templates

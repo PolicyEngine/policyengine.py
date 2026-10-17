@@ -1,9 +1,13 @@
 # Legacy US SPM sources (backward compatibility)
 
 > **Backward compatibility, not a data contract.** This layer exists so that
-> certified US sources published *before* SPM declarations existed can still
-> be measured. New certified sources must carry the declarations themselves;
-> do not register them here.
+> certified US sources that cannot carry an SPM declaration can still be
+> measured: sources published *before* the declarations existed, and sources
+> that cannot store a declaration because the pinned policyengine-us does not
+> define its variable (today `spm_unit_spm_universe_status`, before
+> PolicyEngine/policyengine-us#9462). Register only the declarations a source
+> lacks. Every other certified source must carry the declarations itself; do
+> not register it here.
 
 policyengine-us measures SPM poverty only when a source declares two things:
 
@@ -29,6 +33,7 @@ Sources are keyed by certified SHA-256 in `legacy_spm/registry.py`.
 | Source | Scope rule | Independence list |
 | --- | --- | --- |
 | `populace_us_2024_acs_local` Build O (`769756c3…a7ec`) | `acs_household_population` | national release `source_spm_person_independence.csv` (`22b5968d…3ce5`) |
+| `populace_us_2024_acs_local` rebuilt for microcosm#1263 (`NEW_SHA_SHORT`, the bundle's certified ACS-local file) | `acs_household_population` | none: the source stores `is_spm_independent_minor_role` |
 
 ### Scope rule `acs_household_population` (#597)
 
@@ -43,6 +48,10 @@ Age is never used. Unknown channels, missing or inconsistent evidence, and SPM
 units that mix group quarters with household people all raise.
 
 On the full Build O source, 183,206 SPM units are outside the measurement.
+On the microcosm#1263 rebuild, NEW_OUTSIDE_UNITS are: Build O's group-quarters
+units less the 1,946 one-person group-quarters records of children under 15,
+which the rebuild leaves out of the population until the model reads scope
+natively (PolicyEngine/microcosm#1263).
 
 ### Independence list (#598)
 
@@ -111,6 +120,12 @@ existing files must be made again.
 - **A rebuilt source declares scope and role itself.** Point the bundle at it.
   Keep the Build O registry entry only while anything still reads Build O,
   then delete it.
+- **A rebuilt source can store the role but not the scope.** The pinned
+  policyengine-us does not define `spm_unit_spm_universe_status`, so the
+  source cannot store it (Microcosm's stored-inputs gate refuses a variable
+  the model does not define). Register it with its scope rule and no
+  independence list, as for the microcosm#1263 rebuild. Remove the entry once
+  a release of the source carries the scope natively.
 
 ## Related
 
