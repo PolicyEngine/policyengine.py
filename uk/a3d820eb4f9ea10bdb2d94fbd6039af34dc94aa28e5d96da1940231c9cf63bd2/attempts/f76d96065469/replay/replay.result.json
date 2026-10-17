@@ -1,8 +1,59 @@
 {
   "details": {
-    "status": "running"
+    "integrity": "failed",
+    "integrity_failures": [
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2025
+      },
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2026
+      },
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2027
+      },
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2028
+      },
+      {
+        "code": "construction_inert",
+        "detail": "identical heads although CONSTRUCTION_PREMISES.json sets gov.hmrc.stamp_duty.residential.purchase.additional.rate[0].rate to 0.03 in the baseline world and 0.05 in the reform world (and 4 more paths)",
+        "event": "autumn_budget_2024",
+        "measure_key": "autumn_budget_2024__sdlt_additional_dwelling_surcharge_2pp",
+        "year": 2029
+      }
+    ],
+    "known_gaps": [],
+    "policy": "d1344-replay-regressions-v1",
+    "policy_sha256": "65ecaf44289624b6aae001068099250e789424854ed2b29ead86b71845a7dfa0",
+    "receipt_commit": "2350f3606e1aeee783093e46249e94e29ea76784",
+    "receipt_sha256": "361581a8ba1f1c6b40b860becb2677fb283e814429bc581f915d0edf711b24a7",
+    "regressions": [
+      {
+        "kind": "failed",
+        "why": "Replay integrity failed: construction_inert"
+      }
+    ],
+    "request_id": "71e40ada8b5e858f4b76bf51e38f9c3f9438b9ec95dbb4163e2ddc3e688b016b",
+    "review_items": [],
+    "status": "failed"
   },
   "gate_id": "replay",
-  "status": "unavailable",
-  "summary": "Replay is running; the candidate stays incomplete until it finishes."
+  "status": "fail",
+  "summary": "Replay integrity failed: construction_inert"
 }
