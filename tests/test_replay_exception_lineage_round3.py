@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 import pandas as pd
@@ -174,6 +175,50 @@ def test_three_pair_history_cannot_reactivate_expired_exception(
     assert receipt_c.previous_certificate.qualification_pair_id == receipt_b.pair_id
     assert replay_c.details["applied_exceptions"] == []
     assert "a fresh registry decision is required" in replay_c.summary
+
+
+def test_rehashed_current_history_must_agree_with_its_result_marker():
+    pair_a = make_pair(model="2.135.0", data="1.59.0", dataset_sha="1" * 64)
+    pair_b = make_pair(model="2.135.1", data="1.60.0", dataset_sha="2" * 64)
+    pair_c = make_pair(model="2.135.2", data="1.61.0", dataset_sha="3" * 64)
+    coverage_a = _coverage(pair_a, supplied=True)
+    coverage_b = _coverage(pair_b, removed=True, previous=coverage_a)
+    result, evidence = _coverage(pair_c, previous=coverage_b)
+    evidence = copy.deepcopy(evidence)
+    # Rehashing both history arrays cannot erase the producer's independent
+    # result marker, even after the immediate predecessor stopped using INPUT.
+    assert INPUT in result.details["ever_usable_inputs"]
+    assert evidence["previous_input_status"][INPUT]["usable"] is False
+    for key in ("previous_ever_usable_inputs", "ever_usable_inputs"):
+        evidence[key] = [name for name in evidence[key] if name != INPUT]
+    result = result.model_copy(update={"evidence_sha256": content_sha256(evidence)})
+
+    replay = _replay_for_pair(pair_c, _failed_receipt(), (result, evidence))
+
+    assert replay.status == "fail"
+    assert replay.details["applied_exceptions"] == []
+
+
+@pytest.mark.parametrize("damage", ["missing", "malformed", "contradictory"])
+def test_current_history_requires_a_valid_consistent_result_marker(damage):
+    pair = make_pair()
+    result, evidence = _coverage(pair, previous=_coverage(pair))
+    control = _replay_for_pair(pair, _failed_receipt(), (result, evidence))
+    assert control.status == "needs_review"
+    assert len(control.details["applied_exceptions"]) == 1
+    details = copy.deepcopy(result.details)
+    if damage == "missing":
+        details.pop("ever_usable_inputs")
+    elif damage == "malformed":
+        details["ever_usable_inputs"] = [True]
+    else:
+        details["ever_usable_inputs"] = []
+    result = result.model_copy(update={"details": details})
+
+    replay = _replay_for_pair(pair, _failed_receipt(), (result, evidence))
+
+    assert replay.status == "fail"
+    assert replay.details["applied_exceptions"] == []
 
 
 def test_legacy_history_seed_uses_recomputed_predecessor_coverage():

@@ -145,6 +145,9 @@ def test_ever_usable_input_cannot_reauthorize_after_any_absent_chain(
         result, evidence = _budget_inputs()
         evidence["previous_ever_usable_inputs"] = history
         evidence["ever_usable_inputs"] = history
+        result = result.model_copy(
+            update={"details": {**result.details, "ever_usable_inputs": history}}
+        )
         replay = _judge(
             _failed_receipt(year),
             registry=_registry(_entry(years=[year])),
@@ -180,7 +183,33 @@ def test_history_invariant_kills_predecessor_only_lineage_mutant(monkeypatch):
     result, evidence = _budget_inputs()
     evidence["previous_ever_usable_inputs"] = [INPUT]
     evidence["ever_usable_inputs"] = [INPUT]
+    result = result.model_copy(
+        update={"details": {**result.details, "ever_usable_inputs": [INPUT]}}
+    )
     replay = _judge(_failed_receipt(), budget=_reseal_budget(result, evidence))
+    with pytest.raises(AssertionError):
+        _assert_rejected(replay)
+
+
+def test_history_marker_invariant_kills_skip_marker_consistency_mutant(monkeypatch):
+    result, evidence = _budget_inputs()
+    # Both rehashed arrays erase a usable input still recorded by the producer.
+    result = result.model_copy(
+        update={"details": {**result.details, "ever_usable_inputs": [INPUT]}}
+    )
+    budget = _reseal_budget(result, evidence)
+    _assert_rejected(_judge(_failed_receipt(), budget=budget))
+    mutant = _source_mutant(
+        "if recorded_ever is None or recorded_ever != _input_name_set(\n"
+        '        evidence.get("ever_usable_inputs")\n'
+        "    ):",
+        "if False:",
+        function=qualification._replay_missing_inputs,
+    )
+    monkeypatch.setattr(qualification, "_replay_missing_inputs", mutant)
+    replay = _judge(_failed_receipt(), budget=budget)
+    assert replay.status == "needs_review"
+    assert replay.details["applied_exceptions"]
     with pytest.raises(AssertionError):
         _assert_rejected(replay)
 

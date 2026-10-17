@@ -341,6 +341,12 @@ def _replay_missing_inputs(
             return set()
     except (TypeError, ValueError):
         return set()
+    # Rehashing edited evidence must not erase the producer's history marker.
+    recorded_ever = _input_name_set(result.details.get("ever_usable_inputs"))
+    if recorded_ever is None or recorded_ever != _input_name_set(
+        evidence.get("ever_usable_inputs")
+    ):
+        return set()
     missing = _input_name_set(evidence.get("missing_inputs"))
     newly_missing = _input_name_set(evidence.get("newly_missing_inputs"))
     states = evidence.get("input_status")

@@ -176,6 +176,7 @@ def _budget_inputs(
         details={
             "missing_inputs": len(missing),
             "newly_missing_inputs": evidence["newly_missing_inputs"],
+            "ever_usable_inputs": evidence["ever_usable_inputs"],
         },
     )
     return result, evidence
@@ -573,7 +574,13 @@ def _real_budget(*, attempt_id=TEST_ATTEMPT_ID, request=None):
     )
     result = GateResult.model_validate(_json("uk2.134.7_budget_inputs.result.json"))
     return result.model_copy(
-        update={"evidence_sha256": content_sha256(evidence)}
+        update={
+            "evidence_sha256": content_sha256(evidence),
+            "details": {
+                **result.details,
+                "ever_usable_inputs": evidence["ever_usable_inputs"],
+            },
+        }
     ), evidence
 
 

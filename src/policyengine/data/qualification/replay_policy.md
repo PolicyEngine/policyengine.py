@@ -7,10 +7,11 @@ October 2026, before first use, after the third to fifth reviews of
 policyengine.py#637: scorecard's own record of a mixed known gap no longer
 blocks, flag counters must equal the flags the rows carry, and any
 candidate value other than £0 at a known gap is a contradiction.
-The data-limited exception amendment below implements the Budget
-coordinator's proposal of 17 October 2026 under cos d1344. The registry
-records its decision and review status; the proposal requires independent
-review agreement before adoption.
+The data-limited exception amendment below was adopted by the Budget
+coordinator following independent review agreement under cos d1344:
+RULE AGREE (GPT-6.1 Sol, round 2, 17 October 2026, head 7f518ff61) and
+CODE AGREE WITH NITS (round 3, head dbc1806df), with the P3 nit fixed in
+this commit. The registry records this adopted decision and review status.
 `evaluate_replay_receipt` in `policyengine.provenance.qualification`
 applies this text. Each qualification receipt records the policy id and
 this file's SHA-256 in its `replay` gate details.

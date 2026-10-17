@@ -275,3 +275,45 @@ def test_finalize_rejects_a_newly_usable_previous_lineage(tmp_path):
     assert finalized.verdict == "rejected"
     assert actual.status == "fail"
     assert "fresh registry decision" in str(actual.model_dump()).lower()
+
+
+@pytest.mark.parametrize("history", ["never_usable", "ever_usable", "erased_rehashed"])
+def test_finalize_checks_the_producer_history_marker(tmp_path, history):
+    attempt, _, old_evidence = _stage_real_failed_attempt(tmp_path)
+    result, evidence = uk_candidate.budget_inputs(
+        make_pair(),
+        tmp_path / "unused.h5",
+        model_input_variables=old_evidence["missing_inputs"],
+        critical_inputs=[],
+        accepted_gaps={},
+        previous_missing_inputs=old_evidence["missing_inputs"],
+        previous_unusable_critical=[],
+        previous_input_status=old_evidence["previous_input_status"],
+        previous_ever_usable_inputs=[] if history == "never_usable" else [INPUT],
+        tables={},
+    )
+    evidence["attempt_id"] = uk_qualification.attempt_evidence_id(attempt)
+    if history == "erased_rehashed":
+        # Keep the producer's marker while rehashing erased history arrays.
+        assert INPUT in result.details["ever_usable_inputs"]
+        evidence["previous_ever_usable_inputs"] = []
+        evidence["ever_usable_inputs"] = []
+    result = result.model_copy(update={"evidence_sha256": content_sha256(evidence)})
+    uk_qualification.write_gate_results(attempt, [result], {"budget_inputs": evidence})
+
+    receipt = uk_qualification.finalize_attempt(
+        attempt,
+        tmp_path / "ledger",
+        issued_by=ISSUED,
+        completed_at="2026-10-17T11:00:00Z",
+    )
+    replay = next(gate for gate in receipt.gates if gate.gate_id == "replay")
+
+    if history == "never_usable":
+        assert receipt.verdict == "needs_review"
+        assert replay.status == "needs_review"
+        assert len(replay.details["applied_exceptions"]) == 5
+    else:
+        assert receipt.verdict == "rejected"
+        assert replay.status == "fail"
+        assert replay.details["applied_exceptions"] == []

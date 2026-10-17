@@ -1,5 +1,5 @@
 {
-  "_comment": "Narrow data-limited exceptions for the UK replay qualification gate, reviewed like code under cos d1344. An entry requires coherent zero candidate effects, never-usable input lineage from budget_inputs, and a passing positive-input probe from the same attempt. It always requires a named reviewer's acceptance. The 17 October 2026 decision remains proposed pending independent review agreement; the review metadata records that status.",
+  "_comment": "Narrow data-limited exceptions for the UK replay qualification gate, reviewed like code under cos d1344. An entry requires coherent zero candidate effects, never-usable input lineage from budget_inputs, and a passing positive-input probe from the same attempt. It always requires a named reviewer's acceptance. The 17 October 2026 decision is adopted by the Budget coordinator following independent review agreement under cos d1344: RULE AGREE (GPT-6.1 Sol, round 2, 17 October 2026, head 7f518ff61) and CODE AGREE WITH NITS (round 3, head dbc1806df), with the P3 nit fixed in this commit.",
   "exceptions": [
     {
       "id": "ab2024-sdlt-hrad-purchase-input",
@@ -36,7 +36,7 @@
         "region": "LONDON"
       },
       "decided_under": "cos d1344; Budget coordinator's data-limited exception proposal of 17 October 2026",
-      "review": "Proposed; the decision record requires independent review agreement before adoption and does not yet record that agreement."
+      "review": "Adopted by the Budget coordinator following independent review agreement under cos d1344: RULE AGREE (GPT-6.1 Sol, round 2, 17 October 2026, head 7f518ff61) and CODE AGREE WITH NITS (round 3, head dbc1806df), with the P3 nit fixed in this commit."
     }
   ]
 }
