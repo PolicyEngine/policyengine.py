@@ -20,12 +20,14 @@ exact pair.
         data_producer="populace",
         manifest_uri=(
             "hf://dataset/policyengine/populace-uk-private"
-            "@populace-uk-2023-0cdbb27-c239dfe51c11-20260615T201302Z"
-            "/releases/populace-uk-2023-0cdbb27-c239dfe51c11-20260615T201302Z"
-            "/release_manifest.json"
+            "@microcosm-uk-2024-25-national-20261002T230158Z-5c6b3f68"
+            "/releases/microcosm-uk-2024-25-national/release_manifest.json"
         ),
     )
     print(result.summary())
+
+Pin the cut tag (``@<cut-tag>``), never a branch: a release line's directory
+(``releases/<release-id>/``) is rewritten by each cut.
 
 ``scripts/bundle.py certify-data`` is the operator-facing wrapper. Network
 access is required (HF manifest fetch + PyPI wheel metadata). Countries whose
@@ -46,11 +48,17 @@ from typing import Literal, Optional
 
 import requests
 
+from policyengine.data.uk_geography_assets import (
+    CONSTITUENCY_ASSET_SPEC,
+    LOCAL_AUTHORITY_ASSET_SPEC,
+)
 from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
     DataReleaseManifest,
+    RegionalReleaseKind,
     _specifier_matches,
     fetch_pypi_wheel_metadata,
+    release_build_id,
 )
 
 MANIFEST_URI_PATTERN = re.compile(
@@ -82,6 +90,29 @@ POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
 # source-enrichment releases; `populace-data` is its earlier name. Both denote
 # the same producer, so every Populace-specific rule below must accept either.
 POPULACE_DATA_PACKAGES = frozenset({"populace-data", "microcosm-data"})
+# The Hugging Face repos each country's Populace/Microcosm releases publish to.
+POPULACE_RELEASE_REPOS = {
+    "us": "policyengine/populace-us",
+    "uk": "policyengine/populace-uk-private",
+}
+# Region types a regional release serves. Their regions load the routed dataset
+# and keep row-filtering it on their own geography column.
+LOCAL_AREA_REGION_TYPES = {
+    "us": ("state", "congressional_district"),
+    "uk": ("constituency", "local_authority"),
+}
+REGIONAL_RELEASE_KINDS: tuple[RegionalReleaseKind, ...] = (
+    "local_area",
+    "area_coded_national",
+)
+# A UK area-coded national release (the enhanced FRS) serves constituency and
+# local-authority runs with these weight matrices as well as its households.
+# Consumers bind a matrix only to the release of the dataset it reweights, so
+# they travel with that dataset.
+UK_AREA_WEIGHT_MATRIX_PATHS = (
+    CONSTITUENCY_ASSET_SPEC.weight_matrix_filename,
+    LOCAL_AUTHORITY_ASSET_SPEC.weight_matrix_filename,
+)
 # Artifact kinds published beside the release manifest rather than at the repo
 # root, so their manifest paths are relative to the release directory.
 RELEASE_SCOPED_ARTIFACT_KINDS = frozenset({"diagnostics", "evidence"})
@@ -271,19 +302,8 @@ def validate_release_manifest(
         if not artifact.sha256:
             warnings.append(f"artifact {name!r} has no sha256")
 
-    built_with = None
-    if manifest.build is not None and manifest.build.built_with_model_package:
-        build_pkg = manifest.build.built_with_model_package
-        if build_pkg.name == model_package:
-            built_with = build_pkg.version
-
-    claim_specifiers = [
-        package.specifier
-        for package in manifest.compatible_model_packages
-        if package.name == model_package
-    ]
-    claim_matches = any(
-        _specifier_matches(model_version, specifier) for specifier in claim_specifiers
+    built_with, claim_specifiers, claim_matches = _model_claims(
+        manifest, model_package, model_version
     )
 
     core_rests_on_qualification = core_version is not None and (
@@ -329,6 +349,64 @@ def validate_release_manifest(
         f"compatibility claim {claim_specifiers or '(none declared)'}; "
         "a new data build, a published compatibility claim or an automated "
         "qualification of the exact pair is required."
+    )
+
+
+def _model_claims(
+    manifest: DataReleaseManifest,
+    model_package: str,
+    model_version: str,
+) -> tuple[Optional[str], list[str], bool]:
+    """A release's build-time model version and its claims on ``model_version``.
+
+    Returns ``(built_with, claim_specifiers, claim_matches)``.
+    """
+    built_with = None
+    if manifest.build is not None and manifest.build.built_with_model_package:
+        build_pkg = manifest.build.built_with_model_package
+        if build_pkg.name == model_package:
+            built_with = build_pkg.version
+
+    claim_specifiers = [
+        package.specifier
+        for package in manifest.compatible_model_packages
+        if package.name == model_package
+    ]
+    claim_matches = any(
+        _specifier_matches(model_version, specifier) for specifier in claim_specifiers
+    )
+    return built_with, claim_specifiers, claim_matches
+
+
+def model_compatibility_basis(
+    manifest: DataReleaseManifest,
+    model_package: str,
+    model_version: str,
+) -> tuple[str, list[str]]:
+    """Return the basis on which a release serves a model version by itself.
+
+    The release must be built with ``model_version`` or claim compatibility
+    with it; automated qualification of a pair does not apply. Certification
+    uses this for a regional release, which no qualification names. Returns
+    ``(compatibility_basis, warnings)``.
+    """
+    built_with, claim_specifiers, claim_matches = _model_claims(
+        manifest, model_package, model_version
+    )
+    if built_with == model_version:
+        return BASIS_BUILT_WITH, []
+    if claim_matches:
+        return BASIS_PUBLISHER_CLAIM, [
+            f"certifying {model_package} {model_version} on the publisher's "
+            f"compatibility claim {claim_specifiers}; the data was built "
+            f"with {built_with or 'an unrecorded model version'} — the test "
+            "suite is the arbiter"
+        ]
+    raise CertificationError(
+        f"{model_package} {model_version} matches neither the build-time "
+        f"model ({built_with or 'unrecorded'}) nor any publisher "
+        f"compatibility claim {claim_specifiers or '(none declared)'}; "
+        "a new data build or a published compatibility claim is required."
     )
 
 
@@ -477,11 +555,9 @@ def should_validate_vendored_artifacts(
     manifest: DataReleaseManifest,
     uri_parts: dict,
 ) -> bool:
-    return (
-        country == "us"
-        and manifest.data_package.name in POPULACE_DATA_PACKAGES
-        and uri_parts["repo_id"] == "policyengine/populace-us"
-    )
+    return manifest.data_package.name in POPULACE_DATA_PACKAGES and uri_parts[
+        "repo_id"
+    ] == POPULACE_RELEASE_REPOS.get(country)
 
 
 def _state_code_from_path(path: str, artifact_prefix: str) -> Optional[str]:
@@ -560,65 +636,23 @@ def merge_us_state_release_manifest(
     return DataReleaseManifest.model_validate(primary_payload)
 
 
-def merge_us_local_area_release_manifest(
+def _local_area_region_types(country: str) -> tuple[str, ...]:
+    try:
+        return LOCAL_AREA_REGION_TYPES[country]
+    except KeyError:
+        raise CertificationError(
+            f"Regional data releases are not supported for country {country!r}."
+        ) from None
+
+
+def _route_region_types(
+    country: str,
     primary_manifest: DataReleaseManifest,
-    regional_manifest: DataReleaseManifest,
-    *,
-    regional_repo_type: Optional[Literal["model", "dataset"]] = None,
-) -> DataReleaseManifest:
-    """Add one certified local-area dataset to a primary US release.
-
-    The supplemental release remains non-default nationally. State and
-    congressional-district simulations load the shared artifact and apply the
-    existing row-filtering strategy at runtime.
-    """
-
-    if regional_manifest.dataset_role != "non_default_local_area":
-        raise CertificationError(
-            "US local-area release must declare dataset_role='non_default_local_area'."
-        )
-    if regional_manifest.is_default is not False:
-        raise CertificationError("US local-area release must declare is_default=false.")
-    if regional_manifest.default_datasets:
-        raise CertificationError(
-            "US local-area release must not declare default datasets."
-        )
-
-    local_area_artifacts = [
-        (name, artifact)
-        for name, artifact in regional_manifest.artifacts.items()
-        if artifact.kind == "microdata"
-    ]
-    if len(local_area_artifacts) != 1:
-        raise CertificationError(
-            "US local-area release must contain exactly one microdata artifact."
-        )
-    artifact_name, artifact = local_area_artifacts[0]
-    if not artifact.path.endswith(".h5"):
-        raise CertificationError("US local-area artifact must be an H5 file.")
-    if not artifact.repo_id or not artifact.revision or not artifact.sha256:
-        raise CertificationError(
-            "US local-area artifact must declare repo_id, revision, and sha256."
-        )
-
-    primary_payload = primary_manifest.model_dump(mode="json", exclude_none=True)
-    merged_artifacts = primary_payload.setdefault("artifacts", {})
-    if artifact_name in merged_artifacts:
-        raise CertificationError(
-            f"Regional artifact {artifact_name!r} conflicts with the primary manifest."
-        )
-    if any(item.get("path") == artifact.path for item in merged_artifacts.values()):
-        raise CertificationError(
-            f"Regional artifact path {artifact.path!r} conflicts with the primary manifest."
-        )
-    artifact_payload = artifact.model_dump(
-        mode="json",
-        exclude_none=True,
-    )
-    if regional_repo_type is not None:
-        artifact_payload["repo_type"] = regional_repo_type
-    merged_artifacts[artifact_name] = artifact_payload
-
+    primary_payload: dict,
+    path: str,
+    release_label: str,
+) -> None:
+    """Point the country's local region types at ``path`` in the payload."""
     metadata = primary_payload.setdefault("metadata", {})
     region_datasets = metadata.setdefault("region_datasets", {})
     default_dataset = primary_manifest.default_datasets["national"]
@@ -627,17 +661,243 @@ def merge_us_local_area_release_manifest(
         "national",
         {"path_template": default_artifact.path},
     )
-    regional_template = {"path_template": artifact.path}
-    for region_type in ("state", "congressional_district"):
+    regional_template = {"path_template": path}
+    for region_type in _local_area_region_types(country):
         existing = region_datasets.get(region_type)
         if existing is not None and existing != regional_template:
             raise CertificationError(
-                f"US local-area release conflicts with the {region_type!r} "
+                f"{release_label} conflicts with the {region_type!r} "
                 "dataset template in the primary manifest."
             )
         region_datasets[region_type] = regional_template
 
+
+def _add_regional_artifact(
+    merged_artifacts: dict,
+    name: str,
+    artifact,
+    regional_repo_type: Optional[Literal["model", "dataset"]],
+) -> None:
+    if name in merged_artifacts:
+        raise CertificationError(
+            f"Regional artifact {name!r} conflicts with the primary manifest."
+        )
+    if any(item.get("path") == artifact.path for item in merged_artifacts.values()):
+        raise CertificationError(
+            f"Regional artifact path {artifact.path!r} conflicts with the primary manifest."
+        )
+    artifact_payload = artifact.model_dump(mode="json", exclude_none=True)
+    if regional_repo_type is not None:
+        artifact_payload["repo_type"] = regional_repo_type
+    merged_artifacts[name] = artifact_payload
+
+
+def merge_local_area_release_manifest(
+    country: str,
+    primary_manifest: DataReleaseManifest,
+    regional_manifest: DataReleaseManifest,
+    *,
+    regional_repo_type: Optional[Literal["model", "dataset"]] = None,
+) -> DataReleaseManifest:
+    """Add one certified local-area dataset to a primary release.
+
+    The supplemental release remains non-default nationally. The country's
+    local region types (US states and congressional districts, UK
+    constituencies and local authorities) load the shared artifact and apply
+    their existing row-filtering strategy at runtime.
+    """
+
+    label = f"{country.upper()} local-area release"
+    _local_area_region_types(country)
+    if regional_manifest.dataset_role != "non_default_local_area":
+        raise CertificationError(
+            f"{label} must declare dataset_role='non_default_local_area'."
+        )
+    if regional_manifest.is_default is not False:
+        raise CertificationError(f"{label} must declare is_default=false.")
+    if regional_manifest.default_datasets:
+        raise CertificationError(f"{label} must not declare default datasets.")
+
+    local_area_artifacts = [
+        (name, artifact)
+        for name, artifact in regional_manifest.artifacts.items()
+        if artifact.kind == "microdata"
+    ]
+    if len(local_area_artifacts) != 1:
+        raise CertificationError(
+            f"{label} must contain exactly one microdata artifact."
+        )
+    artifact_name, artifact = local_area_artifacts[0]
+    if not artifact.path.endswith(".h5"):
+        raise CertificationError(
+            f"{country.upper()} local-area artifact must be an H5 file."
+        )
+    if not artifact.repo_id or not artifact.revision or not artifact.sha256:
+        raise CertificationError(
+            f"{country.upper()} local-area artifact must declare repo_id, "
+            "revision, and sha256."
+        )
+
+    primary_payload = primary_manifest.model_dump(mode="json", exclude_none=True)
+    merged_artifacts = primary_payload.setdefault("artifacts", {})
+    _add_regional_artifact(
+        merged_artifacts, artifact_name, artifact, regional_repo_type
+    )
+    _route_region_types(
+        country, primary_manifest, primary_payload, artifact.path, label
+    )
+
     return DataReleaseManifest.model_validate(primary_payload)
+
+
+def merge_us_local_area_release_manifest(
+    primary_manifest: DataReleaseManifest,
+    regional_manifest: DataReleaseManifest,
+    *,
+    regional_repo_type: Optional[Literal["model", "dataset"]] = None,
+) -> DataReleaseManifest:
+    """Add one certified local-area dataset to a primary US release."""
+
+    return merge_local_area_release_manifest(
+        "us",
+        primary_manifest,
+        regional_manifest,
+        regional_repo_type=regional_repo_type,
+    )
+
+
+def merge_area_coded_national_release_manifest(
+    country: str,
+    primary_manifest: DataReleaseManifest,
+    regional_manifest: DataReleaseManifest,
+    *,
+    regional_repo_type: Optional[Literal["model", "dataset"]] = None,
+) -> DataReleaseManifest:
+    """Route UK area regions to another release's national dataset.
+
+    This serves a national-first switch: the primary release's national
+    dataset carries no area codes, and the regional manifest is a certified
+    national release (the enhanced FRS) whose households do. Its national
+    dataset and its area weight matrices join the certified datasets with
+    their own repo and revision pins, and constituency and local-authority
+    regions load that dataset. The regional release's own default stays
+    non-default here.
+    """
+
+    label = f"{country.upper()} area-coded national release"
+    if country != "uk":
+        raise CertificationError(
+            "Area-coded national regional releases are only supported for the UK."
+        )
+    if regional_manifest.dataset_role not in (None, "national_default"):
+        raise CertificationError(
+            f"{label} must be a national release, not "
+            f"dataset_role={regional_manifest.dataset_role!r}. Certify a "
+            "local-area release with --regional-release-kind local_area."
+        )
+    area_dataset = regional_manifest.default_datasets.get("national")
+    if area_dataset is None or area_dataset not in regional_manifest.artifacts:
+        raise CertificationError(
+            f"{label} must declare a national default dataset among its artifacts."
+        )
+    area_artifact = regional_manifest.artifacts[area_dataset]
+    if area_artifact.kind != "microdata" or not area_artifact.path.endswith(".h5"):
+        raise CertificationError(
+            f"{label} national dataset {area_dataset!r} must be an H5 microdata "
+            "artifact."
+        )
+
+    carried = {area_dataset: area_artifact}
+    weights = {
+        name: artifact
+        for name, artifact in regional_manifest.artifacts.items()
+        if artifact.kind == "weights"
+    }
+    weight_paths = {artifact.path for artifact in weights.values()}
+    missing = [path for path in UK_AREA_WEIGHT_MATRIX_PATHS if path not in weight_paths]
+    if missing:
+        raise CertificationError(
+            f"{label} must carry the area weight matrices {missing}."
+        )
+    carried.update(weights)
+    for name, artifact in carried.items():
+        if not artifact.repo_id or not artifact.revision or not artifact.sha256:
+            raise CertificationError(
+                f"{label} artifact {name!r} must declare repo_id, revision, and sha256."
+            )
+
+    primary_payload = primary_manifest.model_dump(mode="json", exclude_none=True)
+    merged_artifacts = primary_payload.setdefault("artifacts", {})
+    for name, artifact in carried.items():
+        _add_regional_artifact(merged_artifacts, name, artifact, regional_repo_type)
+    _route_region_types(
+        country, primary_manifest, primary_payload, area_artifact.path, label
+    )
+
+    return DataReleaseManifest.model_validate(primary_payload)
+
+
+def merge_regional_release_manifest(
+    country: str,
+    primary_manifest: DataReleaseManifest,
+    regional_manifest: DataReleaseManifest,
+    *,
+    release_kind: RegionalReleaseKind = "local_area",
+    regional_repo_type: Optional[Literal["model", "dataset"]] = None,
+    artifact_prefix: str = "states/",
+    path_template: str = "states/{state_code}.h5",
+) -> tuple[DataReleaseManifest, Optional[RegionalReleaseKind]]:
+    """Merge a regional release into a primary release.
+
+    Returns the merged manifest and the routing kind to record. The kind is
+    ``None`` only for a legacy US per-state release.
+    """
+
+    if release_kind not in REGIONAL_RELEASE_KINDS:
+        raise CertificationError(
+            f"Unknown regional release kind {release_kind!r}; expected one of "
+            f"{list(REGIONAL_RELEASE_KINDS)}."
+        )
+    if release_kind == "area_coded_national":
+        return (
+            merge_area_coded_national_release_manifest(
+                country,
+                primary_manifest,
+                regional_manifest,
+                regional_repo_type=regional_repo_type,
+            ),
+            release_kind,
+        )
+    if regional_manifest.dataset_role == "non_default_local_area":
+        return (
+            merge_local_area_release_manifest(
+                country,
+                primary_manifest,
+                regional_manifest,
+                regional_repo_type=regional_repo_type,
+            ),
+            "local_area",
+        )
+    if country == "us" and regional_manifest.dataset_role is None:
+        return (
+            merge_us_state_release_manifest(
+                primary_manifest,
+                regional_manifest,
+                artifact_prefix=artifact_prefix,
+                path_template=path_template,
+            ),
+            None,
+        )
+    if country == "uk" and regional_manifest.dataset_role in (None, "national_default"):
+        raise CertificationError(
+            "UK regional release is a national release, not a local-area one. "
+            "To route constituency and local-authority regions to its national "
+            "dataset, pass --regional-release-kind area_coded_national."
+        )
+    raise CertificationError(
+        f"Unsupported {country.upper()} regional release dataset_role "
+        f"{regional_manifest.dataset_role!r}."
+    )
 
 
 def merge_us_regional_release_manifest(
@@ -650,23 +910,15 @@ def merge_us_regional_release_manifest(
 ) -> DataReleaseManifest:
     """Merge a typed shared local-area release or a legacy per-state release."""
 
-    if regional_manifest.dataset_role == "non_default_local_area":
-        return merge_us_local_area_release_manifest(
-            primary_manifest,
-            regional_manifest,
-            regional_repo_type=regional_repo_type,
-        )
-    if regional_manifest.dataset_role is not None:
-        raise CertificationError(
-            "Unsupported US regional release dataset_role "
-            f"{regional_manifest.dataset_role!r}."
-        )
-    return merge_us_state_release_manifest(
+    manifest, _ = merge_regional_release_manifest(
+        "us",
         primary_manifest,
         regional_manifest,
+        regional_repo_type=regional_repo_type,
         artifact_prefix=artifact_prefix,
         path_template=path_template,
     )
+    return manifest
 
 
 def build_country_manifest_payload(
@@ -760,9 +1012,10 @@ def build_country_manifest_payload(
         certified_artifact["sha256"] = default_artifact.sha256
     build = manifest.build
     if build is not None:
-        if build.build_id:
-            certification["data_build_id"] = build.build_id
-            certified_artifact["build_id"] = build.build_id
+        build_id = release_build_id(build)
+        if build_id:
+            certification["data_build_id"] = build_id
+            certified_artifact["build_id"] = build_id
         model_build = build.built_with_model_package
         if model_build is not None:
             certification["built_with_model_version"] = model_build.version
@@ -808,6 +1061,7 @@ def build_bundle_data_release_payload(
     uri_parts: dict,
     regional_manifest_uri: Optional[str] = None,
     regional_uri_parts: Optional[dict] = None,
+    regional_release_kind: Optional[RegionalReleaseKind] = None,
 ) -> dict:
     """Map the country certification payload into bundle ``data_releases``."""
     payload = copy.deepcopy(country_payload)
@@ -825,6 +1079,8 @@ def build_bundle_data_release_payload(
         payload["regional_release_manifest_uri"] = https_manifest_url(
             regional_uri_parts
         )
+    if regional_release_kind is not None:
+        payload["regional_release_kind"] = regional_release_kind
     payload["default_dataset_uri"] = certified_artifact.get("uri")
     return payload
 
@@ -844,6 +1100,7 @@ class DataProducerCertificationStrategy:
         regional_manifest_uri: Optional[str] = None,
         regional_artifact_prefix: str = "states/",
         regional_path_template: str = "states/{state_code}.h5",
+        regional_release_kind: RegionalReleaseKind = "local_area",
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
@@ -865,6 +1122,7 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
         regional_manifest_uri: Optional[str] = None,
         regional_artifact_prefix: str = "states/",
         regional_path_template: str = "states/{state_code}.h5",
+        regional_release_kind: RegionalReleaseKind = "local_area",
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
@@ -889,6 +1147,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         regional_manifest_uri: Optional[str] = None,
         regional_artifact_prefix: str = "states/",
         regional_path_template: str = "states/{state_code}.h5",
+        regional_release_kind: RegionalReleaseKind = "local_area",
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
@@ -896,22 +1155,46 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             manifest_uri, token=token
         )
         regional_uri_parts = None
+        recorded_release_kind = None
+        regional_artifacts: dict = {}
+        regional_warnings: list[str] = []
         if regional_manifest_uri is not None:
-            if country != "us":
-                raise CertificationError(
-                    "Regional data release manifests are only supported for US "
-                    "Populace certification."
-                )
             regional_manifest, _, regional_uri_parts = fetch_release_manifest(
                 regional_manifest_uri, token=token
             )
-            manifest = merge_us_regional_release_manifest(
+            # The regional release runs on the same model and core, so it must
+            # cover the pinned versions by its own build or claims. A qualified
+            # pair names the primary release only, so it does not extend here.
+            try:
+                _, regional_warnings = model_compatibility_basis(
+                    regional_manifest, model_package, model_version
+                )
+                if core_version is not None:
+                    _check_core_compatibility(
+                        regional_manifest, core_version, None, regional_warnings
+                    )
+            except CertificationError as exc:
+                raise CertificationError(
+                    f"Regional release {regional_manifest_uri}: {exc}"
+                ) from exc
+            regional_warnings = [
+                f"regional release: {warning}" for warning in regional_warnings
+            ]
+            primary_artifact_names = set(manifest.artifacts)
+            manifest, recorded_release_kind = merge_regional_release_manifest(
+                country,
                 manifest,
                 regional_manifest,
+                release_kind=regional_release_kind,
                 regional_repo_type=regional_uri_parts["repo_type"],
                 artifact_prefix=regional_artifact_prefix,
                 path_template=regional_path_template,
             )
+            regional_artifacts = {
+                name: artifact
+                for name, artifact in manifest.artifacts.items()
+                if name not in primary_artifact_names
+            }
         compatibility_basis, warnings = validate_release_manifest(
             manifest,
             model_package,
@@ -919,6 +1202,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             core_version=core_version,
             qualified_pair_id=qualified_pair_id,
         )
+        warnings = warnings + regional_warnings
 
         for filename in required_supplemental_release_files(
             country, manifest, uri_parts
@@ -934,6 +1218,12 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             raise CertificationError(
                 f"Certified dataset artifact is not reachable: {default_artifact.uri}"
             )
+        if check_artifacts and recorded_release_kind is not None:
+            for name, artifact in regional_artifacts.items():
+                if not head_artifact(artifact, token=token):
+                    raise CertificationError(
+                        f"Regional artifact {name!r} is not reachable: {artifact.uri}"
+                    )
 
         model_wheel = fetch_pypi_wheel_metadata(model_package, model_version)
         country_payload = build_country_manifest_payload(
@@ -970,6 +1260,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                 uri_parts=uri_parts,
                 regional_manifest_uri=regional_manifest_uri,
                 regional_uri_parts=regional_uri_parts,
+                regional_release_kind=recorded_release_kind,
             ),
             manifest_sha256,
             warnings,
@@ -1011,6 +1302,8 @@ def certify_data_release(
     regional_manifest_uri: Optional[str] = None,
     regional_artifact_prefix: str = "states/",
     regional_path_template: str = "states/{state_code}.h5",
+    regional_release_kind: RegionalReleaseKind = "local_area",
+    drop_regional_release: bool = False,
     core_version: Optional[str] = None,
     qualified_pair_id: Optional[str] = None,
 ) -> CertificationResult:
@@ -1021,12 +1314,38 @@ def certify_data_release(
     core and data release when neither the build-time model nor a publisher
     claim covers them; the certificate then names the pair, whose promotable
     qualification receipt must be in the ledger.
+
+    ``regional_manifest_uri`` routes the country's local region types to a
+    regional release, read as ``regional_release_kind``. That release must
+    serve the pinned model, and the pinned core when ``core_version`` is
+    given, by its own build or claims: a qualified pair names the primary
+    release only. While the bundle routes regions, a run without
+    ``regional_manifest_uri`` is refused unless ``drop_regional_release``.
     """
     if country not in COUNTRY_MODEL_PACKAGES:
         raise CertificationError(f"Unknown country {country!r}.")
     model_package = COUNTRY_MODEL_PACKAGES[country]
     model_version = model_version or installed_model_version(model_package)
     strategy = certification_strategy(country, data_producer)
+    bundle_path = bundle_path or default_bundle_source_path()
+    bundle = json.loads(bundle_path.read_text())
+
+    # Certification rewrites data_releases.<country> wholesale, so a run
+    # without the regional manifest would silently drop the regional routing.
+    current_regional_uri = ((bundle.get("data_releases") or {}).get(country) or {}).get(
+        "regional_source_manifest_uri"
+    )
+    if (
+        current_regional_uri is not None
+        and regional_manifest_uri is None
+        and not drop_regional_release
+    ):
+        raise CertificationError(
+            f"The bundle's {country.upper()} data release routes regions to "
+            f"{current_regional_uri}. Pass --regional-manifest-uri (that release "
+            "or its replacement) to keep regional routing, or "
+            "--drop-regional-release to remove it."
+        )
 
     data_release, manifest_sha256, warnings = strategy.certify(
         country=country,
@@ -1038,11 +1357,10 @@ def certify_data_release(
         regional_manifest_uri=regional_manifest_uri,
         regional_artifact_prefix=regional_artifact_prefix,
         regional_path_template=regional_path_template,
+        regional_release_kind=regional_release_kind,
         core_version=core_version,
         qualified_pair_id=qualified_pair_id,
     )
-    bundle_path = bundle_path or default_bundle_source_path()
-    bundle = json.loads(bundle_path.read_text())
     bundle.setdefault("data_releases", {})[country] = data_release
     bundle.setdefault("countries", {}).setdefault(country, {})["model_package"] = (
         model_package

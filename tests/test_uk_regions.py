@@ -17,6 +17,7 @@ from policyengine.countries.uk.regions import (
     build_uk_region_registry,
     uk_region_registry,
 )
+from policyengine.provenance.manifest import CountryReleaseManifest
 
 
 class TestUKCountries:
@@ -301,6 +302,146 @@ class TestUKRegionRegistryBuilder:
         assert isinstance(local_authority.scoping_strategy, RowFilterStrategy)
         assert local_authority.scoping_strategy.variable_name == "la_code_oa"
         assert local_authority.scoping_strategy.variable_value == "LA001"
+
+
+MICROCOSM_NATIONAL_TAG = "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa"
+MICROCOSM_DENSE_TAG = "microcosm-uk-2024-25-dense-20261101T000000Z-bbbbbbbb"
+MICROCOSM_NATIONAL_URI = (
+    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
+    f"@{MICROCOSM_NATIONAL_TAG}"
+)
+EFRS_AREA_URI = (
+    "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.0"
+)
+MICROCOSM_DENSE_URI = (
+    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
+    f"@{MICROCOSM_DENSE_TAG}"
+)
+
+
+def _uk_routed_manifest(kind: str) -> CountryReleaseManifest:
+    """A certified Microcosm national bundle whose area regions are routed."""
+    if kind == "area_coded_national":
+        area_name, area_reference = (
+            "enhanced_frs_2024_25",
+            {
+                "path": "enhanced_frs_2024_25.h5",
+                "repo_id": "policyengine/policyengine-uk-data-private",
+                "repo_type": "model",
+                "revision": "1.58.0",
+            },
+        )
+    else:
+        area_name, area_reference = (
+            "microcosm_uk_2024_25_dense",
+            {
+                "path": "microcosm_uk_2024_25_dense.h5",
+                "repo_id": "policyengine/populace-uk-private",
+                "repo_type": "dataset",
+                "revision": MICROCOSM_DENSE_TAG,
+            },
+        )
+    area_template = {"path_template": area_reference["path"]}
+    return CountryReleaseManifest.model_validate(
+        {
+            "country_id": "uk",
+            "policyengine_version": "9.9.9",
+            "model_package": {"name": "policyengine-uk", "version": "2.126.12"},
+            "data_package": {
+                "name": "microcosm-data",
+                "version": "0.1.0",
+                "repo_id": "policyengine/populace-uk-private",
+                "repo_type": "dataset",
+                "release_manifest_revision": MICROCOSM_NATIONAL_TAG,
+            },
+            "default_dataset": "microcosm_uk_2024_25",
+            "datasets": {
+                "microcosm_uk_2024_25": {
+                    "path": "microcosm_uk_2024_25.h5",
+                    "repo_id": "policyengine/populace-uk-private",
+                    "revision": MICROCOSM_NATIONAL_TAG,
+                },
+                area_name: area_reference,
+            },
+            "region_datasets": {
+                "national": {"path_template": "microcosm_uk_2024_25.h5"},
+                "constituency": area_template,
+                "local_authority": area_template,
+            },
+            "regional_release_kind": kind,
+        }
+    )
+
+
+class TestUKAreaRegionRouting:
+    """Area regions load the dataset certification routes them to."""
+
+    def test__given_unrouted_bundle__then_area_regions_filter_the_national_dataset(
+        self,
+    ):
+        registry = build_uk_region_registry(
+            include_constituencies=True, include_local_authorities=True
+        )
+
+        assert registry.get("constituency/E14001063").dataset_path is None
+        assert registry.get("local_authority/N09000011").dataset_path is None
+        assert len(uk_region_registry.get_by_type("constituency")) == 0
+
+    def test__given_national_first_bundle__then_area_regions_load_the_efrs(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "policyengine.provenance.manifest.get_release_manifest",
+            lambda country_id: _uk_routed_manifest("area_coded_national"),
+        )
+
+        default = build_uk_region_registry()
+        registry = build_uk_region_registry(
+            include_constituencies=True, include_local_authorities=True
+        )
+
+        # An area-coded national route does not add area regions by default.
+        assert len(default) == 5
+        assert registry.get("uk").dataset_path == MICROCOSM_NATIONAL_URI
+        assert registry.get("country/wales").dataset_path is None
+        constituency = registry.get("constituency/E14001063")
+        assert constituency.dataset_path == EFRS_AREA_URI
+        assert constituency.scoping_strategy.variable_name == "constituency_code_oa"
+        local_authority = registry.get("local_authority/N09000011")
+        assert local_authority.dataset_path == EFRS_AREA_URI
+        assert local_authority.scoping_strategy.variable_name == "la_code_oa"
+
+    def test__given_local_area_bundle__then_default_registry_adds_area_regions(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "policyengine.provenance.manifest.get_release_manifest",
+            lambda country_id: _uk_routed_manifest("local_area"),
+        )
+
+        registry = build_uk_region_registry()
+
+        assert len(registry.get_by_type("constituency")) == 650
+        assert len(registry.get_by_type("local_authority")) == 361
+        assert registry.get("constituency/N05000001").dataset_path == (
+            MICROCOSM_DENSE_URI
+        )
+        assert registry.get("local_authority/E06000063").dataset_path == (
+            MICROCOSM_DENSE_URI
+        )
+        assert registry.get("uk").dataset_path == MICROCOSM_NATIONAL_URI
+
+    def test__given_local_area_bundle__then_explicit_exclusion_wins(self, monkeypatch):
+        monkeypatch.setattr(
+            "policyengine.provenance.manifest.get_release_manifest",
+            lambda country_id: _uk_routed_manifest("local_area"),
+        )
+
+        registry = build_uk_region_registry(
+            include_constituencies=False, include_local_authorities=False
+        )
+
+        assert len(registry) == 5
 
 
 # The pinned UK model's Region enum contains nine English ITL1 regions and
