@@ -294,11 +294,13 @@ jobs:
     needs: [resolve, prepare]
     if: needs.prepare.outputs.duplicate == 'false'
     runs-on: ubuntu-latest
-    # The local gates took about 80 minutes while every wrapper.household
+    # The local gates took 80-89 minutes while every wrapper.household
     # contract row errored at once. Since #651 those rows run the household
-    # calculator, and with contract 2.0.0's extra years the gates pass two
-    # hours, so a 120-minute limit cancelled every attempt and re-staged it.
-    # 330 stays under the 360-minute ceiling for GitHub-hosted jobs.
+    # calculator, which takes the gates past two hours, so a 120-minute limit
+    # cancelled every attempt and re-staged it. 330 stays under the 360-minute
+    # ceiling for GitHub-hosted jobs. Note that stage_attempt's four-hour lease
+    # still lets a catch-up re-stage a live attempt whose gates pass about four
+    # hours (#662), so in practice runs should stay under that.
     timeout-minutes: 330
     concurrency:
       group: uk-candidate-${{ needs.resolve.outputs.pair_id }}
