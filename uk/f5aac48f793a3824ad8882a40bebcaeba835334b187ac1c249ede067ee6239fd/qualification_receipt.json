@@ -1,5 +1,5 @@
 {
-  "completed_at": "2026-10-18T08:47:00Z",
+  "completed_at": "2026-10-18T12:33:42Z",
   "gates": [
     {
       "details": {
@@ -11,15 +11,15 @@
     }
   ],
   "harness": {
-    "git_commit": "2ed4e36c4f245bbcd7771e87adab4693d2c55ce0",
+    "git_commit": "5dde23c490e9ba50041b0e1fe7c53cbcc910c5c2",
     "packaged_bundle_manifest_sha256": "7be67d3fefe3e7f9bae3ab9c63deddcd44d653238c8cd0ad4819c0eb33905462",
     "policyengine_version": "6.7.3"
   },
   "issued_by": {
     "repository": "PolicyEngine/policyengine.py",
     "run_attempt": 1,
-    "run_url": "https://github.com/PolicyEngine/policyengine.py/actions/runs/39105105518",
-    "workflow_run_id": 39105105518
+    "run_url": "https://github.com/PolicyEngine/policyengine.py/actions/runs/39119542375",
+    "workflow_run_id": 39119542375
   },
   "pair": {
     "core": {
