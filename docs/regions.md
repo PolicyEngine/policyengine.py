@@ -23,13 +23,9 @@ ca_snap = Aggregate(
 ca_snap.run()
 ```
 
-Each state is a region in the US registry. State regions load the Populace
-dataset declared by `region.dataset_path`, then scope its rows by `state_fips`.
-They do not require separate state H5 files.
-
-**Temporarily**, state and congressional-district regions filter the certified national dataset (`populace_us_2024`), as in policyengine 6.2.1. The certified ACS-local release has no source-backed SPM independence, so canonical SPM refuses thousands of its SPM units (PolicyEngine/microcosm#1263, PolicyEngine/policyengine-sim-api#747). They move back to the ACS-local dataset with a release whose SPM units all have a classified adult.
-
-For example:
+Each state is a region in the US registry. State regions load the ACS-local
+Populace dataset declared by `region.dataset_path`, then scope its rows by
+`state_fips`. They do not require separate state H5 files:
 
 ```python
 states = pe.us.model.region_registry.get_by_type("state")
@@ -56,8 +52,7 @@ for row in impacts.district_results:
 
 `district_geoid` is the SSDD integer (state FIPS × 100 + district number;
 at-large districts use `00`). Congressional district regions load the same
-file as state regions (for now the national dataset; see above) and scope its rows by
-`congressional_district_geoid`.
+ACS-local file and scope its rows by `congressional_district_geoid`.
 
 ## UK countries
 

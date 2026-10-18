@@ -1,8 +1,20 @@
-"""Certified US sources that predate SPM declarations.
+"""Certified US sources that cannot carry their SPM declarations.
 
-BACKWARD COMPATIBILITY (#597, #598): register a source here only when it was
-certified before SPM measurement-scope and independence-role declarations
-existed. New certified sources must carry the declarations themselves.
+BACKWARD COMPATIBILITY (#597, #598). Register a certified source here only
+when it cannot carry a declaration itself:
+
+- it was certified before SPM measurement-scope and independence-role
+  declarations existed (Build O); or
+- the pinned policyengine-us does not define that declaration's variable, so
+  the source cannot store it. Today that is ``spm_unit_spm_universe_status``,
+  which policyengine-us defines only from PolicyEngine/policyengine-us#9462;
+  Microcosm's stored-inputs gate refuses a variable the model does not define.
+
+Register only the declarations the source lacks: a source that stores
+``is_spm_independent_minor_role`` takes no independence list. Delete an entry
+once nothing reads that source, or once a release of it carries the
+declaration natively. Every other certified source must carry the
+declarations itself.
 """
 
 from __future__ import annotations
@@ -63,7 +75,26 @@ POPULACE_US_2024_ACS_LOCAL_BUILD_O = LegacySPMSource(
     ),
 )
 
-LEGACY_SPM_SOURCES: tuple[LegacySPMSource, ...] = (POPULACE_US_2024_ACS_LOCAL_BUILD_O,)
+#: ``populace_us_2024_acs_local`` rebuilt for PolicyEngine/microcosm#1263. It
+#: stores the SPM independence role for every person, so it takes no list. It
+#: cannot store the measurement scope: policyengine-us 2.2.1 does not define
+#: ``spm_unit_spm_universe_status``. Its ACS group-quarters units are outside
+#: the measurement under Census's ACS household-population rule, as Build O's
+#: are. Remove the entry once a release carries the scope natively
+#: (PolicyEngine/policyengine-us#9462).
+POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263 = LegacySPMSource(
+    name=(
+        "populace_us_2024_acs_local@"
+        "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
+    ),
+    source_sha256="3ce781c440a7f933b1d952ff4e9d9f65f4698c64b94d2fad165af0c662838d6c",
+    spm_universe_rule="acs_household_population",
+)
+
+LEGACY_SPM_SOURCES: tuple[LegacySPMSource, ...] = (
+    POPULACE_US_2024_ACS_LOCAL_BUILD_O,
+    POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263,
+)
 
 
 def legacy_spm_source(source_sha256: Optional[str]) -> Optional[LegacySPMSource]:

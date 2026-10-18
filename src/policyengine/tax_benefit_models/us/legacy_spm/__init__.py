@@ -11,8 +11,10 @@
 #                                                                            #
 # This package DERIVES the declarations from evidence those sources do       #
 # carry, for the sources registered in ``registry.LEGACY_SPM_SOURCES`` and   #
-# for nothing else. New certified sources must carry the declarations        #
-# themselves: do NOT register them here.                                     #
+# for nothing else. A new certified source is registered only for a          #
+# declaration the pinned policyengine-us cannot read (today the scope,       #
+# before PolicyEngine/policyengine-us#9462); see ``registry``. Otherwise new #
+# certified sources must carry the declarations themselves.                  #
 #                                                                            #
 # ``model_adapter`` is the part that must eventually go: it overrides SPM    #
 # variables only while the installed policyengine-us cannot read the scope   #

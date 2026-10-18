@@ -65,11 +65,9 @@ US_RELEASE_MANIFEST_DATASET_URI = (
 # immutable release. It remains non-default nationally and is selected for
 # states and congressional districts.
 US_LOCAL_AREA_DATASET = "populace_us_2024_acs_local"
-US_LOCAL_AREA_RELEASE_ID = (
-    "populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z"
-)
+US_LOCAL_AREA_RELEASE_ID = "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
 US_LOCAL_AREA_SHA256 = (
-    "769756c31f3ca646d12c272511744dec04c0e68870c6946dd945fbba65b6a7ec"
+    "3ce781c440a7f933b1d952ff4e9d9f65f4698c64b94d2fad165af0c662838d6c"
 )
 US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
@@ -330,15 +328,12 @@ class TestReleaseManifests:
         assert manifest.region_datasets["national"].path_template == (
             "populace_us_2024.h5"
         )
-        # Temporary (microcosm#1263): state and district regions filter the
-        # national file until the ACS-local release supplies source-backed SPM
-        # independence; see the test below.
         assert manifest.region_datasets["state"].path_template == (
-            "populace_us_2024.h5"
+            "populace_us_2024_acs_local.h5"
         )
         assert (
             manifest.region_datasets["congressional_district"].path_template
-            == "populace_us_2024.h5"
+            == "populace_us_2024_acs_local.h5"
         )
 
     def test__given_local_area_name__then_resolves_to_its_immutable_tag(self):
@@ -365,21 +360,10 @@ class TestReleaseManifests:
         assert US_LOCAL_AREA_DATASET in resolve_default_datasets("us")
         assert US_LOCAL_AREA_DATASET != manifest.default_dataset
 
-    def test__given_us_manifest__then_local_regions_filter_the_national_file(self):
-        """Temporary revert, until microcosm#1263 lands.
-
-        The ACS-local release (``populace-us-2024-buildo-acs-local-767312d60-…``)
-        has no ``is_spm_independent_minor_role``, so 5,274 SPM units have no
-        classified adult and canonical SPM refuses every state-region run
-        (SPM_COMPOSITION_REQUIRED; policyengine-sim-api#747). State and district
-        regions filter the national file again, as in policyengine 6.2.1, which
-        carries the role. Point them back at the ACS-local dataset only with a
-        release whose SPM units all have a classified adult.
-        """
-
+    def test__given_us_manifest__then_local_regions_resolve_to_acs_local(self):
         assert (
             resolve_region_dataset_path("us", "state", state_code="CA")
-            == US_CERTIFIED_DATASET_URI
+            == US_LOCAL_AREA_DATASET_URI
         )
         assert (
             resolve_region_dataset_path(
@@ -387,7 +371,7 @@ class TestReleaseManifests:
                 "congressional_district",
                 district_code="CA-01",
             )
-            == US_CERTIFIED_DATASET_URI
+            == US_LOCAL_AREA_DATASET_URI
         )
         assert not any(
             key.startswith(("states/", "districts/"))

@@ -40,6 +40,7 @@ from policyengine.tax_benefit_models.us.legacy_spm.independence import (
 )
 from policyengine.tax_benefit_models.us.legacy_spm.registry import (
     POPULACE_US_2024_ACS_LOCAL_BUILD_O,
+    POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263,
 )
 from policyengine.tax_benefit_models.us.legacy_spm.universe import (
     classify_acs_household_population,
@@ -47,6 +48,8 @@ from policyengine.tax_benefit_models.us.legacy_spm.universe import (
 
 ACS = "acs_2024_1yr"
 BUILD_O = POPULACE_US_2024_ACS_LOCAL_BUILD_O
+#: The bundle's certified ACS-local file: scope rule only, roles stored.
+REBUILD = POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263
 
 
 def _tables():
@@ -88,16 +91,27 @@ def test_registry_keys_are_unique_and_match_the_bundle():
     hashes = [source.source_sha256 for source in LEGACY_SPM_SOURCES]
     assert len(hashes) == len(set(hashes))
     manifest = get_release_manifest("us")
+    # The bundle certifies the microcosm#1263 rebuild. Build O stays
+    # registered so runs over it still reproduce.
     assert manifest.datasets["populace_us_2024_acs_local"].sha256 == (
-        BUILD_O.source_sha256
+        REBUILD.source_sha256
     )
     pin = BUILD_O.independence_list
     assert pin is not None
     assert manifest.datasets[pin.bundle_dataset].sha256 == pin.sha256
 
 
+def test_the_rebuild_needs_only_the_scope():
+    """It stores the independence role, so it takes no list (registry rule)."""
+    assert REBUILD.spm_universe_rule == "acs_household_population"
+    assert REBUILD.independence_list is None
+    assert REBUILD in LEGACY_SPM_SOURCES
+    assert BUILD_O in LEGACY_SPM_SOURCES
+
+
 def test_only_registered_sources_are_legacy():
     assert legacy_spm_source(BUILD_O.source_sha256) == BUILD_O
+    assert legacy_spm_source(REBUILD.source_sha256) == REBUILD
     assert legacy_spm_source(None) is None
     assert legacy_spm_source("0" * 64) is None
     default = get_release_manifest("us").datasets["populace_us_2024"]
@@ -322,6 +336,51 @@ def test_unexpected_list_columns_are_refused(tmp_path):
         independence_roles(person, path)
 
 
+# --- The microcosm#1263 rebuild: scope only ---------------------------------
+
+
+def test_the_rebuild_takes_scope_from_record_types_and_keeps_its_own_roles(tmp_path):
+    from policyengine.tax_benefit_models.us.legacy_spm import derive_declarations
+
+    person, household = _tables()
+    stored_roles = [True, False, False, False, True, False, True]
+    person[INDEPENDENCE_ROLE] = stored_roles
+    declarations = derive_declarations(REBUILD, person, household, data_dir=tmp_path)
+    # ACS group quarters (TYPEHUGQ 2/3 with RELSHIPP 37/38) are outside; the
+    # ACS housing unit and the ASEC and PUF units are measured.
+    assert declarations.universe.to_dict() == {
+        10: "INCLUDED",
+        20: "OUTSIDE",
+        30: "OUTSIDE",
+        40: "INCLUDED",
+        50: "INCLUDED",
+    }
+    # No list: the roles the source stores are the model's input, untouched.
+    assert declarations.independence_role is None
+    assert person[INDEPENDENCE_ROLE].tolist() == stored_roles
+    assert declarations.record.independence_list_people is None
+    assert declarations.record.outside_spm_units == 2
+    assert declarations.record.included_spm_units == 3
+    assert declarations.record.profile == expected_profile(REBUILD)
+    assert not any(tmp_path.iterdir())  # nothing was downloaded
+
+
+def test_a_rebuild_year_file_needs_the_scope_but_no_derived_role():
+    from policyengine.tax_benefit_models.us.legacy_spm import check_year_file_frames
+
+    record = LegacySPMRecord(
+        profile=expected_profile(REBUILD),
+        outside_spm_units=1,
+        included_spm_units=1,
+    )
+    person, spm_unit = _declared_frames()
+    person.drop(columns=[INDEPENDENCE_ROLE], inplace=True)
+    check_year_file_frames(person, spm_unit, record)
+    spm_unit.drop(columns=["spm_unit_spm_universe_status"], inplace=True)
+    with pytest.raises(ValueError, match="spm_unit_spm_universe_status"):
+        check_year_file_frames(person, spm_unit, record)
+
+
 # --- Records: total and exact ---------------------------------------------
 
 
@@ -458,11 +517,21 @@ def test_a_file_that_is_not_hdf5_is_out_of_date(tmp_path):
 def test_only_legacy_year_files_must_record_declarations(tmp_path):
     path = _empty_h5(tmp_path / "year.h5")
     acs_local = us_datasets._expected_legacy_spm_profile("populace_us_2024_acs_local")
-    assert acs_local == expected_profile(BUILD_O)
+    assert acs_local == expected_profile(REBUILD)
     assert us_datasets._expected_legacy_spm_profile("populace_us_2024") is None
     assert us_datasets._expected_legacy_spm_profile("hf://other/repo/x.h5") is None
     assert year_file_problem(path, acs_local) is not None
+    # A Build O record is stale for the rebuild the bundle now certifies.
     write_record(path, _record())
+    assert year_file_problem(path, acs_local) is not None
+    write_record(
+        path,
+        _record(
+            name=REBUILD.name,
+            source_sha256=REBUILD.source_sha256,
+            independence_list=None,
+        ),
+    )
     assert year_file_problem(path, acs_local) is None
     assert year_file_problem(path, None) is not None
 
@@ -472,7 +541,7 @@ def test_a_managed_dataset_is_recognised_by_its_uri_too():
 
     uri = resolve_dataset_reference("us", "populace_us_2024_acs_local")
     assert uri.startswith("hf://")
-    assert us_datasets._expected_legacy_spm_profile(uri) == expected_profile(BUILD_O)
+    assert us_datasets._expected_legacy_spm_profile(uri) == expected_profile(REBUILD)
     default_uri = resolve_dataset_reference("us", "populace_us_2024")
     assert us_datasets._expected_legacy_spm_profile(default_uri) is None
 

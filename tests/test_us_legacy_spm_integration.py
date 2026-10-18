@@ -70,6 +70,7 @@ from policyengine.tax_benefit_models.us.legacy_spm.model_adapter import (  # noq
 )
 from policyengine.tax_benefit_models.us.legacy_spm.registry import (  # noqa: E402
     POPULACE_US_2024_ACS_LOCAL_BUILD_O,
+    POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263,
 )
 from policyengine.tax_benefit_models.us.model import PolicyEngineUSLatest  # noqa: E402
 
@@ -571,7 +572,24 @@ def legacy_files(tmp_path, monkeypatch):
 
     for module in (us_datasets, us_model, declarations):
         monkeypatch.setattr(module, "materialize_dataset", materialize)
+    # The bundle now certifies the microcosm#1263 rebuild. These tests serve
+    # the synthetic file as Build O, which stays registered, so the bundle's
+    # ACS-local name and URI resolve to Build O's hash here.
+    managed = us_datasets._managed_source_sha256
+    bundle_sha256 = _bundle_acs_local_sha256()
+
+    def build_o_identity(dataset):
+        sha256 = managed(dataset)
+        return BUILD_O.source_sha256 if sha256 == bundle_sha256 else sha256
+
+    monkeypatch.setattr(us_datasets, "_managed_source_sha256", build_o_identity)
     return SimpleSources(source=source, requests=requests)
+
+
+def _bundle_acs_local_sha256() -> str:
+    from policyengine.provenance.manifest import get_release_manifest
+
+    return get_release_manifest("us").datasets["populace_us_2024_acs_local"].sha256
 
 
 class SimpleSources:
@@ -770,3 +788,100 @@ def test_other_sources_get_no_declarations(tmp_path):
     assert RECORD_KEY not in dataset.metadata
     assert UNIVERSE_VARIABLE not in pd.DataFrame(dataset.data.spm_unit).columns
     assert INDEPENDENCE_ROLE not in pd.DataFrame(dataset.data.person).columns
+
+
+# --- The microcosm#1263 rebuild: scope rule, roles stored -------------------
+
+REBUILD = POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263
+#: The roles the rebuilt source stores: ACS head, ASEC head and the ASEC teen
+#: who heads their own SPM unit.
+REBUILD_ROLES = [True, False, False, False, True, True]
+
+
+@pytest.fixture
+def rebuild_files(tmp_path, monkeypatch):
+    """Serve a synthetic source as the bundle's certified ACS-local file."""
+    frames = _source_frames()
+    frames["person"][INDEPENDENCE_ROLE] = REBUILD_ROLES
+    path = tmp_path / "populace_us_2024_acs_local.h5"
+    with pd.HDFStore(path, mode="w") as store:
+        for entity, frame in frames.items():
+            store.put(entity, frame, format="table", data_columns=True)
+        store.put("_time_period", pd.Series([2024]), format="table")
+    requests = []
+
+    def materialize(country, dataset=None, **kwargs):
+        requests.append(dataset)
+        return _bundle_source(path, REBUILD.source_sha256)
+
+    for module in (us_datasets, us_model, declarations):
+        monkeypatch.setattr(module, "materialize_dataset", materialize)
+    return SimpleSources(source=str(path), requests=requests)
+
+
+def test_the_bundle_certifies_the_rebuild():
+    assert _bundle_acs_local_sha256() == REBUILD.source_sha256
+
+
+def test_the_rebuilds_year_files_carry_its_scope_and_keep_its_roles(
+    tmp_path, rebuild_files
+):
+    from policyengine.provenance.manifest import resolve_dataset_reference
+
+    data_folder = str(tmp_path / "data")
+    created = create_datasets(
+        datasets=["populace_us_2024_acs_local"], years=[YEAR], data_folder=data_folder
+    )
+    # No independence list is fetched: the source stores the roles.
+    assert rebuild_files.requests == ["populace_us_2024_acs_local"]
+    (dataset,) = created.values()
+    spm_unit = pd.DataFrame(dataset.data.spm_unit).set_index("spm_unit_id")
+    person = pd.DataFrame(dataset.data.person).set_index("person_id")
+    assert spm_unit[UNIVERSE_VARIABLE].tolist() == [
+        "INCLUDED",
+        "OUTSIDE",
+        "OUTSIDE",
+        "INCLUDED",
+        "INCLUDED",
+    ]
+    assert person[INDEPENDENCE_ROLE].tolist() == REBUILD_ROLES
+    assert LegacySPMRecord.model_validate(
+        dataset.metadata[RECORD_KEY]
+    ) == LegacySPMRecord(
+        profile=expected_profile(REBUILD),
+        outside_spm_units=2,
+        included_spm_units=3,
+    )
+
+    # The region registry names the file by URI.
+    uri = resolve_dataset_reference("us", "populace_us_2024_acs_local")
+    (loaded,) = load_datasets(
+        datasets=[uri], years=[YEAR], data_folder=data_folder
+    ).values()
+    simulation = Simulation(
+        dataset=loaded,
+        tax_benefit_model_version=pe.us.model,
+        extra_variables=SPM_EXTRAS,
+    )
+    simulation.run()
+    spm_unit = _frame(simulation, "spm_unit")
+    assert spm_unit.loc[OUTSIDE_UNITS, "spm_unit_spm_threshold"].isna().all()
+    assert spm_unit.loc[OUTSIDE_UNITS, "spm_unit_is_in_spm_poverty"].isna().all()
+    assert spm_unit.loc[MEASURED_UNITS, "spm_unit_spm_threshold"].notna().all()
+    assert spm_unit.loc[MEASURED_UNITS, "spm_unit_net_income"].notna().all()
+    assert simulation.output_dataset.metadata[RECORD_KEY]["model_mode"] == "override"
+
+
+def test_a_managed_simulation_of_the_rebuild_masks_group_quarters(rebuild_files):
+    simulation = pe.us.managed_microsimulation(dataset="populace_us_2024_acs_local")
+    thresholds = simulation.calculate("spm_unit_spm_threshold", YEAR).values
+    assert np.isnan(thresholds[[1, 2]]).all()
+    assert np.isfinite(thresholds[[0, 3, 4]]).all()
+    in_poverty = simulation.calculate("spm_unit_is_in_spm_poverty", YEAR).values
+    assert np.isnan(in_poverty[[1, 2]]).all()
+    recorded = LegacySPMRecord.model_validate(
+        simulation.policyengine_bundle[RECORD_KEY]
+    )
+    assert recorded.model_mode == "override"
+    assert recorded.outside_spm_units == 2
+    assert recorded.independence_list_people is None
