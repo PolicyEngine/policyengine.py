@@ -83,8 +83,11 @@ POPULACE_US_2024_ACS_LOCAL_BUILD_O = LegacySPMSource(
 #: are. Remove the entry once a release carries the scope natively
 #: (PolicyEngine/policyengine-us#9462).
 POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263 = LegacySPMSource(
-    name="populace_us_2024_acs_local@NEW_RELEASE_ID",
-    source_sha256="NEW_SOURCE_SHA256",
+    name=(
+        "populace_us_2024_acs_local@"
+        "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
+    ),
+    source_sha256="3ce781c440a7f933b1d952ff4e9d9f65f4698c64b94d2fad165af0c662838d6c",
     spm_universe_rule="acs_household_population",
 )
 

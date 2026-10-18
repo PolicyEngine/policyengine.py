@@ -33,7 +33,7 @@ Sources are keyed by certified SHA-256 in `legacy_spm/registry.py`.
 | Source | Scope rule | Independence list |
 | --- | --- | --- |
 | `populace_us_2024_acs_local` Build O (`769756c3…a7ec`) | `acs_household_population` | national release `source_spm_person_independence.csv` (`22b5968d…3ce5`) |
-| `populace_us_2024_acs_local` rebuilt for microcosm#1263 (`NEW_SHA_SHORT`, the bundle's certified ACS-local file) | `acs_household_population` | none: the source stores `is_spm_independent_minor_role` |
+| `populace_us_2024_acs_local` rebuilt for microcosm#1263 (`3ce781c4…8d6c`, the bundle's certified ACS-local file) | `acs_household_population` | none: the source stores `is_spm_independent_minor_role` |
 
 ### Scope rule `acs_household_population` (#597)
 
@@ -48,7 +48,7 @@ Age is never used. Unknown channels, missing or inconsistent evidence, and SPM
 units that mix group quarters with household people all raise.
 
 On the full Build O source, 183,206 SPM units are outside the measurement.
-On the microcosm#1263 rebuild, NEW_OUTSIDE_UNITS are: Build O's group-quarters
+On the microcosm#1263 rebuild, 181,260 are: Build O's group-quarters
 units less the 1,946 one-person group-quarters records of children under 15,
 which the rebuild leaves out of the population until the model reads scope
 natively (PolicyEngine/microcosm#1263).
