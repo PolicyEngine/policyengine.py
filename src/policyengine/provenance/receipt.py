@@ -81,7 +81,7 @@ import re
 import struct
 import sys
 import zipfile
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
@@ -1263,7 +1263,12 @@ def _unwrapped(value: Any, module: Any, filename: str) -> Any:
     for _ in range(16):
         if _from_this_file(value, module, filename):
             return value
-        value = getattr(value, "__wrapped__", None)
+        try:
+            value = getattr(value, "__wrapped__", None)
+        except Exception:
+            # A module whose lazy __getattr__ raises something other than
+            # AttributeError wraps nothing (#632 round 6, L1).
+            return None
         if value is None:
             return None
     return None
@@ -2269,20 +2274,193 @@ def _holds_union(value: Any, depth: int = 0) -> bool:
     return any(_holds_union(argument, depth + 1) for argument in arguments)
 
 
+_TYPE_PARAMETERS = tuple(
+    getattr(ast, name)
+    for name in ("TypeVar", "ParamSpec", "TypeVarTuple")
+    if hasattr(ast, name)
+)
+
+
+def _names_bound_without_import(nodes: Iterable[ast.AST]) -> set[str]:
+    """Every name these nodes bind other than by import: parameters (lambda
+    ones included), assignment, loop, ``with``, comprehension and ``:=``
+    targets, deletions, ``except`` and ``match`` captures, nested function
+    and class names, type parameters, and ``global`` or ``nonlocal``
+    declarations."""
+
+    names: set[str] = set()
+    for node in nodes:
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            names.add(node.id)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ) or isinstance(node, _TYPE_PARAMETERS):
+            names.add(node.name)
+        elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)):
+            if node.name:
+                names.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            names.add(node.rest)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            names.update(node.names)
+    return names
+
+
+#: Builtins that read or write an attribute named at run time.
+_ATTRIBUTE_BUILTINS = ("setattr", "delattr", "getattr")
+
+
+def _names_mutated_by_attribute(nodes: Iterable[ast.AST]) -> tuple[set[str], bool]:
+    """Names code can rebind without binding a name, and whether it can
+    rebind ones the receipt cannot name.
+
+    The names: attribute stores and deletions (``sys.modules[__name__].
+    Annotated = Tuple`` and ``typing.Annotated = Tuple`` store
+    ``Annotated``) and the literal names passed to ``setattr`` or
+    ``delattr`` called directly. Unsound (any name could change): any use of
+    ``modules`` (an attribute, an imported name or a string), through
+    which code can swap whole modules; ``getattr(x, "modules")``; and
+    ``setattr``, ``delattr`` or ``getattr`` used other than as a direct call
+    with a literal name (an alias, ``map``, ``partial``, a computed name, or
+    reached as an attribute).
+    """
+
+    nodes = list(nodes)
+    names: set[str] = set()
+    unsound = False
+    direct: set[int] = set()
+    for node in nodes:
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in _ATTRIBUTE_BUILTINS
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
+        ):
+            direct.add(id(node.func))
+            if node.func.id != "getattr":
+                names.add(node.args[1].value)
+            elif node.args[1].value == "modules":
+                unsound = True
+    for node in nodes:
+        if isinstance(node, ast.Attribute):
+            if not isinstance(node.ctx, ast.Load):
+                names.add(node.attr)
+            if node.attr == "modules" or node.attr in _ATTRIBUTE_BUILTINS:
+                unsound = True
+        elif isinstance(node, ast.Name):
+            if node.id in _ATTRIBUTE_BUILTINS and id(node) not in direct:
+                unsound = True
+        elif isinstance(node, ast.alias) and node.name in (
+            "modules",
+            *_ATTRIBUTE_BUILTINS,
+        ):
+            unsound = True
+        elif isinstance(node, ast.Constant) and node.value == "modules":
+            unsound = True
+    return names, unsound
+
+
+#: Names a forward reference must not use: Pydantic evaluates it, so it runs
+#: whatever it calls (``setattr(...) or int``, ``globals().update(...)``).
+_CODE_RUNNING_NAMES = frozenset({*_ATTRIBUTE_BUILTINS, "import_module"}) | (
+    _REFUSED_NAMES
+)
+
+
+def _runs_code(node: ast.AST) -> bool:
+    """Whether a node in a forward reference names something that could
+    change what other names stand for."""
+
+    if isinstance(node, ast.Name):
+        return node.id in _CODE_RUNNING_NAMES or _is_dunder(node.id)
+    if isinstance(node, ast.Attribute):
+        return node.attr in _CODE_RUNNING_NAMES or _is_dunder(node.attr)
+    return False
+
+
+def _module_mutations(tree: ast.Module) -> tuple[set[str], bool]:
+    """``_names_mutated_by_attribute`` across every top-level function: a
+    function can call a sibling that rebinds a name for it."""
+
+    nodes: list[ast.AST] = []
+    for statement in tree.body:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            nodes.extend(ast.walk(statement.args))
+            for root in statement.body:
+                nodes.extend(ast.walk(root))
+    return _names_mutated_by_attribute(nodes)
+
+
+def _imports_of_stored_names(nodes: Iterable[ast.AST], stored: set[str]) -> set[str]:
+    """Names local imports bind from a module path, or as a name, that code
+    stores to: ``typing.Annotated = Tuple`` then ``from typing import
+    Annotated as A`` rebinds ``A``."""
+
+    rebound: set[str] = set()
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if stored.intersection(alias.name.split(".")):
+                    rebound.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            path = set((node.module or "").split("."))
+            for alias in node.names:
+                if stored.intersection(path | {alias.name}):
+                    rebound.add(alias.asname or alias.name)
+    return rebound
+
+
+#: How many nodes the forward references of one function may add before
+#: the receipt stops inspecting them and refuses the function instead.
+_INSPECTED_FORWARD_NODES = 100_000
+
+
+class _Unresolved:
+    """What a name stands for when the receipt cannot tell: an import whose
+    target is not loaded when the receipt is built, or an attribute of
+    something other than a loaded module. It could be any object."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<unresolved>"
+
+
+_UNRESOLVED = _Unresolved()
+
+
 def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[Any]]:
     """What each name an import inside a function binds, across all its scopes.
 
     Every binding is kept, so a name one helper imports from typing and
-    another from collections.abc counts as both.
+    another from collections.abc counts as both. An import whose target is
+    not loaded yet binds :data:`_UNRESOLVED`: the import runs when the
+    function does, and could bind anything.
     """
 
     bindings: dict[str, list[Any]] = {}
     for node in nodes:
         if isinstance(node, ast.Import):
             for alias in node.names:
-                name = alias.asname or alias.name.split(".")[0]
-                target = alias.name if alias.asname else name
-                bindings.setdefault(name, []).append(sys.modules.get(target))
+                if not alias.asname:
+                    name = alias.name.split(".")[0]
+                    bindings.setdefault(name, []).append(
+                        sys.modules.get(name, _UNRESOLVED)
+                    )
+                    continue
+                # ``import a.b as c`` binds getattr(a, "b"), as Python does,
+                # with sys.modules only where the attribute is missing.
+                parts = alias.name.split(".")
+                value: Any = sys.modules.get(parts[0], _UNRESOLVED)
+                for depth, part in enumerate(parts[1:], start=2):
+                    if value is _UNRESOLVED:
+                        break
+                    value = _module_attribute(value, part, ".".join(parts[:depth]))
+                bindings.setdefault(alias.asname, []).append(value)
         elif isinstance(node, ast.ImportFrom):
             try:
                 source_name = (
@@ -2293,18 +2471,39 @@ def _function_bindings(module: Any, nodes: Sequence[ast.AST]) -> dict[str, list[
                     else node.module or ""
                 )
             except (ImportError, ValueError):
-                continue
-            source = sys.modules.get(source_name)
+                source_name = None
+            source = sys.modules.get(source_name) if source_name else None
             for alias in node.names:
-                if alias.name != "*":
-                    bindings.setdefault(alias.asname or alias.name, []).append(
-                        getattr(
-                            source,
-                            alias.name,
-                            sys.modules.get(f"{source_name}.{alias.name}"),
-                        )
+                if alias.name == "*":
+                    continue
+                if source is None:
+                    value = (
+                        sys.modules.get(f"{source_name}.{alias.name}", _UNRESOLVED)
+                        if source_name
+                        else _UNRESOLVED
                     )
+                else:
+                    value = _module_attribute(
+                        source, alias.name, f"{source_name}.{alias.name}"
+                    )
+                bindings.setdefault(alias.asname or alias.name, []).append(value)
     return bindings
+
+
+def _module_attribute(owner: Any, name: str, submodule: str = "") -> Any:
+    """What ``owner.name`` stands for, read as Python reads it: the module's
+    attribute (a lazy loader's ``__getattr__`` runs, as it will when the code
+    does), then the loaded submodule of that name. Anything but a module, or a
+    loader that raises, gives :data:`_UNRESOLVED` rather than an error."""
+
+    if not isinstance(owner, ModuleType):
+        return _UNRESOLVED
+    try:
+        return getattr(owner, name)
+    except AttributeError:
+        return sys.modules.get(submodule, _UNRESOLVED) if submodule else _UNRESOLVED
+    except Exception:
+        return _UNRESOLVED
 
 
 def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
@@ -2321,51 +2520,174 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
     inside them.
 
     Resolution is conservative: a name stands for every object the module
-    or any import inside the function binds it to, and every string in the
-    function's code that parses as an expression is inspected as a type
-    (except ``Literal`` values and ``Annotated`` metadata), since a forward
-    reference is evaluated when something resolves it. Local aliases of
-    typing objects (``L = List``) are not followed.
+    or any import inside the function binds it to (an import not loaded yet,
+    or an attribute of anything but a loaded module, could be any object),
+    and every string in the function's code that parses as an expression
+    and could build a cached type (it subscripts something the receipt can
+    name, or holds a nested string) is inspected as a type, except
+    ``Literal`` values and ``Annotated`` metadata, since a forward reference
+    is evaluated when something resolves it. A function whose forward
+    references exceed ``_INSPECTED_FORWARD_NODES``, or hold a string too
+    deeply nested to parse, is refused.
+
+    The ``Literal`` and ``Annotated`` exemptions are granted only where no
+    code the receipt can see could change what those names stand for: no
+    binding of the name in the function, no store or ``setattr``/``delattr``
+    of it in the code of any module function or in a forward reference of
+    the function, no use of ``modules`` (an attribute, an imported name or a
+    string) or of ``setattr``, ``delattr`` or ``getattr`` other than a direct
+    call with a literal name in any module function, and no forward
+    reference of the function that calls something, or stores to an
+    attribute or subscript, while doing either or naming such a builtin,
+    ``import_module``, a refused name or a dunder. A string that does
+    neither (a label such as ``'id'``) runs no code.
+
+    This guards an honest producer, as the receipt does throughout. It is not
+    a sandbox: it does not follow local aliases (``L = List``, ``Amount =
+    Union[Decimal, float]``), ``getattr(typing, "List")``,
+    ``importlib.import_module`` results, ``operator.getitem`` or ``reduce``
+    over typing objects, what calls inside forward references do beyond the
+    names above, forward references in other module functions, f-string or
+    concatenated forward references, or changes made from other modules.
     """
 
     namespace = vars(module)
+    # A sibling function the code calls can rebind names for it.
+    module_stored, module_unsound = _module_mutations(tree)
     for statement in tree.body:
         if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         nodes = [node for root in statement.body for node in ast.walk(root)]
         local = _function_bindings(module, nodes)
+        # Names the code rebinds other than by import, in any scope and in
+        # any forward reference (through := or a lambda's parameters), are
+        # not resolved, so they never earn the Literal or Annotated
+        # exemption. Past the size limit nothing does.
+        rebound = _names_bound_without_import([*ast.walk(statement.args), *nodes])
+        # Names an attribute store or setattr can rebind, here or in any
+        # module function, count as rebound wherever they appear in a name's
+        # chain, as do local imports of them; code that can rebind names the
+        # receipt cannot see earns no exemption at all.
+        stored, unsound = _names_mutated_by_attribute(nodes)
+        stored |= module_stored
+        rebound |= stored | _imports_of_stored_names(nodes, stored)
+        exemptions_sound = not (unsound or module_unsound)
+        strings = [
+            node
+            for node in nodes
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        ]
+        parsed_nodes = 0
+        while strings and exemptions_sound:
+            text = strings.pop().value
+            try:
+                walked = list(ast.walk(ast.parse(text.strip(), mode="eval")))
+            except (SyntaxError, ValueError):
+                continue
+            except RecursionError:
+                exemptions_sound = False
+                break
+            # Every string is inspected; only those that could bind a name
+            # or build a type count toward the limit, so labels never do.
+            if any(
+                isinstance(child, (ast.Subscript, ast.NamedExpr, ast.Lambda))
+                or (isinstance(child, ast.Constant) and isinstance(child.value, str))
+                for child in walked
+            ):
+                parsed_nodes += len(walked)
+            stored, unsound = _names_mutated_by_attribute(walked)
+            # A string that neither calls anything nor stores to an attribute
+            # or subscript (a label such as 'id' or '__main__') cannot run
+            # code; stores and bindings in it still count. A comprehension
+            # target such as t.__dict__['Annotated'] runs __setitem__ with no
+            # call (round 7 of #632), so such a store counts as a call.
+            calls = any(
+                isinstance(child, ast.Call)
+                or (
+                    isinstance(child, (ast.Attribute, ast.Subscript))
+                    and not isinstance(child.ctx, ast.Load)
+                )
+                for child in walked
+            )
+            if parsed_nodes > _INSPECTED_FORWARD_NODES or (
+                calls and (unsound or any(_runs_code(child) for child in walked))
+            ):
+                exemptions_sound = False
+                break
+            rebound |= _names_bound_without_import(walked) | stored
+            strings.extend(
+                node
+                for node in walked
+                if isinstance(node, ast.Constant) and isinstance(node.value, str)
+            )
 
         def resolve(node: ast.AST) -> list[Any]:
-            if isinstance(node, ast.Name):
-                values = list(local.get(node.id, ()))
-                if node.id in namespace:
-                    values.append(namespace[node.id])
-                # A builtin (list, dict, type) never reuses equal aliases.
-                return values
-            if isinstance(node, ast.Attribute):
-                return [
-                    getattr(owner, node.attr)
-                    for owner in resolve(node.value)
-                    if isinstance(owner, ModuleType) and hasattr(owner, node.attr)
-                ]
-            return []
+            # Iterative: a quoted forward reference can nest attributes deeper
+            # than the interpreter's recursion limit.
+            attributes: list[str] = []
+            while isinstance(node, ast.Attribute):
+                attributes.append(node.attr)
+                node = node.value
+            if not isinstance(node, ast.Name):
+                return []
+            values = list(local.get(node.id, ()))
+            if node.id in namespace:
+                values.append(namespace[node.id])
+            # A builtin (list, dict, type) never reuses equal aliases. An
+            # attribute is followed only on a loaded module; on anything else,
+            # or one the module lacks now, it could be any object.
+            for attribute in reversed(attributes):
+                values = [_module_attribute(owner, attribute) for owner in values]
+            return values
 
         def is_form(node: ast.AST, *forms: str) -> bool:
-            return any(_is_typing_form(value, *forms) for value in resolve(node))
+            """Whether any object the name can stand for is one of ``forms``
+            (an unresolved one could be)."""
+
+            return any(
+                value is _UNRESOLVED or _is_typing_form(value, *forms)
+                for value in resolve(node)
+            )
+
+        def is_only_form(node: ast.AST, *forms: str) -> bool:
+            """Whether every object the name can stand for is one of ``forms``.
+
+            Exemptions need this: a name a helper rebinds (``from typing
+            import Tuple as Annotated``, ``Annotated = Tuple``, a parameter
+            named ``Annotated``) must not exempt the strings under it.
+            """
+
+            root = node
+            chain: list[str] = []
+            while isinstance(root, ast.Attribute):
+                chain.append(root.attr)
+                root = root.value
+            if (
+                not exemptions_sound
+                or not isinstance(root, ast.Name)
+                or root.id in rebound
+                or rebound.intersection(chain)
+            ):
+                return False
+            values = resolve(node)
+            return bool(values) and all(
+                _is_typing_form(value, *forms) for value in values
+            )
 
         # Strings that are values, not forward references. ast.walk yields a
         # node before its children, so a Literal or Annotated subscript marks
         # its values before they are reached.
         values: set[int] = set()
         inspected: list[ast.AST] = list(nodes)
+        added = 0
         position = 0
         while position < len(inspected):
             node = inspected[position]
             position += 1
             if isinstance(node, ast.Subscript):
-                if is_form(node.value, "Literal"):
+                if is_only_form(node.value, "Literal"):
                     values.update(id(child) for child in ast.walk(node.slice))
-                elif is_form(node.value, "Annotated") and isinstance(
+                elif is_only_form(node.value, "Annotated") and isinstance(
                     node.slice, ast.Tuple
                 ):
                     for metadata in node.slice.elts[1:]:
@@ -2374,54 +2696,124 @@ def _runtime_alias_problem(module: Any, tree: ast.Module) -> Optional[str]:
                 isinstance(node, ast.Constant)
                 and isinstance(node.value, str)
                 and id(node) not in values
-                and len(inspected) < 100_000
             ):
                 try:
                     parsed = ast.parse(node.value.strip(), mode="eval").body
                 except (SyntaxError, ValueError):
                     continue
-                for child in ast.walk(parsed):
+                except RecursionError:
+                    return (
+                        f"function {statement.name} holds a string too deeply "
+                        "nested for the receipt to inspect as a type"
+                    )
+                walked = list(ast.walk(parsed))
+                # Only a subscript of something the receipt can name, or a
+                # nested string that may hold one, can build a type typing
+                # caches; a label, or a subscript of an unbound name such as
+                # a parameter path ('gov.hmrc...rates.uk[0].threshold'),
+                # cannot, and is neither inspected nor counted.
+                if not any(
+                    (isinstance(child, ast.Subscript) and resolve(child.value))
+                    or (
+                        isinstance(child, ast.Constant) and isinstance(child.value, str)
+                    )
+                    for child in walked
+                ):
+                    continue
+                added += len(walked)
+                if added > _INSPECTED_FORWARD_NODES:
+                    return (
+                        f"function {statement.name} holds more forward-reference "
+                        "type expressions than the receipt inspects"
+                    )
+                for child in walked:
                     ast.copy_location(child, node)
                     inspected.append(child)
 
-        def holds_union(expression: ast.AST) -> bool:
-            for child in ast.walk(expression):
-                if isinstance(child, ast.BinOp) and isinstance(child.op, ast.BitOr):
-                    return True
-                if isinstance(child, ast.Subscript) and is_form(
-                    child.value, "Union", "Optional", "Literal"
-                ):
-                    return True
-                if isinstance(child, (ast.Name, ast.Attribute)) and any(
-                    _holds_union(value) for value in resolve(child)
-                ):
-                    return True
-                if (
-                    isinstance(child, ast.Constant)
-                    and isinstance(child.value, str)
-                    and id(child) not in values
-                ):
-                    try:
-                        parsed = ast.parse(child.value.strip(), mode="eval").body
-                    except (SyntaxError, ValueError):
+        def holds_union(expression: ast.AST) -> Optional[str]:
+            """What in a type expression typing may reuse reordered: "a union"
+            (a union or ``Literal``), or "a name the receipt cannot resolve"
+            (which could be either); ``None`` if nothing.
+
+            ``Literal`` values and ``Annotated`` metadata are values, not types,
+            so a quoted string there is never read as a type, including inside
+            a forward reference parsed here, when every object the subscripted
+            name can stand for is that form. The walk is iterative: quoted
+            layers can nest deeper than the interpreter's recursion limit.
+            """
+
+            pending = [expression]
+            while pending:
+                node = pending.pop()
+                if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+                    return "a union"
+                if isinstance(node, ast.Subscript):
+                    if is_form(node.value, "Union", "Optional", "Literal"):
+                        return (
+                            "a union"
+                            if any(
+                                _is_typing_form(value, "Union", "Optional", "Literal")
+                                for value in resolve(node.value)
+                            )
+                            else "a name the receipt cannot resolve"
+                        )
+                    if is_only_form(node.value, "Annotated"):
+                        elements = (
+                            node.slice.elts
+                            if isinstance(node.slice, ast.Tuple)
+                            else [node.slice]
+                        )
+                        pending.extend(elements[:1])
                         continue
-                    if holds_union(parsed):
-                        return True
-            return False
+                if (
+                    isinstance(node, (ast.Name, ast.Attribute))
+                    and id(node) not in values
+                ):
+                    resolved = resolve(node)
+                    if any(
+                        _holds_union(value)
+                        for value in resolved
+                        if value is not _UNRESOLVED
+                    ):
+                        return "a union"
+                    if _UNRESOLVED in resolved:
+                        return "a name the receipt cannot resolve"
+                if isinstance(node, ast.Constant):
+                    if isinstance(node.value, str) and id(node) not in values:
+                        try:
+                            pending.append(
+                                ast.parse(node.value.strip(), mode="eval").body
+                            )
+                        except (SyntaxError, ValueError):
+                            pass
+                        except RecursionError:
+                            return "a string too deeply nested to inspect"
+                    continue
+                pending.extend(ast.iter_child_nodes(node))
+            return None
 
         for node in inspected:
             if not isinstance(node, ast.Subscript):
                 continue
-            if any(
-                _subscript_reuses_equal_aliases(value) for value in resolve(node.value)
-            ) and holds_union(node.slice):
+            if not any(
+                value is _UNRESOLVED or _subscript_reuses_equal_aliases(value)
+                for value in resolve(node.value)
+            ):
+                continue
+            held = holds_union(node.slice)
+            if held is not None:
                 line = getattr(node, "lineno", statement.lineno)
+                try:
+                    base = ast.unparse(node.value)
+                except RecursionError:
+                    base = "a deeply nested expression"
                 return (
                     f"function {statement.name} subscripts "
-                    f"{ast.unparse(node.value)} with a union (line {line}); typing "
+                    f"{base} with {held} (line {line}); typing "
                     "can return an alias it cached for the same members in another "
                     "order, so earlier code decides what runs (use a builtin "
-                    "generic such as list[Decimal | float])"
+                    "generic such as list[Decimal | float], and import what the "
+                    "function uses at module level)"
                 )
     return None
 

@@ -252,7 +252,11 @@ class Finding(BaseModel):
 
 
 class PriorPublic(BaseModel):
-    """Cells an earlier publication already made public."""
+    """Cells an earlier publication already made public.
+
+    Each cell is ``(level, area_code, reform, year, outcome)``. A release
+    matches cells by code, so they must use the area codes of its estimates.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

@@ -76,7 +76,17 @@ def _validate_reviewed_inputs(
     ):
         raise ValueError(f"{prefix} requires certification for the pinned model")
     validate_release_manifest(
-        data, country.model_package.name, country.model_package.version
+        data,
+        country.model_package.name,
+        country.model_package.version,
+        # Revalidate the certificate's exact qualification context, including
+        # qualification-only models/cores. Never substitute a publisher range.
+        core_version=country.certification.certified_for_core_version,
+        qualified_pair_id=(
+            country.certification.qualification_pair_id
+            if country.certification.compatibility_basis == "qualified_exact_pair"
+            else None
+        ),
     )
     certified = country.certified_data_artifact
     artifact = data.artifacts.get(certified.dataset) if certified else None
@@ -127,6 +137,17 @@ def _validate_runtime_model(bundle: dict, country: CountryReleaseManifest) -> No
     component = bundle.get("packages", {}).get(key, {})
     model = country.model_package
     prefix = f"{country.country_id}: strict TRACE release"
+    certification = country.certification
+    if certification and certification.compatibility_basis == "qualified_exact_pair":
+        core = bundle.get("packages", {}).get("policyengine-core", {})
+        if (
+            not certification.qualification_pair_id
+            or not certification.certified_for_core_version
+            or core.get("version") != certification.certified_for_core_version
+        ):
+            raise ValueError(
+                f"{prefix}: runtime core differs from the qualified exact pair"
+            )
     if (
         model.name != key
         or component.get("name") != model.name

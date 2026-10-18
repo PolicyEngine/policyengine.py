@@ -131,7 +131,8 @@
   "repository": "PolicyEngine/policyengine-scorecard",
   "ref": "replay-state",
   "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "path": "requests/2e4dd8350bfdc5a39780e002c14ab49c02cbf28b77b222af420e38c68bb945cf/results/"
+  "path": "requests/2e4dd8350bfdc5a39780e002c14ab49c02cbf28b77b222af420e38c68bb945cf/results/",
+  "manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
  },
- "receipt_sha256": "a070ac40cb4e6d7daef520cfc1be4ed4958cdd4fe275975dc6d55e856d4ff515"
+ "receipt_sha256": "5cbc44c1b79506a6410c12b437a7451a0e1387ab6a133b9cb8dc0bf71b396650"
 }

@@ -1,3 +1,61 @@
+## [6.7.4] - 2026-10-18
+
+### Changed
+
+- The UK replay qualification gate records narrowly scoped data-limited exceptions under policy d1344-replay-regressions-v2. A matching regression requires coherent zero candidate effects, approved input lineage, and digest-bound Budget-input and positive-input probe evidence from the same candidate-pair attempt. Named acceptance must restate the publication designation; unmatched failures still fail.
+
+### Fixed
+
+- Replay exceptions reject nonzero candidate effects at every reported fiscal level and retain cumulative usable-input history across certified pairs. Budget-input evidence is bound to the exact pair and attempt, status maps must agree with missing-input claims, and probe evidence must match the installed model and recorded baseline/reform arithmetic.
+
+
+## [6.7.3] - 2026-10-17
+
+### Changed
+
+- Contract 2.0.0 of the UK Budget reform contract resolves cos d1344: after a freeze ends, the personal allowance, basic rate limit and aligned NICs thresholds are checked against indexation from the frozen amount (ITA 2007 ss21 and 57), and the six pending checks become gating ones; the sampled property uses the same statutory oracle for the allowance.
+
+
+## [6.7.2] - 2026-10-17
+
+### Fixed
+
+- The UK Budget reform contract's household route imports the UK model module directly, so it runs in the qualification gate, whose scripts skip the country imports that set `policyengine.uk`; every household-route row there had errored.
+
+
+## [6.7.1] - 2026-10-17
+
+### Fixed
+
+- The UK Budget reform contract's population rows no longer report a count of survey records from 1 to 9 (it reads "fewer than 10"), or a total over fewer than 10 changed records, and they state each condition they test as a flat true/false finding in `detail`.
+
+
+## [6.7.0] - 2026-10-16
+
+### Added
+
+- Qualification reads policyengine-scorecard#183's receipts. The vendored replay receipt schema and its mirrors now carry the base's own grid record (`diff.base_events`) and the candidate's missing and unsupported measure-years. A gap counts as known only when the base's record lists the same measure-year as inert, or missing and supported.
+
+
+## [6.6.0] - 2026-10-16
+
+### Added
+
+- Qualify each new policyengine-uk wheel or uk-data release automatically before promotion. The new `certify-uk-release` workflow and `scripts/check_uk_candidate.py` resolve and deduplicate the candidate pair. They build a candidate commit with the manifest, pins, lock, TRO and test constants regenerated together, and run mandatory gates on it, none of which can be skipped: installed versions, wheel hashes, core compatibility, data access, dataset bytes, supported years, Budget inputs, the reform contract and metric review bounds. The metric review reads the aggregate-impact tool's small-cell format: a figure from fewer than 10 records is never compared, a change that would come from one goes to review, totals rebuilt without different suppressed figures are lined up from published figures where they are sums, a skipped check counts as not run, and only reports in that format are written to the ledger. From the reform contract's population checks, which run on the survey data, the ledger publishes each row's fixed fields (check, route, status and the like) and only the top-level true/false findings of its detail; `docs/engineering/runbooks/uk-qualification.md` explains how to see a failed check's figures locally. They also send policyengine-scorecard an immutable replay request, record a qualification receipt in the `uk-qualification-ledger` branch, and promote in order. Certification gains an exact `qualified_exact_pair` basis backed by the ledger receipt, together with a core compatibility check. The release dispatch now carries the certified UK bundle identity and goes to the Budget dashboard and the scorecard as well.
+- Added `UK_REGION_GSS_CODES` in `policyengine.outputs.uk_geography_disclosure`: the ONS GSS code of each UK region, under every spelling a household output may carry (GSS codes, the engine's region enum names and Microcosm's pseudo codes for the nations).
+
+### Changed
+
+- `compute_uk_geography_disclosure` now keys regions on ONS GSS codes (`E12000001` to `E12000009` for England's regions, `W92000004`, `S92000003` and `N92000002` for Wales, Scotland and Northern Ireland), whether the household output carries `region_code_oa` or only the stored `region`, so releases from national and local datasets publish the same codes. Microcosm's pseudo codes for the nations map to the country codes, `UNKNOWN` is unassigned, and any other region value raises. Region codes in `parent_of`, in `prior_public` and in region weights passed with `area_weights=` must be GSS codes. Region rows from national datasets used to carry the engine's enum names, and enum names in `parent_of` or `prior_public` were accepted; they now raise.
+- The UK qualification replay gate applies policy d1344-replay-regressions-v1. It fails lost results, lost responses (a measure-year the candidate lists as inert, or a measure-year total of £0 against a base at least the diff's bound away), mapping flags and incomplete grids. It sends every other flagged move to a named reviewer. Each receipt records the policy id and its text's SHA-256. Automatic UK promotion is on (d1344): a qualified candidate still built on current main is moved onto main, by a push leased on its parent, once every check of its own runs on its own tree has passed. Runs of pull requests from other branches or forks at the same commit are not counted; a candidate whose runs may not all be its own pull request's against main (its branch has another pull request that is open or ran at its commit, whatever that one's base, or its own pull request's base was ever changed) is refused with an error, since GitHub does not record which pull request or base a run is for, and a base renamed into main records no event. Candidate pull requests are found through GitHub's listing of this repository's own branches, which forks' pull requests cannot crowd out, and every write to one goes by its number. Refresh re-runs a candidate's failed, timed-out or cancelled runs up to four attempts within GitHub's 30-day window, and a candidate left waiting on a run it will not re-run fails the promote run with an error naming it.
+
+### Fixed
+
+- Receipts no longer refuse a measure helper whose quoted `Annotated` metadata contains `|` (for example `List['Annotated[float, "weekly | monthly"]']`), still refuse a union hidden under a name a helper rebinds (`from typing import Tuple as Annotated`), and inspect deeply quoted annotations without a recursion error. A parameter path such as `'gov.hmrc.income_tax.rates.uk[0].threshold'` no longer counts toward the inspection limit, and a lazy loader whose module `__getattr__` raises no longer crashes the receipt. Receipts now refuse a typing generic over a local import of a module not yet loaded (for example `Optional[statistics.NormalDist]`), an attribute of something other than a module inside a typing generic or subscripted with a union (`List[pd.DataFrame.dtypes]`, `HTTPStatus.OK.phrase[0 | 0]`), a function holding a string too deeply nested to parse, and a function whose forward references exceed 100,000 inspected nodes. The `Literal` and `Annotated` exemption is withheld from a function when code anywhere in the module could rebind typing names by a route the receipt can see (`sys.modules`, `setattr` through an alias, a forward reference that calls code or stores to an attribute or subscript). The docs now say which uses of `id` and the other refused names are refused, and which routes the exemption does not follow.
+- The disclosure release check no longer passes in silence when area codes do not match. `Release.check()` now raises `DisclosureError` for a `parent_of` value that is not an area of the parent level, and for a `prior_public` cell at a level the release holds whose area code is not an area of that level: of the estimates for the cell's reform and year when the release holds them, and of any of the level's estimates otherwise. A prior table on older boundaries therefore raises even for a year the release does not hold, so filter those cells out first. `Release()` refuses a prior cell with an unknown outcome. Such codes used to leave the nesting and earlier-publication checks with nothing to check, so they returned no finding. Prior cells at levels the release does not hold are still accepted, but `compute_uk_geography_disclosure` raises for one at a level that is not a UK level, since that is a misspelling. The adapter also reads the stored `region` when `region_code_oa` gives no household a region, and raises a clear error when a requested level's column gives no household an area, instead of a `KeyError` from the check. The messages give counts, never codes or values.
+- The push-to-main Test job now times out at 90 minutes, as the pull-request one does, so a slow but passing suite no longer cancels the run before versioning and leaves the release unpublished.
+
+
 ## [6.5.0] - 2026-10-15
 
 ### Added
