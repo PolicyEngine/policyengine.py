@@ -858,7 +858,11 @@ def test_the_rebuilds_year_files_carry_its_scope_and_keep_its_roles(
     (loaded,) = load_datasets(
         datasets=[uri], years=[YEAR], data_folder=data_folder
     ).values()
-    simulation = Simulation(dataset=loaded, tax_benefit_model_version=pe.us.model)
+    simulation = Simulation(
+        dataset=loaded,
+        tax_benefit_model_version=pe.us.model,
+        extra_variables=SPM_EXTRAS,
+    )
     simulation.run()
     spm_unit = _frame(simulation, "spm_unit")
     assert spm_unit.loc[OUTSIDE_UNITS, "spm_unit_spm_threshold"].isna().all()
