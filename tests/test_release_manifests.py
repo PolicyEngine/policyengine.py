@@ -65,9 +65,7 @@ US_RELEASE_MANIFEST_DATASET_URI = (
 # immutable release. It remains non-default nationally and is selected for
 # states and congressional districts.
 US_LOCAL_AREA_DATASET = "populace_us_2024_acs_local"
-US_LOCAL_AREA_RELEASE_ID = (
-    "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
-)
+US_LOCAL_AREA_RELEASE_ID = "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
 US_LOCAL_AREA_SHA256 = (
     "3ce781c440a7f933b1d952ff4e9d9f65f4698c64b94d2fad165af0c662838d6c"
 )
