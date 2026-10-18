@@ -66,10 +66,10 @@ US_RELEASE_MANIFEST_DATASET_URI = (
 # states and congressional districts.
 US_LOCAL_AREA_DATASET = "populace_us_2024_acs_local"
 US_LOCAL_AREA_RELEASE_ID = (
-    "populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z"
+    "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
 )
 US_LOCAL_AREA_SHA256 = (
-    "769756c31f3ca646d12c272511744dec04c0e68870c6946dd945fbba65b6a7ec"
+    "3ce781c440a7f933b1d952ff4e9d9f65f4698c64b94d2fad165af0c662838d6c"
 )
 US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
