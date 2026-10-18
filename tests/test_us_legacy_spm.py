@@ -521,7 +521,17 @@ def test_only_legacy_year_files_must_record_declarations(tmp_path):
     assert us_datasets._expected_legacy_spm_profile("populace_us_2024") is None
     assert us_datasets._expected_legacy_spm_profile("hf://other/repo/x.h5") is None
     assert year_file_problem(path, acs_local) is not None
+    # A Build O record is stale for the rebuild the bundle now certifies.
     write_record(path, _record())
+    assert year_file_problem(path, acs_local) is not None
+    write_record(
+        path,
+        _record(
+            name=REBUILD.name,
+            source_sha256=REBUILD.source_sha256,
+            independence_list=None,
+        ),
+    )
     assert year_file_problem(path, acs_local) is None
     assert year_file_problem(path, None) is not None
 
