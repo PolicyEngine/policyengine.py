@@ -1,3 +1,14 @@
+## [6.7.4] - 2026-10-18
+
+### Changed
+
+- The UK replay qualification gate records narrowly scoped data-limited exceptions under policy d1344-replay-regressions-v2. A matching regression requires coherent zero candidate effects, approved input lineage, and digest-bound Budget-input and positive-input probe evidence from the same candidate-pair attempt. Named acceptance must restate the publication designation; unmatched failures still fail.
+
+### Fixed
+
+- Replay exceptions reject nonzero candidate effects at every reported fiscal level and retain cumulative usable-input history across certified pairs. Budget-input evidence is bound to the exact pair and attempt, status maps must agree with missing-input claims, and probe evidence must match the installed model and recorded baseline/reform arithmetic.
+
+
 ## [6.7.3] - 2026-10-17
 
 ### Changed
