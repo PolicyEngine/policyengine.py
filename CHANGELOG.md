@@ -1,3 +1,10 @@
+## [6.7.5] - 2026-10-18
+
+### Changed
+
+- US state and congressional-district regions use the ACS-local Populace dataset again: the rebuilt release `populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z` (PolicyEngine/microcosm#1263), in which every SPM unit has a classified adult. This ends the temporary national-file filter of #604. The rebuild is registered as a legacy SPM source with the ACS household-population scope rule, so its group-quarters units stay outside SPM measurement, as for the previous release.
+
+
 ## [6.7.4] - 2026-10-18
 
 ### Changed
