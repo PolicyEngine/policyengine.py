@@ -1,0 +1,13 @@
+{
+  "expected": {
+    "policyengine": "6.7.6",
+    "policyengine-core": "3.33.0",
+    "policyengine-uk": "2.138.0"
+  },
+  "installed": {
+    "policyengine": "6.7.6",
+    "policyengine-core": "3.33.0",
+    "policyengine-uk": "2.138.0"
+  },
+  "unmet_requirements": []
+}
