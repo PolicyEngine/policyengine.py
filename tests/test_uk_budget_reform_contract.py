@@ -682,6 +682,7 @@ def test_the_default_response_is_reported_without_gating():
     }
     assert set(responses) == {
         ("cgt_default_response", "change:capital_gains_tax:2027"),
+        ("cgt_default_response_relief_gains", "change:capital_gains_tax:2027"),
         (
             "cgt_default_response_relief_gains",
             "variable:capital_gains_badr_behavioural_response:2027",

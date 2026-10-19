@@ -534,6 +534,34 @@ def _scaled(amount: float, ratio, offset: float = 0.0) -> Callable[[Context], fl
     return lambda context: amount * (ratio(context) + offset)
 
 
+def _mixed_gains_tax_change(year: int, rate: float) -> Callable[[Context], float]:
+    """The change in CGT on the mixed gains when the rate on the main-rate
+    gains moves to ``rate``, with both shares scaled by the retention ratio.
+
+    The annual exempt amount comes off the main-rate gains first, the
+    allocation that leaves the least tax (TCGA 1992 s. 1H; the relief gains
+    are charged at the lower rate).
+    """
+
+    def expected(context: Context) -> float:
+        ratio = _mixed_retention_ratio(year, rate)(context)
+        exempt = context.baseline(CGT_ANNUAL_EXEMPT_AMOUNT, year)
+        relief_rate = context.baseline(CGT_BADR_RATE, year)
+
+        def tax(main: float, relief: float, main_rate: float) -> float:
+            main_exempt = min(exempt, main)
+            relief_exempt = min(exempt - main_exempt, relief)
+            return (main - main_exempt) * main_rate + (
+                relief - relief_exempt
+            ) * relief_rate
+
+        main, relief = MIXED_GAINS - RELIEF_GAINS, RELIEF_GAINS
+        before = tax(main, relief, context.baseline(CGT_HIGHER_RATE, year))
+        return tax(main * ratio, relief * ratio, rate) - before
+
+    return expected
+
+
 MIXED_RESPONSE_ORACLE = (
     "£50,000 of gains, £20,000 qualifying for the relief, scaled by "
     "(1 - t1) / (1 - t0), where t0 and t1 are 40% x the relief rate + 60% x "
@@ -1020,6 +1048,19 @@ CASES: tuple[Case, ...] = (
                     2027,
                     _scaled(RELIEF_GAINS, _mixed_retention_ratio(2027, 0.45), -1.0),
                     MIXED_RESPONSE_ORACLE + "; the response on the qualifying £20,000",
+                    0.05,
+                ),
+                # The revenue effect, which also fixes which gains the annual
+                # exempt amount comes off.
+                Check(
+                    "change",
+                    "capital_gains_tax",
+                    2027,
+                    _mixed_gains_tax_change(2027, 0.45),
+                    MIXED_RESPONSE_ORACLE
+                    + "; tax at 45% on the main-rate gains after the annual "
+                    "exempt amount, which comes off them first, and the relief "
+                    "rate on the qualifying gains",
                     0.05,
                 ),
             )
