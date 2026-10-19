@@ -1,0 +1,24 @@
+{
+  "history": [
+    {
+      "at": "2026-10-19T17:17:02Z",
+      "run_url": "https://github.com/PolicyEngine/policyengine-scorecard/actions/runs/39289719854",
+      "status": "queued"
+    },
+    {
+      "at": "2026-10-19T17:26:27Z",
+      "run_url": "https://github.com/PolicyEngine/policyengine-scorecard/actions/runs/39281342307",
+      "status": "running"
+    },
+    {
+      "at": "2026-10-19T18:46:03Z",
+      "run_url": "https://github.com/PolicyEngine/policyengine-scorecard/actions/runs/39281342307",
+      "status": "failed"
+    }
+  ],
+  "receipt_commit": "67c0a7ae8ed5ee221834ba9b34cf372357dd0b51",
+  "receipt_sha256": "d50444398bf6224ece35711aabfbc86f3df8de0712362dcfae3bf3e6d41a399b",
+  "request_id": "d83e83d08e16259cf8b3c56de37dcb424924ac458121e8de80e20272fca711a5",
+  "schema": "policyengine.uk-replay-status/v1",
+  "status": "failed"
+}
