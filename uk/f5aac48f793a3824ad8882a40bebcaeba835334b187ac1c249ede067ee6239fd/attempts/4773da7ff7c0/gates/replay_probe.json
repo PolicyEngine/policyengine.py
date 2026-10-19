@@ -1,0 +1,41 @@
+{
+  "attempt_id": "f5aac48f793a3824ad8882a40bebcaeba835334b187ac1c249ede067ee6239fd/4773da7ff7c0",
+  "candidate_model_version": "2.135.6",
+  "exception_registry_sha256": "4ba8ff2961035eaa784b5cdfdf24b300c3e2031fdfc006db9fea2996815cbc55",
+  "probes": [
+    {
+      "exception_id": "ab2024-sdlt-hrad-purchase-input",
+      "installed_model_version": "2.135.6",
+      "positive_baseline_gbp": 14000.0,
+      "positive_change_gbp": 6000.0,
+      "positive_reform_gbp": 20000.0,
+      "rates": [
+        {
+          "baseline": 0.03,
+          "reform": 0.05
+        },
+        {
+          "baseline": 0.05,
+          "reform": 0.07
+        },
+        {
+          "baseline": 0.08,
+          "reform": 0.1
+        },
+        {
+          "baseline": 0.13,
+          "reform": 0.15
+        },
+        {
+          "baseline": 0.15,
+          "reform": 0.16999999999999998
+        }
+      ],
+      "spec_sha256": "92a0381db8f7ffea623241024086d9caa08841b776047de64037d154e8701cbc",
+      "status": "pass",
+      "zero_baseline_gbp": 0.0,
+      "zero_change_gbp": 0.0,
+      "zero_reform_gbp": 0.0
+    }
+  ]
+}

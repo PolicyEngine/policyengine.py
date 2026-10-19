@@ -1,0 +1,10 @@
+{
+  "details": {
+    "data_only": "needs_review",
+    "model_only": "needs_review"
+  },
+  "evidence_sha256": "cc7a5d22497e96e6983aba9716e322d10e15a0edab83139e073db4f81175398d",
+  "gate_id": "metrics_review",
+  "status": "needs_review",
+  "summary": "model_only: 109 metric move(s) exceed their review bounds; data_only: 105 metric move(s) exceed their review bounds"
+}
