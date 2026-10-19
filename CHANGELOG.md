@@ -1,3 +1,10 @@
+## [6.7.6] - 2026-10-19
+
+### Fixed
+
+- The UK qualification job may now run for up to 330 minutes, so candidates whose gates take over two hours, now that the household contract route runs, finish instead of being cancelled and re-staged.
+
+
 ## [6.7.5] - 2026-10-18
 
 ### Changed
