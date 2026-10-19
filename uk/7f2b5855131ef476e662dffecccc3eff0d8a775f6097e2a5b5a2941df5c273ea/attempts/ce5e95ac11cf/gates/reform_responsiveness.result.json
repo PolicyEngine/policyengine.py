@@ -1,0 +1,7 @@
+{
+  "details": {},
+  "evidence_sha256": "12a7bcb4663d0ae4b7c4e0742e8dd43d11f087cb40de037ec53f7d2884723989",
+  "gate_id": "reform_responsiveness",
+  "status": "pass",
+  "summary": "All 10 standard reforms ran and moved their targets by at least their minimums in every year from 2025-26 to 2031-32."
+}
