@@ -13,6 +13,11 @@ draw ``True``). Both children are WIC-eligible, which each test checks.
 
 from __future__ import annotations
 
+import contextlib
+import os
+import re
+from importlib import metadata as importlib_metadata
+from pathlib import Path
 from unittest.mock import patch
 
 import h5py
@@ -27,6 +32,17 @@ pytest.importorskip("policyengine_us")
 pytest.importorskip("spm_calculator.policyengine_adapter")
 
 import policyengine as pe  # noqa: E402
+import policyengine.provenance.dataset_materialization as dataset_materialization  # noqa: E402
+import policyengine.provenance.manifest as manifest_module  # noqa: E402
+from policyengine.provenance.dataset_materialization import (  # noqa: E402
+    DatasetMaterializationError,
+    describe_dataset_source_identity,
+    requested_dataset_source_identity,
+)
+from policyengine.provenance.manifest import (  # noqa: E402
+    ArtifactPathReference,
+    get_release_manifest,
+)
 from policyengine.tax_benefit_models.us import datasets as us_datasets  # noqa: E402
 from policyengine.tax_benefit_models.us import legacy_inputs  # noqa: E402
 from policyengine.tax_benefit_models.us.datasets import (  # noqa: E402
@@ -49,6 +65,7 @@ from policyengine.tax_benefit_models.us.legacy_inputs import (  # noqa: E402
 from policyengine.tax_benefit_models.us.model import (  # noqa: E402
     PolicyEngineUSLatest,
 )
+from policyengine.utils.hashing import sha256_file  # noqa: E402
 
 YEAR = 2024
 LEGACY = "would_claim_wic"
@@ -104,10 +121,16 @@ def _in_memory_dataset(directory, frames=None) -> PolicyEngineUSDataset:
     )
 
 
-def _write_entity_tables(path) -> str:
-    """Write the household in the certified Populace default's layout."""
+def _write_entity_tables(path, draw=None) -> str:
+    """Write the household in the certified Populace default's layout.
+
+    ``draw`` replaces the stored draws (``DRAW``), as a new release would.
+    """
+    frames = _frames()
+    if draw is not None:
+        frames["person"][LEGACY] = draw
     with pd.HDFStore(path, mode="w") as store:
-        for entity, frame in _frames().items():
+        for entity, frame in frames.items():
             store.put(entity, frame, format="table", data_columns=True)
         store.put("_time_period", pd.Series([YEAR]), format="table")
     return str(path)
@@ -556,8 +579,20 @@ def _create_year_file(directory):
     return source, dataset
 
 
+def _stamp_for(source):
+    """The stamp a year file cut now from ``source`` carries."""
+    return year_file_stamp(requested_dataset_source_identity("us", source))
+
+
+def _problem(path, source):
+    """Why a year file is out of date for a request of ``source``."""
+    return year_file_stamp_problem(
+        path, requested_dataset_source_identity("us", source)
+    )
+
+
 def test_create_datasets_extracts_the_draw_under_the_live_name(tmp_path):
-    _, dataset = _create_year_file(tmp_path)
+    source, dataset = _create_year_file(tmp_path)
     person = pd.DataFrame(dataset.data.person)
 
     assert person[LIVE].tolist() == DRAW
@@ -565,9 +600,20 @@ def test_create_datasets_extracts_the_draw_under_the_live_name(tmp_path):
     assert dataset.metadata["legacy_input_renames"] == RENAME
     # The year file keeps the record, so reloading it keeps the chain.
     assert read_renames_record(dataset.filepath) == RENAME
-    # It is stamped with the register it was cut under, so it is current.
-    assert read_year_file_stamp(dataset.filepath) == year_file_stamp()
-    assert year_file_stamp_problem(dataset.filepath) is None
+    # It is stamped with what it was cut from and under, so it is current.
+    stamp = read_year_file_stamp(dataset.filepath)
+    assert stamp == _stamp_for(source)
+    status = os.stat(source)
+    assert stamp["source"] == {
+        "path": str(Path(source).resolve()),
+        "size": status.st_size,
+        "mtime_ns": status.st_mtime_ns,
+    }
+    assert stamp["packages"] == {
+        name: importlib_metadata.version(name)
+        for name in ("policyengine-core", "policyengine-us")
+    }
+    assert _problem(dataset.filepath, source) is None
     reloaded = PolicyEngineUSDataset(
         name=dataset.name,
         description=dataset.description,
@@ -675,13 +721,13 @@ def test_a_year_file_cut_before_a_register_entry_is_regenerated(tmp_path):
     with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {}):
         source, dataset = _create_year_file(tmp_path)
         # Under the register it was cut with, the file is current.
-        assert year_file_stamp_problem(dataset.filepath) is None
+        assert _problem(dataset.filepath, source) is None
     path = dataset.filepath
     person = pd.DataFrame(dataset.data.person)
     assert LIVE not in person.columns
     assert LEGACY not in person.columns
     assert read_renames_record(path) == {}
-    assert read_year_file_stamp(path) == {"register": {}, "revision": 1}
+    assert read_year_file_stamp(path) == {**_stamp_for(source), "register": {}}
     # The draw is lost from it: a run gives the infant WIC.
     assert _person_outputs(_run(dataset))["wic"].iloc[INFANT] > 0
 
@@ -690,7 +736,7 @@ def test_a_year_file_cut_before_a_register_entry_is_regenerated(tmp_path):
         "it was cut before these renames were registered, so it may have lost "
         f"them: {LEGACY} -> {LIVE}"
     )
-    assert year_file_stamp_problem(path) == reason
+    assert _problem(path, source) == reason
     with pytest.raises(ValueError, match=f"is out of date: {reason}"):
         load_datasets(
             datasets=[source], years=[YEAR], data_folder=str(tmp_path / "data")
@@ -699,7 +745,7 @@ def test_a_year_file_cut_before_a_register_entry_is_regenerated(tmp_path):
     regenerated = _ensure(source, tmp_path / "data")
 
     assert regenerated.filepath == path
-    assert read_year_file_stamp(path) == year_file_stamp()
+    assert read_year_file_stamp(path) == _stamp_for(source)
     assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW
     loaded = _assert_reused(source, tmp_path / "data")
     assert _person_outputs(_run(loaded))["wic"].iloc[INFANT] == 0
@@ -716,7 +762,7 @@ def test_a_future_register_entry_regenerates_year_files(tmp_path):
     data_folder = tmp_path / "data"
 
     with patch.object(legacy_inputs, "LEGACY_INPUT_RENAMES", {**RENAME, **future}):
-        reason = year_file_stamp_problem(dataset.filepath)
+        reason = _problem(dataset.filepath, source)
         assert reason == (
             "it was cut before these renames were registered, so it may have "
             "lost them: fictitious_old_input -> fictitious_new_input"
@@ -736,8 +782,8 @@ def test_a_future_register_entry_regenerates_year_files(tmp_path):
 
         assert created == [[YEAR]]
         assert read_year_file_stamp(dataset.filepath) == {
+            **_stamp_for(source),
             "register": {**RENAME, **future},
-            "revision": 1,
         }
         # Only the entry the engine needs was applied, and the data is as
         # before.
@@ -746,8 +792,8 @@ def test_a_future_register_entry_regenerates_year_files(tmp_path):
         _assert_reused(source, data_folder)
 
     # Back under this release's register, the newer file is out of date too.
-    assert "does not register: fictitious_old_input" in year_file_stamp_problem(
-        dataset.filepath
+    assert "does not register: fictitious_old_input" in _problem(
+        dataset.filepath, source
     )
 
 
@@ -765,16 +811,20 @@ def test_ensure_datasets_regenerates_a_year_file_with_only_the_renames_record(
 
     regenerated = _ensure(source, data_folder)
 
-    assert read_year_file_stamp(regenerated.filepath) == year_file_stamp()
+    assert read_year_file_stamp(regenerated.filepath) == _stamp_for(source)
     assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW
     _assert_reused(source, data_folder)
 
 
-def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
+def test_create_datasets_stamps_the_year_files_after_saving_and_checking(
+    tmp_path,
+):
+    """Every year file is saved, the source checked again, then each stamped."""
     source = _write_entity_tables(tmp_path / "populace_layout.h5")
     events = []
     save = PolicyEngineUSDataset.save
     stamp = us_datasets.write_year_file_stamp
+    change = us_datasets.dataset_source_change
 
     def recording_save(self):
         save(self)
@@ -784,9 +834,14 @@ def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
         stamp(path, value)
         events.append(("stamp", path))
 
+    def recording_change(*args):
+        events.append(("check source",))
+        return change(*args)
+
     with (
         patch.object(PolicyEngineUSDataset, "save", recording_save),
         patch.object(us_datasets, "write_year_file_stamp", recording_stamp),
+        patch.object(us_datasets, "dataset_source_change", recording_change),
     ):
         created = create_datasets(
             datasets=[source],
@@ -798,12 +853,13 @@ def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
     paths = [dataset.filepath for dataset in created.values()]
     assert events == [
         ("save", paths[0]),
-        ("stamp", paths[0]),
         ("save", paths[1]),
+        ("check source",),
+        ("stamp", paths[0]),
         ("stamp", paths[1]),
     ]
     for path in paths:
-        assert year_file_stamp_problem(path) is None
+        assert _problem(path, source) is None
 
 
 def test_a_year_file_whose_stamp_was_never_written_is_out_of_date(tmp_path):
@@ -825,9 +881,250 @@ def test_a_year_file_whose_stamp_was_never_written_is_out_of_date(tmp_path):
     # The tables and the record were written, but without the stamp the file
     # is cut again.
     assert read_renames_record(path) == RENAME
-    assert year_file_stamp_problem(path).startswith("it has no stamp")
+    assert _problem(path, source).startswith("it has no stamp")
     assert _ensure(source, tmp_path / "data").filepath == str(path)
-    assert year_file_stamp_problem(path) is None
+    assert _problem(path, source) is None
+
+
+# --- The year-file stamp: the source and packages a year file was cut from
+
+
+def test_editing_a_local_source_cuts_its_year_files_again(tmp_path):
+    """A local dataset rewritten in place keeps its name, and so its year
+    files' names, but not its identity."""
+    source, dataset = _create_year_file(tmp_path)
+    data_folder = tmp_path / "data"
+    cut_from = requested_dataset_source_identity("us", source)
+    assert read_year_file_stamp(dataset.filepath)["source"] == cut_from
+
+    # The infant's stored draw becomes True. The rewrite is given a later
+    # modification time of its own, since a file system can keep coarser
+    # times than a quick rewrite in a test needs.
+    _write_entity_tables(source, draw=[False, True, True])
+    later = cut_from["mtime_ns"] + 1_000_000_000
+    os.utime(source, ns=(later, later))
+    now = requested_dataset_source_identity("us", source)
+    assert now["path"] == cut_from["path"] and now != cut_from
+
+    reason = (
+        f"it was cut from {describe_dataset_source_identity(cut_from)}, and the "
+        f"requested source is {describe_dataset_source_identity(now)}"
+    )
+    assert _problem(dataset.filepath, source) == reason
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        load_datasets(datasets=[source], years=[YEAR], data_folder=str(data_folder))
+    # The year file still holds the old draw, which a run would use.
+    assert pd.DataFrame(dataset.data.person)[LIVE].tolist() == DRAW
+
+    regenerated = _ensure(source, data_folder)
+
+    assert regenerated.filepath == dataset.filepath
+    assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == [False, True, True]
+    assert read_year_file_stamp(dataset.filepath)["source"] == now
+    loaded = _assert_reused(source, data_folder)
+    assert _person_outputs(_run(loaded))["wic"].iloc[INFANT] > 0
+
+
+#: A logical dataset name that a fixture bundle pins, as the certified bundle
+#: pins ``populace_us_2024_acs_local``.
+BUNDLE_NAME = "tiny_bundle"
+BUNDLE_URI = f"hf://fixture/tiny-bundle/{BUNDLE_NAME}.h5"
+
+
+def _pinned(revision, sha256):
+    """Patch the bundled US manifest to pin ``BUNDLE_NAME`` as given, and
+    refuse every download: a verified copy is already in the data folder."""
+    manifest = get_release_manifest("us").model_copy(deep=True)
+    manifest.datasets[BUNDLE_NAME] = ArtifactPathReference(
+        path=f"{BUNDLE_NAME}.h5",
+        repo_id="fixture/tiny-bundle",
+        repo_type="dataset",
+        revision=revision,
+        sha256=sha256,
+    )
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a bundle dataset was downloaded")
+
+    return (
+        patch.object(manifest_module, "get_release_manifest", lambda _: manifest),
+        patch.object(
+            dataset_materialization, "get_release_manifest", lambda _: manifest
+        ),
+        patch.object(dataset_materialization.requests, "get", refuse),
+    )
+
+
+def test_a_re_pinned_bundle_dataset_cuts_its_year_files_again(tmp_path):
+    """The ACS-local replacement in miniature: the bundle points a logical
+    name at a new release, and year files cut from the old one are not
+    reused, although their names are unchanged."""
+    data_folder = tmp_path / "data"
+    data_folder.mkdir()
+    # ``materialize_dataset`` keeps a verified copy at the artifact's name in
+    # the data folder, and downloads only when that copy's sha256 differs.
+    bundled = data_folder / f"{BUNDLE_NAME}.h5"
+    _write_entity_tables(bundled)
+    old_sha256 = sha256_file(bundled)
+    old = {"uri": f"{BUNDLE_URI}@release-1", "sha256": old_sha256}
+
+    first, second, third = _pinned("release-1", old_sha256)
+    with first, second, third:
+        dataset = _ensure(BUNDLE_NAME, data_folder)
+        assert dataset.filepath == str(data_folder / f"{BUNDLE_NAME}_year_{YEAR}.h5")
+        assert read_year_file_stamp(dataset.filepath)["source"] == old
+        assert pd.DataFrame(dataset.data.person)[LIVE].tolist() == DRAW
+        _assert_reused(BUNDLE_NAME, data_folder)
+
+    # The replacement release stores the infant's draw as True; its verified
+    # copy replaces the old one, as a download would.
+    _write_entity_tables(bundled, draw=[False, True, True])
+    new_sha256 = sha256_file(bundled)
+    new = {"uri": f"{BUNDLE_URI}@release-2", "sha256": new_sha256}
+    assert new_sha256 != old_sha256
+
+    first, second, third = _pinned("release-2", new_sha256)
+    with first, second, third:
+        reason = (
+            f"it was cut from {BUNDLE_URI}@release-1 (sha256 {old_sha256}), and "
+            f"the requested source is {BUNDLE_URI}@release-2 (sha256 {new_sha256})"
+        )
+        assert _problem(dataset.filepath, BUNDLE_NAME) == reason
+        with pytest.raises(ValueError, match=re.escape(reason)):
+            load_datasets(
+                datasets=[BUNDLE_NAME], years=[YEAR], data_folder=str(data_folder)
+            )
+
+        regenerated = _ensure(BUNDLE_NAME, data_folder)
+
+        assert regenerated.filepath == dataset.filepath
+        assert read_year_file_stamp(regenerated.filepath)["source"] == new
+        assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == [
+            False,
+            True,
+            True,
+        ]
+        loaded = _assert_reused(BUNDLE_NAME, data_folder)
+        assert _person_outputs(_run(loaded))["wic"].iloc[INFANT] > 0
+
+
+class _Download:
+    """A Hugging Face response serving ``payload``."""
+
+    status_code = 200
+
+    def __init__(self, payload: bytes):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size):
+        yield self.payload
+
+
+@pytest.mark.parametrize("kind", ["bundle", "explicit URI", "local"])
+def test_a_source_replaced_while_it_is_cut_leaves_the_year_files_unstamped(
+    tmp_path, kind
+):
+    """Another process replaces the source once it is materialized: by
+    materializing another release, or another file with the same name, into
+    the same data folder, or by rewriting a local file. The year files may
+    hold data the stamp would not describe, so they are left unstamped and
+    cut again."""
+    import policyengine_us
+
+    data_folder = tmp_path / "data"
+    data_folder.mkdir()
+    original = Path(_write_entity_tables(tmp_path / "original.h5")).read_bytes()
+    if kind == "bundle":
+        path = data_folder / f"{BUNDLE_NAME}.h5"
+        path.write_bytes(original)
+        request, pins = BUNDLE_NAME, _pinned("release-1", sha256_file(path))
+    elif kind == "explicit URI":
+        path = data_folder / "tiny_uri.h5"
+        request = "hf://fixture/tiny-uri/tiny_uri.h5@pinned"
+        pins = (
+            patch.object(
+                dataset_materialization.requests,
+                "get",
+                lambda *args, **kwargs: _Download(original),
+            ),
+        )
+    else:
+        path = tmp_path / "populace_layout.h5"
+        path.write_bytes(original)
+        request, pins = str(path), ()
+    real_microsimulation = policyengine_us.Microsimulation
+
+    def replaced_once_loaded(*args, **kwargs):
+        simulation = real_microsimulation(*args, **kwargs)
+        if kind == "local":
+            # Rewritten in place, with a later modification time of its own.
+            _write_entity_tables(path, draw=[False, True, True])
+            later = path.stat().st_mtime_ns + 1_000_000_000
+            os.utime(path, ns=(later, later))
+        else:
+            # Replaced as a download replaces it.
+            other = _write_entity_tables(
+                path.with_name(".other.h5"), draw=[False, True, True]
+            )
+            os.replace(other, path)
+        return simulation
+
+    year_file = data_folder / f"{path.stem}_year_{YEAR}.h5"
+    with contextlib.ExitStack() as stack:
+        for pin in pins:
+            stack.enter_context(pin)
+        with patch.object(policyengine_us, "Microsimulation", replaced_once_loaded):
+            with pytest.raises(
+                DatasetMaterializationError, match="changed while they were cut"
+            ):
+                _ensure(request, data_folder)
+
+        assert year_file.exists()
+        assert read_year_file_stamp(year_file) is None
+        with pytest.raises(ValueError, match="it has no stamp"):
+            load_datasets(
+                datasets=[request], years=[YEAR], data_folder=str(data_folder)
+            )
+
+        # The pinned source is back in place, as a download would put it.
+        path.write_bytes(original)
+        regenerated = _ensure(request, data_folder)
+        assert pd.DataFrame(regenerated.data.person)[LIVE].tolist() == DRAW
+        assert _problem(year_file, request) is None
+
+
+def test_another_package_version_cuts_year_files_again(tmp_path, monkeypatch):
+    """Year files cut under one policyengine-us are not reused under another."""
+    source, dataset = _create_year_file(tmp_path)
+    data_folder = tmp_path / "data"
+    installed = legacy_inputs.installed_package_versions()
+    assert installed["policyengine-us"] == importlib_metadata.version("policyengine-us")
+    upgraded = {**installed, "policyengine-us": "99.0.0"}
+    monkeypatch.setattr(
+        legacy_inputs, "installed_package_versions", lambda: dict(upgraded)
+    )
+
+    reason = (
+        f"it was cut with policyengine-us {installed['policyengine-us']}, and "
+        "policyengine-us 99.0.0 is installed"
+    )
+    assert _problem(dataset.filepath, source) == reason
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        load_datasets(datasets=[source], years=[YEAR], data_folder=str(data_folder))
+
+    regenerated = _ensure(source, data_folder)
+
+    assert read_year_file_stamp(regenerated.filepath)["packages"] == upgraded
+    _assert_reused(source, data_folder)
 
 
 # --- Saved outputs and run records keep the record ----------------------
