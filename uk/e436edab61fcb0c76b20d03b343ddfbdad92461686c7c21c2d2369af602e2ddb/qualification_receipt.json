@@ -1,5 +1,5 @@
 {
-  "completed_at": "2026-10-18T16:34:03Z",
+  "completed_at": "2026-10-19T00:34:08Z",
   "gates": [
     {
       "details": {
@@ -11,15 +11,15 @@
     }
   ],
   "harness": {
-    "git_commit": "3aed5ede961a6bd8983cac15b1ead870e3b4eeee",
-    "packaged_bundle_manifest_sha256": "ba82e8542fe987c7ba58d77d9dea181a83022635561b5a21a1e97da14e6b39ad",
-    "policyengine_version": "6.7.3"
+    "git_commit": "e46a0195c71c74faa12c6f73903d1f874c6b74ab",
+    "packaged_bundle_manifest_sha256": "a1b3036ce4428b0871e4c6b3d4c0859ce10262281fbc2a19e82f40aecc4c058a",
+    "policyengine_version": "6.7.4"
   },
   "issued_by": {
     "repository": "PolicyEngine/policyengine.py",
     "run_attempt": 1,
-    "run_url": "https://github.com/PolicyEngine/policyengine.py/actions/runs/39136344991",
-    "workflow_run_id": 39136344991
+    "run_url": "https://github.com/PolicyEngine/policyengine.py/actions/runs/39172509594",
+    "workflow_run_id": 39172509594
   },
   "pair": {
     "core": {
@@ -51,8 +51,8 @@
   },
   "pair_id": "e436edab61fcb0c76b20d03b343ddfbdad92461686c7c21c2d2369af602e2ddb",
   "previous_certificate": {
-    "bundle_version": "6.7.3",
-    "certificate_sha256": "a9c1512399075dd4e16e0a73a2b4abb4f9d87cf8358011f5bc09c11434df1e36",
+    "bundle_version": "6.7.4",
+    "certificate_sha256": "24b5596dc0b94bcb28bb9a49d4488786a4d41be900634523fe44459ee9d1d656",
     "core_version": "3.33.0",
     "data_release_version": "1.58.1",
     "dataset_name": "enhanced_frs_2024_25",
