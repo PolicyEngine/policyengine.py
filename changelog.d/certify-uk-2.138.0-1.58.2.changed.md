@@ -1,0 +1,1 @@
+Certify uk-data 1.58.2 (`enhanced_frs_2024_25`) with policyengine-uk 2.138.0 and policyengine-core 3.33.0, qualified automatically as pair `29e7437638c8`. No publisher claim covers this model version, so the certificate is an exact claim backed by the qualification receipt.
