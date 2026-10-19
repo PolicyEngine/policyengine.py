@@ -27,9 +27,11 @@ import pytest
 pytest.importorskip("policyengine_uk")
 _capital_gains = pytest.importorskip("policyengine_uk.utils.capital_gains")
 if not hasattr(_capital_gains, "capital_gains_response_assumption"):
-    # Until the pin reaches the policyengine-uk release with the default
-    # (policyengine-uk#2396). The commit that moves the pin removes this
-    # guard, so from then on a pin without the default fails here.
+    # Until the pin reaches policyengine-uk 2.134.0, the release with the
+    # default (policyengine-uk#2396). From then on the guard can't skip
+    # silently: a release with the helper but another default fails
+    # test_the_pinned_model_defaults_to_the_central_case. The follow-up that
+    # makes the default cases gating removes it.
     pytest.skip(
         "needs the policyengine-uk release with the default capital gains "
         "response (policyengine-uk#2396)",
