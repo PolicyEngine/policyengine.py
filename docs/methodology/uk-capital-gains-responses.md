@@ -49,15 +49,20 @@ to 2.0, gives the sensitivities. Its limits:
   $1 / (1 + e)$: 50% at the default, 40% at 1.5, 33% at 2.0 and about 22% at
   3.6. So the elasticity can decide whether a large rise raises or loses
   revenue, and the default can give the opposite sign to official costings.
-- **Not their revenue.** Adopting 1.0 does not reproduce their revenue
-  estimates.
+- **Not their calculation.** policyengine-uk raises each person's ratio of
+  marginal retention rates to the power $e$. CenTax apply one aggregate
+  elasticity to the CGT base as a whole (pp. 32 and 37), and a person's
+  marginal rate differs from an aggregate rate at any elasticity. Read
+  linearly, their elasticity would also give the power's response at 1 but
+  not at 0.5 or 2. So adopting 1.0 reproduces neither their revenue estimates
+  nor their sensitivities.
 
 The OBR's elasticities (3.6 for main-rate gains, 1.4 for relief gains) can be
 set for comparison. They then compare elasticities, not the OBR's full
 costing. The response scales the gains in the data, so a comparison in
 pounds also mixes in any gap in the level of gains.
 
-The model's default is 1.0 from policyengine-uk {X}. Before, it was 0, so
+The model's default is 1.0 from policyengine-uk 2.134.0. Before, it was 0, so
 reforms were costed statically unless a caller set an elasticity.
 
 ## When there is no response
@@ -67,7 +72,12 @@ reforms were costed statically unless a caller set an elasticity.
   does not measure them and the response is zero.
 - **No rate change.** A reform that doesn't change a person's marginal rate
   on gains leaves their gains alone. That includes a change to one band's
-  rate for someone whose last pound of gains falls in another band.
+  rate for someone whose last pound of gains falls in another band. Until
+  [policyengine-uk#2433](https://github.com/PolicyEngine/policyengine-uk/pull/2433)
+  lands, the model can place gains in the higher band where the law puts
+  them in the additional band, so a reform to only one of those two rates can
+  respond where it shouldn't, or not respond where it should. Change both
+  rates together to avoid it.
 - **Marginal tax rates.** Marginal tax rates on earnings hold realised gains
   fixed: a pay rise is not a reform for the response to answer.
 

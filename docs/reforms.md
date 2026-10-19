@@ -41,7 +41,7 @@ reform = {
 }
 ```
 
-`Simulation(policy=...)`, `Simulation(dynamic=...)`, and UK `calculate_household(reform=...)` accept these two date formats and reject an interval whose end precedes its start. They reject bare years such as `"2027"` or `2027`, because policyengine-uk reads them as fiscal year 2027 only, while policyengine-core's `Reform.from_dict` reads them as from 2027 onward. Use `"2027-04-06.2028-04-05"` for one UK fiscal year or `"2027-01-01"` for an effective date. The US household route retains its country package's period-key handling.
+`Simulation(policy=...)`, `Simulation(dynamic=...)`, and UK `calculate_household(reform=...)` accept these two date formats and reject an interval whose end precedes its start. They reject bare years such as `"2027"` or `2027`, because a bare year means different things in different places. policyengine-uk reads it as fiscal year 2027 only for most parameters, but as calendar year 2027 for the economic growth rates, the indices built from them and the household parameters (from policyengine-uk 2.131.1). policyengine-core's `Reform.from_dict` reads it as from 2027 onward. Use `"2027-04-06.2028-04-05"` for one UK fiscal year or `"2027-01-01"` for an effective date. The US household route retains its country package's period-key handling.
 
 ### Multiple changes
 
@@ -94,9 +94,9 @@ reformed = Simulation(
 ## Behavioural responses: UK capital gains
 
 policyengine-uk realises capital gains in response to any reform that changes
-a person's marginal rate on gains. From policyengine-uk {X}, pinned by
-policyengine.py {Y}, the default is a retention-rate elasticity of 1.0. Each
-person's realised gains scale by $((1 - t_1) / (1 - t_0))^{e}$, where $t_0$
+a person's marginal rate on gains. From policyengine-uk 2.134.0 the default
+is a retention-rate elasticity of 1.0, so policyengine.py has it from the
+first release that pins 2.134.0 or later. Each person's realised gains scale by $((1 - t_1) / (1 - t_0))^{e}$, where $t_0$
 and $t_1$ are their marginal rates on gains without and with the reform. Gains
 qualifying for Business Asset Disposal Relief take the same 1.0. Before, the
 elasticity was 0, so a CGT reform was costed statically unless the caller set
@@ -109,8 +109,8 @@ are not interchangeable.
 
 - **Who is affected.** Any reform that moves someone's marginal rate on gains
   is affected. That includes CGT rates, and also income tax bands and
-  allowances, because gains are taxed on top of income. Results without a
-  reform are unchanged.
+  allowances, because gains are taxed on top of income. The default leaves
+  results without a reform unchanged.
 - **The static costing.** Set the elasticities to zero for the years you run,
   as below:
   - on `Simulation`, pass them as `dynamic=`;
@@ -118,7 +118,9 @@ are not interchangeable.
   - on `managed_microsimulation`, merge them into `reform=`, whose keys
     policyengine-uk reads itself.
 - **Sensitivities.** The elasticity can be 0.5 or 2.0, the range CenTax
-  consider. For the OBR's elasticities, set it to 3.6 and
+  consider. policyengine-uk applies it as a power to each person's marginal
+  retention rate, where CenTax apply one aggregate elasticity to the whole
+  base, so these don't reproduce CenTax's own sensitivities. For the OBR's elasticities, set it to 3.6 and
   `separate_badr_elasticity` to true; `badr_elasticity` stays 1.4. That
   compares elasticities, not the OBR's full costing.
 - **The marginal tax rate convention.** An `mtr_elasticity` set on its own
@@ -151,7 +153,10 @@ static = {
 static_costing = Simulation(
     dataset=dataset,
     tax_benefit_model_version=pe.uk.model,
-    policy={"gov.hmrc.cgt.higher_rate": {"2027-04-06": 0.45}},
+    policy={
+        "gov.hmrc.cgt.higher_rate": {"2027-04-06": 0.45},
+        "gov.hmrc.cgt.additional_rate": {"2027-04-06": 0.45},
+    },
     dynamic=static,
 )
 ```
