@@ -86,7 +86,9 @@ marginal rates on the gains without and with the reform. Contract 1.1.0
 added both, and a case with no response settings that shows the default
 response policyengine-uk applies. Its checks expect the retention-rate
 elasticity of 1 that policyengine-uk#2396 makes the default, and carry
-``pending`` until policyengine.py pins a release with it.
+``pending`` until policyengine.py pins a release with it. Contract 2.1.0
+adds a second default case, for gains partly qualifying for Business Asset
+Disposal Relief, which respond at the same elasticity.
 
 Report
 ------
@@ -130,7 +132,7 @@ from decimal import ROUND_CEILING, Decimal
 from typing import Any, Optional, Union
 
 CONTRACT_ID = "policyengine-uk/budget-reform-contract"
-CONTRACT_VERSION = "2.0.0"
+CONTRACT_VERSION = "2.1.0"
 PRIOR_LAW_OPTION = "statutory"
 # The cos decision under which the prior-law call was taken.
 PRIOR_LAW_DECISION = "d1344"
@@ -173,6 +175,9 @@ BASIC_RATE_LIMIT = "gov.hmrc.income_tax.rates.uk[1].threshold"
 UC_SINGLE_OLD = "gov.dwp.universal_credit.standard_allowance.amount.SINGLE_OLD"
 NEW_STATE_PENSION = "gov.dwp.state_pension.new_state_pension.amount"
 CGT_BASIC_RATE = "gov.hmrc.cgt.basic_rate"
+CGT_HIGHER_RATE = "gov.hmrc.cgt.higher_rate"
+CGT_ADDITIONAL_RATE = "gov.hmrc.cgt.additional_rate"
+CGT_BADR_RATE = "gov.hmrc.cgt.badr.rate"
 CGT_ANNUAL_EXEMPT_AMOUNT = "gov.hmrc.cgt.annual_exempt_amount"
 CGT_RESPONSES = "gov.simulation.capital_gains_responses"
 CGT_ELASTICITY = f"{CGT_RESPONSES}.elasticity"
@@ -498,6 +503,70 @@ GAINS_RESPONSE_UPLIFT_ORACLE = (
     "(realised gains - the annual exempt amount) x 20% - (£10,000 of gains - "
     "the annual exempt amount) x current rate, with the realised gains above; "
     "the exempt amount and current rate are read from current law"
+)
+
+MIXED_GAINS = 50_000
+RELIEF_GAINS = 20_000
+
+
+def _mixed_retention_ratio(year: int, rate: float) -> Callable[[Context], float]:
+    """The retention ratio for gains partly qualifying for the relief, when
+    the rate on the rest moves to ``rate``.
+
+    The marginal rate on gains is share-weighted across the schedules: the
+    relief rate on the qualifying share, the higher rate on the rest. Both
+    shares respond to the one change in that rate.
+    """
+
+    def expected(context: Context) -> float:
+        relief_share = RELIEF_GAINS / MIXED_GAINS
+        relief_rate = context.baseline(CGT_BADR_RATE, year)
+        before = relief_share * relief_rate + (1 - relief_share) * (
+            context.baseline(CGT_HIGHER_RATE, year)
+        )
+        after = relief_share * relief_rate + (1 - relief_share) * rate
+        return (1 - after) / (1 - before)
+
+    return expected
+
+
+def _scaled(amount: float, ratio, offset: float = 0.0) -> Callable[[Context], float]:
+    return lambda context: amount * (ratio(context) + offset)
+
+
+def _mixed_gains_tax_change(year: int, rate: float) -> Callable[[Context], float]:
+    """The change in CGT on the mixed gains when the rate on the main-rate
+    gains moves to ``rate``, with both shares scaled by the retention ratio.
+
+    The annual exempt amount comes off the main-rate gains first, the
+    allocation that leaves the least tax (TCGA 1992 s. 1H; the relief gains
+    are charged at the lower rate).
+    """
+
+    def expected(context: Context) -> float:
+        ratio = _mixed_retention_ratio(year, rate)(context)
+        exempt = context.baseline(CGT_ANNUAL_EXEMPT_AMOUNT, year)
+        relief_rate = context.baseline(CGT_BADR_RATE, year)
+
+        def tax(main: float, relief: float, main_rate: float) -> float:
+            main_exempt = min(exempt, main)
+            relief_exempt = min(exempt - main_exempt, relief)
+            return (main - main_exempt) * main_rate + (
+                relief - relief_exempt
+            ) * relief_rate
+
+        main, relief = MIXED_GAINS - RELIEF_GAINS, RELIEF_GAINS
+        before = tax(main, relief, context.baseline(CGT_HIGHER_RATE, year))
+        return tax(main * ratio, relief * ratio, rate) - before
+
+    return expected
+
+
+MIXED_RESPONSE_ORACLE = (
+    "£50,000 of gains, £20,000 qualifying for the relief, scaled by "
+    "(1 - t1) / (1 - t0), where t0 and t1 are 40% x the relief rate + 60% x "
+    "the higher rate (24% now, 45% under the reform); the relief and higher "
+    "rates are read from current law"
 )
 
 DIVIDENDS = 10_000
@@ -940,6 +1009,59 @@ CASES: tuple[Case, ...] = (
                     _gains_response_uplift(2027, 0.20, 1.0),
                     GAINS_RESPONSE_UPLIFT_ORACLE + ", at the default elasticity of 1",
                     0.005,
+                ),
+            )
+        ),
+    ),
+    Case(
+        id="cgt_default_response_relief_gains",
+        title=(
+            "CGT higher and additional rates 45% from 6 April 2027, for gains "
+            "partly qualifying for Business Asset Disposal Relief, at the "
+            "default response"
+        ),
+        changes=(
+            Change(CGT_HIGHER_RATE, _date("2027-04-06"), 0.45),
+            Change(CGT_ADDITIONAL_RATE, _date("2027-04-06"), 0.45),
+        ),
+        # £80,000 of earnings puts all the gains above the basic rate band;
+        # £20,000 of the £50,000 qualify for the relief, whose rate the reform
+        # leaves alone. Pending, as cgt_default_response, until the pin.
+        household=adult(
+            80_000, capital_gains=MIXED_GAINS, capital_gains_badr=RELIEF_GAINS
+        ),
+        checks=tuple(
+            replace(check, pending=DEFAULT_RESPONSE_DECISION)
+            for check in (
+                Check(
+                    "variable",
+                    "capital_gains",
+                    2027,
+                    _scaled(MIXED_GAINS, _mixed_retention_ratio(2027, 0.45)),
+                    MIXED_RESPONSE_ORACLE,
+                    0.05,
+                ),
+                # The qualifying gains respond at the same elasticity of 1.
+                Check(
+                    "variable",
+                    "capital_gains_badr_behavioural_response",
+                    2027,
+                    _scaled(RELIEF_GAINS, _mixed_retention_ratio(2027, 0.45), -1.0),
+                    MIXED_RESPONSE_ORACLE + "; the response on the qualifying £20,000",
+                    0.05,
+                ),
+                # The revenue effect, which also fixes which gains the annual
+                # exempt amount comes off.
+                Check(
+                    "change",
+                    "capital_gains_tax",
+                    2027,
+                    _mixed_gains_tax_change(2027, 0.45),
+                    MIXED_RESPONSE_ORACLE
+                    + "; tax at 45% on the main-rate gains after the annual "
+                    "exempt amount, which comes off them first, and the relief "
+                    "rate on the qualifying gains",
+                    0.05,
                 ),
             )
         ),

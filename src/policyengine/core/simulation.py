@@ -73,7 +73,12 @@ class Simulation(BaseModel):
     )
     dynamic: Optional[Union[Dynamic, dict[str, Any]]] = Field(
         default=None,
-        description=("Behavioural-response overlay. Same dict shape as ``policy``."),
+        description=(
+            "Behavioural-response overlay. Same dict shape as ``policy``. "
+            "``None`` keeps the country model's defaults, which need not be "
+            "static: policyengine-uk realises capital gains at a "
+            "retention-rate elasticity of 1 by default."
+        ),
     )
     dataset: Dataset = None
 
