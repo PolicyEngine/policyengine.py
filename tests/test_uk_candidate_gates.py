@@ -871,11 +871,11 @@ def test_the_released_models_full_run_passes_the_runners_own_declarations():
 
 
 RELEASED_COUNTS = {
-    "pass": 881,
+    "pass": 905,
     "fail": 0,
     "error": 0,
-    "unsupported": 119,
-    "pending": 19,
+    "unsupported": 120,
+    "pending": 34,
 }
 
 
@@ -1394,13 +1394,13 @@ def test_w1_population_run_alone_is_incomplete():
 
 
 def test_w1_full_run_passes():
-    """The real full run of contract 2.0.0 on the certified dataset: 881 pass,
-    19 pending a methodology call, 119 unsupported by design."""
+    """The real full run of contract 2.1.0 on the certified dataset: 905 pass,
+    34 pending a methodology call, 120 unsupported by design."""
 
     result = _run_contract(_passing_report())
     assert result.status == "pass", result.summary
-    assert "every case, property and population check passed (881)" in result.summary
-    assert "19 pending a methodology call" in result.summary
+    assert "every case, property and population check passed (905)" in result.summary
+    assert "34 pending a methodology call" in result.summary
     assert result.details["problems"] == []
 
 
@@ -3869,8 +3869,8 @@ def test_metrics_with_nan_values_fail_rather_than_crash():
 
 # Same-label assertions. Contract 1.1.0 read the 2034 allowance twice (one
 # gating check, one pending d1344), so its full run exercised the gate's
-# resolution of rows that share a label. 2.0.0 has no such pair, so these
-# tests declare one on top of the real runner and its real 2.0.0 run.
+# resolution of rows that share a label. Since 2.0.0 there is no such pair, so
+# these tests declare one on top of the real runner and its real full run.
 
 _SAME_LABEL = "parameter:gov.hmrc.income_tax.allowances.personal_allowance.amount:2034"
 _SAME_LABEL_ORACLE = "a second reading of the 2034 allowance, pending d1344"
