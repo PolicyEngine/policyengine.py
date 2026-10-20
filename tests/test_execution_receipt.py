@@ -132,6 +132,8 @@ def _bundle_for(
     record["certified_data_artifact"]["sha256"] = digest
     record["datasets"][record["default_dataset"]]["sha256"] = digest
     record["certification"]["certified_for_model_version"] = model_version
+    if "certified_for_core_version" in record["certification"]:
+        record["certification"]["certified_for_core_version"] = core_version
     bundle["packages"]["policyengine-core"]["version"] = core_version
     bundle["policyengine_version"] = INSTALLED_WRAPPER
     record["policyengine_version"] = INSTALLED_WRAPPER
@@ -303,10 +305,15 @@ def test_any_uncovered_component_makes_the_receipt_uncertified(
     elif change == "dataset name":
         # Same bytes registered under another certified dataset name.
         record = bundle["data_releases"]["uk"]
-        record["datasets"]["frs_2024_25"]["sha256"] = record["certified_data_artifact"][
+        other = next(
+            name
+            for name, reference in record["datasets"].items()
+            if name != record["default_dataset"] and reference["path"].endswith(".h5")
+        )
+        record["datasets"][other]["sha256"] = record["certified_data_artifact"][
             "sha256"
         ]
-        kwargs["dataset"] = "frs_2024_25"
+        kwargs["dataset"] = other
     receipt = _build(path, bundle, **kwargs)
     assert receipt.certification_status == "uncertified"
     assert receipt.certificate is None
@@ -548,6 +555,16 @@ def test_a_forged_receipt_with_the_genuine_record_digest_does_not_verify(
     assert any("data.dataset_sha256" in p for p in problems)
 
 
+#: A valid compatibility basis other than the committed certificate's.
+_OTHER_BASIS = next(
+    basis
+    for basis in ("built_with_model_package", "legacy_compatible_model_package")
+    if basis
+    != json.loads(BUNDLE_PATH.read_text())["data_releases"]["uk"]["certification"][
+        "compatibility_basis"
+    ]
+)
+
 #: Consistent edits a forger could make, each of which the model accepts.
 FORGERIES = {
     "bundle version": {
@@ -567,7 +584,7 @@ FORGERIES = {
         "certificate__certified_dataset_sha256": "e" * 64,
     },
     "record digest": {"certificate__certificate_sha256": "e" * 64},
-    "basis": {"certificate__compatibility_basis": "built_with_model_package"},
+    "basis": {"certificate__compatibility_basis": _OTHER_BASIS},
     "certifier": {"certificate__certified_by": "someone else"},
     "dataset name": {"data__dataset": "frs_2024_25"},
     "data release": {"data__release_version": "9.9.9"},
@@ -621,6 +638,14 @@ def test_every_consistent_forgery_is_reported(tmp_path_factory, names):
     assert verify_certificate(_forge(genuine, **changes), bundle)
 
 
+def _certify_core(bundle: dict, version: str) -> None:
+    """Change the core version a bundle certifies, wherever it states it."""
+    certification = bundle["data_releases"]["uk"]["certification"]
+    if "certified_for_core_version" in certification:
+        certification["certified_for_core_version"] = version
+    bundle["packages"]["policyengine-core"].update(version=version)
+
+
 @pytest.mark.parametrize(
     "edit",
     [
@@ -633,7 +658,7 @@ def test_every_consistent_forgery_is_reported(tmp_path_factory, names):
         ),
         lambda b: b["data_releases"]["uk"].update(policyengine_version="0.0.0"),
         lambda b: b.update(policyengine_version="0.0.0"),
-        lambda b: b["packages"]["policyengine-core"].update(version="0.0.1"),
+        lambda b: _certify_core(b, "0.0.1"),
     ],
     ids=[
         "certifier",

@@ -73,12 +73,21 @@ US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
     f"@{US_LOCAL_AREA_RELEASE_ID}"
 )
-UK_MODEL_VERSION = "2.130.1"
-UK_BUILT_WITH_MODEL_VERSION = "2.122.2"
-UK_DATA_RELEASE_VERSION = "1.58.1"
-UK_DATA_RELEASE_ID = "policyengine-uk-data-1.58.1"
-UK_DATA_RELEASE_REVISION = "89be6b73fc1e6eeba6dae2f9400676d8510bcd51"
-UK_DATA_RELEASE_PATH = "releases/1.58.1/release_manifest.json"
+UK_MODEL_VERSION = "2.132.6"
+UK_BUILT_WITH_MODEL_VERSION = "2.132.6"
+UK_DATA_RELEASE_VERSION = "0.1.0"
+UK_DATA_RELEASE_ID = "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+UK_DATA_RELEASE_REVISION = "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+UK_DATA_RELEASE_PATH = "releases/microcosm-uk-2024-25-national/release_manifest.json"
+UK_LOCAL_AREA_RELEASE_ID = "microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe"
+# The prior certified default (policyengine-uk-data 1.58.1), kept resolvable
+# via dataset_overlays.
+UK_EFRS_DATASET_URI = (
+    "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.1"
+)
+UK_EFRS_FRS_DATASET_URI = (
+    "hf://policyengine/policyengine-uk-data-private/frs_2024_25.h5@1.58.1"
+)
 # The prior certified default, kept resolvable via dataset_overlays.
 UK_POPULACE_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
 UK_POPULACE_DATASET_URI = (
@@ -87,7 +96,12 @@ UK_POPULACE_DATASET_URI = (
 )
 UK_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 UK_CERTIFIED_DATASET_URI = (
-    "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.1"
+    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
+    f"@{UK_DATA_RELEASE_ID}"
+)
+UK_LOCAL_AREA_DATASET_URI = (
+    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
+    f"@{UK_LOCAL_AREA_RELEASE_ID}"
 )
 
 
@@ -226,25 +240,20 @@ class TestReleaseManifests:
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-uk"
         assert manifest.model_package.version == UK_MODEL_VERSION
-        assert manifest.data_package.name == "policyengine-uk-data"
+        assert manifest.data_package.name == "microcosm-data"
         assert manifest.data_package.version == UK_DATA_RELEASE_VERSION
-        assert manifest.data_package.repo_id == (
-            "policyengine/policyengine-uk-data-private"
-        )
+        assert manifest.data_package.repo_id == "policyengine/populace-uk-private"
         assert manifest.data_package.release_manifest_path == UK_DATA_RELEASE_PATH
         assert (
             manifest.data_package.release_manifest_revision == UK_DATA_RELEASE_REVISION
         )
         assert manifest.certified_data_artifact is not None
         assert manifest.certified_data_artifact.build_id == UK_DATA_RELEASE_ID
-        assert manifest.certified_data_artifact.dataset == "enhanced_frs_2024_25"
+        assert manifest.certified_data_artifact.dataset == "microcosm_uk_2024_25"
         assert manifest.certified_data_artifact.uri == UK_CERTIFIED_DATASET_URI
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == UK_DATA_RELEASE_ID
-        assert (
-            manifest.certification.compatibility_basis
-            == "legacy_compatible_model_package"
-        )
+        assert manifest.certification.compatibility_basis == "built_with_model_package"
         assert manifest.certification.certified_by == UK_CERTIFICATION_SOURCE
         assert (
             manifest.certification.built_with_model_version
@@ -277,9 +286,26 @@ class TestReleaseManifests:
         )
 
     def test__given_uk_dataset_name__then_resolves_to_versioned_hf_url(self):
-        resolved = resolve_dataset_reference("uk", "enhanced_frs_2024_25")
+        resolved = resolve_dataset_reference("uk", "microcosm_uk_2024_25")
 
         assert resolved == UK_CERTIFIED_DATASET_URI
+
+    def test__given_uk_manifest__then_area_regions_route_to_local_release(self):
+        manifest = get_release_manifest("uk")
+
+        assert manifest.regional_release_kind == "local_area"
+        assert {
+            region_type: template.path_template
+            for region_type, template in manifest.region_datasets.items()
+        } == {
+            "national": "microcosm_uk_2024_25.h5",
+            "constituency": "microcosm_uk_2024_25_dense.h5",
+            "local_authority": "microcosm_uk_2024_25_dense.h5",
+        }
+        assert (
+            resolve_dataset_reference("uk", "microcosm_uk_2024_25_dense")
+            == UK_LOCAL_AREA_DATASET_URI
+        )
 
     def test__given_uk_legacy_dataset_names__then_resolves_bundled_aliases(self):
         assert (
@@ -293,6 +319,11 @@ class TestReleaseManifests:
             resolve_dataset_reference("uk", "populace_uk_2023")
             == UK_POPULACE_DATASET_URI
         )
+        assert (
+            resolve_dataset_reference("uk", "enhanced_frs_2024_25")
+            == UK_EFRS_DATASET_URI
+        )
+        assert resolve_dataset_reference("uk", "frs_2024_25") == UK_EFRS_FRS_DATASET_URI
 
     def test__given_explicit_url__then_resolution_is_noop(self):
         url = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
@@ -915,11 +946,11 @@ class TestReleaseManifests:
         bundle = model_version.release_bundle
 
         assert bundle["bundle_id"] == f"uk-{POLICYENGINE_VERSION}"
-        assert bundle["default_dataset"] == "enhanced_frs_2024_25"
+        assert bundle["default_dataset"] == "microcosm_uk_2024_25"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
         assert bundle["certified_data_build_id"] == UK_DATA_RELEASE_ID
         assert bundle["data_build_model_version"] == UK_BUILT_WITH_MODEL_VERSION
-        assert bundle["compatibility_basis"] == "legacy_compatible_model_package"
+        assert bundle["compatibility_basis"] == "built_with_model_package"
         assert bundle["certified_by"] == UK_CERTIFICATION_SOURCE
 
     def test__given_runtime_certification__then_release_bundle_prefers_runtime_value(
@@ -1099,30 +1130,30 @@ class TestReleaseManifests:
                 "materialize_dataset",
                 return_value=_dataset_source(
                     "uk",
-                    "enhanced_frs_2024_25",
-                    "/tmp/enhanced_frs_2024_25.h5",
+                    "microcosm_uk_2024_25",
+                    "/tmp/microcosm_uk_2024_25.h5",
                 ),
             ):
                 microsim = uk_model.managed_microsimulation(
-                    dataset="enhanced_frs_2024_25"
+                    dataset="microcosm_uk_2024_25"
                 )
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
-        assert dataset == "/tmp/enhanced_frs_2024_25.h5"
+        assert dataset == "/tmp/microcosm_uk_2024_25.h5"
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
-        assert microsim.policyengine_bundle["runtime_dataset"] == "enhanced_frs_2024_25"
+        assert microsim.policyengine_bundle["runtime_dataset"] == "microcosm_uk_2024_25"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
             UK_CERTIFIED_DATASET_URI
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
-        assert dataset_source == "/tmp/enhanced_frs_2024_25.h5"
+        assert dataset_source == "/tmp/microcosm_uk_2024_25.h5"
         assert (
             microsim.policyengine_bundle["runtime_dataset_sha256"]
-            == get_release_manifest("uk").datasets["enhanced_frs_2024_25"].sha256
+            == get_release_manifest("uk").datasets["microcosm_uk_2024_25"].sha256
         )
-        assert microsim.policyengine_bundle["runtime_dataset_repo_type"] == "model"
+        assert microsim.policyengine_bundle["runtime_dataset_repo_type"] == "dataset"
 
     def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"

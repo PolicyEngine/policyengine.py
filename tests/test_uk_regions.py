@@ -1,5 +1,6 @@
 """Tests for UK region definitions."""
 
+from collections import Counter
 from unittest.mock import patch
 
 import pandas as pd
@@ -18,6 +19,18 @@ from policyengine.countries.uk.regions import (
     uk_region_registry,
 )
 from policyengine.provenance.manifest import CountryReleaseManifest
+
+# The certified bundle's national dataset, and the Microcosm local-area
+# release its constituency and local-authority regions are routed to.
+UK_CERTIFIED_NATIONAL_URI = (
+    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
+    "@microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+)
+UK_CERTIFIED_LOCAL_AREA_URI = (
+    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
+    "@microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe"
+)
+UK_AREA_REGION_COUNT = 650 + 361
 
 
 class TestUKCountries:
@@ -78,11 +91,7 @@ class TestUKRegionRegistry:
         assert national.code == "uk"
         assert national.label == "United Kingdom"
         assert national.region_type == "national"
-        assert (
-            national.dataset_path
-            == "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5"
-            "@1.58.1"
-        )
+        assert national.dataset_path == UK_CERTIFIED_NATIONAL_URI
         assert not national.requires_filter
 
     def test__given_uk_registry__then_has_four_country_regions(self):
@@ -171,49 +180,65 @@ class TestUKRegionRegistry:
         assert ni.requires_filter
         assert ni.scoping_strategy.variable_value == "NORTHERN_IRELAND"
 
-    def test__given_uk_national__then_children_are_countries(self):
+    def test__given_uk_national__then_children_are_countries_and_areas(self):
         """Given: UK national region
         When: Getting its children
-        Then: All children are country regions
+        Then: The 4 countries, 650 constituencies and 361 local authorities
         """
         # When
         uk_children = uk_region_registry.get_children("uk")
 
         # Then
-        assert len(uk_children) == 4
-        assert all(c.region_type == "country" for c in uk_children)
+        assert Counter(c.region_type for c in uk_children) == {
+            "country": 4,
+            "constituency": 650,
+            "local_authority": 361,
+        }
 
-    def test__given_uk_registry__then_only_national_has_dataset(self):
-        """Given: UK region registry
+    def test__given_uk_registry__then_national_and_area_regions_have_datasets(
+        self,
+    ):
+        """Given: UK region registry routed to a Microcosm local-area release
         When: Getting dataset regions
-        Then: Only national has dedicated dataset
+        Then: National loads the national dataset, area regions the local one
         """
         # When
         dataset_regions = uk_region_registry.get_dataset_regions()
 
         # Then
-        assert len(dataset_regions) == 1
-        assert dataset_regions[0].code == "uk"
+        assert len(dataset_regions) == 1 + UK_AREA_REGION_COUNT
+        paths = {r.region_type: set() for r in dataset_regions}
+        for region in dataset_regions:
+            paths[region.region_type].add(region.dataset_path)
+        assert paths == {
+            "national": {UK_CERTIFIED_NATIONAL_URI},
+            "constituency": {UK_CERTIFIED_LOCAL_AREA_URI},
+            "local_authority": {UK_CERTIFIED_LOCAL_AREA_URI},
+        }
 
-    def test__given_uk_registry__then_filter_regions_are_countries(self):
+    def test__given_uk_registry__then_countries_and_areas_filter(self):
         """Given: UK region registry
         When: Getting filter regions
-        Then: All 4 countries require filter
+        Then: The 4 countries and every area region require a filter
         """
         # When
         filter_regions = uk_region_registry.get_filter_regions()
 
         # Then
-        assert len(filter_regions) == 4
-        assert all(r.region_type == "country" for r in filter_regions)
+        assert len(filter_regions) == 4 + UK_AREA_REGION_COUNT
+        assert {r.region_type for r in filter_regions} == {
+            "country",
+            "constituency",
+            "local_authority",
+        }
 
-    def test__given_default_registry__then_has_5_regions(self):
-        """Given: Default UK registry
+    def test__given_default_registry__then_has_1016_regions(self):
+        """Given: Default UK registry routed to a Microcosm local-area release
         When: Counting regions
-        Then: Contains 1 national + 4 countries = 5
+        Then: 1 national + 4 countries + 650 constituencies + 361 LAs = 1,016
         """
         # Then
-        assert len(uk_region_registry) == 5
+        assert len(uk_region_registry) == 5 + UK_AREA_REGION_COUNT
 
 
 class TestUKRegionRegistryBuilder:
@@ -373,19 +398,36 @@ def _uk_routed_manifest(kind: str) -> CountryReleaseManifest:
     )
 
 
+def _uk_unrouted_manifest() -> CountryReleaseManifest:
+    """A certified national bundle that routes no area regions."""
+    manifest = _uk_routed_manifest("local_area")
+    return manifest.model_copy(
+        update={
+            "region_datasets": {"national": manifest.region_datasets["national"]},
+            "regional_release_kind": None,
+        }
+    )
+
+
 class TestUKAreaRegionRouting:
     """Area regions load the dataset certification routes them to."""
 
     def test__given_unrouted_bundle__then_area_regions_filter_the_national_dataset(
-        self,
+        self, monkeypatch
     ):
+        monkeypatch.setattr(
+            "policyengine.provenance.manifest.get_release_manifest",
+            lambda country_id: _uk_unrouted_manifest(),
+        )
+
+        default = build_uk_region_registry()
         registry = build_uk_region_registry(
             include_constituencies=True, include_local_authorities=True
         )
 
         assert registry.get("constituency/E14001063").dataset_path is None
         assert registry.get("local_authority/N09000011").dataset_path is None
-        assert len(uk_region_registry.get_by_type("constituency")) == 0
+        assert len(default) == 5
 
     def test__given_national_first_bundle__then_area_regions_load_the_efrs(
         self, monkeypatch
