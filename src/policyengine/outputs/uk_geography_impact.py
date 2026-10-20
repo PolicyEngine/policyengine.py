@@ -14,8 +14,14 @@ from policyengine.data.uk_geography_assets import (
     default_local_search_dirs,
     packaged_uk_area_list_path,
 )
+from policyengine.provenance.manifest import uk_area_dataset_hint
 
 logger = logging.getLogger(__name__)
+#: The region type whose dataset carries each longwise area column.
+AREA_REGION_TYPES = {
+    "constituency_code_oa": "constituency",
+    "la_code_oa": "local_authority",
+}
 
 
 def warn_unprotected_uk_geography_output(name: str, level: str) -> None:
@@ -142,10 +148,12 @@ def compute_longwise_uk_geography_impacts(
         "household_weight",
     ]:
         if column not in baseline_household.columns:
+            hint = uk_area_dataset_hint(AREA_REGION_TYPES.get(column, ""))
             raise ValueError(
                 f"UK geography impacts require baseline household column "
                 f"'{column}'. Re-run the simulation with an output dataset "
                 f"that preserves UK geography passthrough columns."
+                + (f" {hint}" if hint else "")
             )
     if "household_net_income" not in reform_household.columns:
         raise ValueError(

@@ -273,6 +273,11 @@ control: each number passes a floor on the survey households behind it and
 carries a 90% interval. Use it for anything you publish. See
 [Disclosure control](disclosure.md).
 
+Constituency and local-authority levels need simulations on a dataset whose
+households carry those codes. The Microcosm national default does not: run
+them on the local-area dataset the bundle routes those regions to,
+`microcosm_uk_2024_25_dense`. Regions can come from either.
+
 ```python
 from policyengine.outputs import compute_uk_geography_disclosure
 

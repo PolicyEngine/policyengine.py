@@ -464,3 +464,27 @@ def test_the_release_is_available_only_after_a_run():
 def test_the_adapter_is_exported_from_outputs():
     assert outputs.UKGeographyDisclosure is UKGeographyDisclosure
     assert outputs.compute_uk_geography_disclosure is compute_uk_geography_disclosure
+
+
+def test_a_missing_area_column_names_the_dataset_that_carries_it():
+    from policyengine.provenance.manifest import uk_area_dataset_hint
+
+    baseline, reform = _households()
+    for frame in (baseline, reform):
+        del frame["constituency_code_oa"]
+    with pytest.raises(ValueError, match="no household an area") as error:
+        _compute(baseline, reform, levels=("constituency",))
+    hint = uk_area_dataset_hint("constituency")
+    assert "microcosm_uk_2024_25_dense" in hint
+    assert hint in str(error.value)
+
+
+def test_no_hint_when_nothing_routes_the_area(monkeypatch):
+    from policyengine.provenance import manifest
+
+    record = manifest.get_release_manifest("uk")
+    unrouted = record.model_copy(
+        update={"region_datasets": {"national": record.region_datasets["national"]}}
+    )
+    monkeypatch.setattr(manifest, "get_release_manifest", lambda country: unrouted)
+    assert manifest.uk_area_dataset_hint("constituency") == ""

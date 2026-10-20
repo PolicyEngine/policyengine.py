@@ -706,6 +706,43 @@ def resolve_default_datasets(country_id: str) -> list[str]:
     return list(manifest.datasets.keys())
 
 
+def region_dataset_name(country_id: str, region_type: str) -> Optional[str]:
+    """The certified dataset that ``region_type`` regions are routed to, if any."""
+
+    manifest = get_release_manifest(country_id)
+    template = manifest.region_datasets.get(region_type)
+    if template is None:
+        return None
+    return next(
+        (
+            name
+            for name, reference in manifest.datasets.items()
+            if reference.path == template.path_template
+        ),
+        None,
+    )
+
+
+def uk_area_dataset_hint(region_type: str) -> str:
+    """A sentence naming the dataset whose households carry an area's codes.
+
+    The Microcosm national default has no constituency or local-authority
+    codes; the local-area release the bundle routes those regions to does.
+    """
+
+    try:
+        name = region_dataset_name("uk", region_type)
+    except ValueError:
+        return ""
+    if name is None:
+        return ""
+    return (
+        f"The certified bundle routes {region_type} regions to the dataset "
+        f"{name!r}, whose households carry these codes: run the simulations "
+        "on that dataset."
+    )
+
+
 def resolve_region_dataset_path(
     country_id: str,
     region_type: str,

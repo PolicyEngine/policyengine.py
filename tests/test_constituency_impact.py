@@ -252,12 +252,16 @@ def test_compute_constituency_impacts_requires_longwise_geography_column():
         }
     )
 
-    with pytest.raises(ValueError, match="constituency_code_oa"):
+    with pytest.raises(ValueError, match="constituency_code_oa") as error:
         compute_uk_constituency_impacts(
             baseline,
             reform,
             download_missing_assets=False,
         )
+    # The error names the dataset whose households carry the codes.
+    from policyengine.provenance.manifest import uk_area_dataset_hint
+
+    assert uk_area_dataset_hint("constituency") in str(error.value)
 
 
 def test_constituency_impacts_warn_that_they_are_not_disclosure_controlled(caplog):
