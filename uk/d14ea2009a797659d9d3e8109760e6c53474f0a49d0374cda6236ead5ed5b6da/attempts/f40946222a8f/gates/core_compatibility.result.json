@@ -1,0 +1,10 @@
+{
+  "details": {
+    "publisher_claim_covers_core": false,
+    "publisher_claim_covers_model": false
+  },
+  "evidence_sha256": "6264064dc0c3d3adeeddfacefc5bb2b9917f748bf61a3cf7222bfbfe85948f46",
+  "gate_id": "core_compatibility",
+  "status": "pass",
+  "summary": "policyengine-core 3.33.0 satisfies policyengine-uk>=3.32.27; certification will record an exact qualified pair, since the publisher's claims do not cover both."
+}
