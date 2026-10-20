@@ -559,6 +559,16 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     if not isinstance(source_bytes, bytes):
         source_bytes = response.text.encode("utf-8")
     data_release_manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    if data_release_manifest.build_folder is not None:
+        # A build in its own release folder must be the build the bundle
+        # pinned; ReleaseBuildFolderError is not an unavailable manifest, so
+        # no bundled certificate covers it.
+        return read_build_folder(
+            data_release_manifest,
+            repo_id=country_manifest.data_package.repo_id,
+            manifest_path=country_manifest.data_package.release_manifest_path,
+            revision=_artifact_revision(country_manifest.data_package),
+        )
     release_revision = country_manifest.data_package.release_manifest_revision
     if release_revision is not None:
         for artifact in data_release_manifest.artifacts.values():

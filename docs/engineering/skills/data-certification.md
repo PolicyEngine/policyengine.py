@@ -58,6 +58,9 @@ python scripts/bundle.py certify-data --country uk --data-producer populace \
 - The certificate names the build by `build`
   (`data_releases.<country>.version`, the certification's `data_build_id` and
   the changelog fragment name), so two builds of one release never match.
+- At import, a remote manifest that names another release or build than the
+  bundle's pinned folder is refused, even when the bundle carries a
+  certificate.
 
 Manifests published before this layout, whose `build` is an object, are
 certified as described above.

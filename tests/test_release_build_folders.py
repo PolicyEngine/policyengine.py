@@ -31,7 +31,11 @@ from policyengine.provenance.certification import (
     certify_data_release,
 )
 from policyengine.provenance.manifest import (
+    CountryReleaseManifest,
     DataReleaseManifest,
+    ReleaseBuildFolderError,
+    certify_data_release_compatibility,
+    get_data_release_manifest,
     release_build_id,
 )
 
@@ -461,3 +465,141 @@ class TestCertifyBuildFolder:
             f"releases/{NATIONAL_RELEASE}/calibration_diagnostics.json"
         )
         assert result.build_id == tag
+
+
+PAIR_ID = "a" * 64
+
+
+def folder_layout_country_manifest(
+    certification: dict | None = None,
+) -> CountryReleaseManifest:
+    """A bundle entry certified from the national build's own folder."""
+
+    return CountryReleaseManifest.model_validate(
+        {
+            "country_id": "uk",
+            "policyengine_version": "9.9.9",
+            "model_package": {"name": "policyengine-uk", "version": UK_MODEL_VERSION},
+            "data_package": {
+                "name": "microcosm-data",
+                "version": "0.1.0",
+                "repo_id": REPOSITORY,
+                "repo_type": "dataset",
+                "release_manifest_path": f"{NATIONAL_FOLDER}/release_manifest.json",
+                "release_manifest_revision": NATIONAL_COMMIT,
+            },
+            "default_dataset": "microcosm_uk_2024_25",
+            "datasets": {
+                "microcosm_uk_2024_25": {
+                    "path": f"{NATIONAL_FOLDER}/microcosm_uk_2024_25.h5",
+                    "revision": NATIONAL_COMMIT,
+                    "repo_id": REPOSITORY,
+                }
+            },
+            **({"certification": certification} if certification else {}),
+        }
+    )
+
+
+class TestImportCheckBuildFolder:
+    def setup_method(self):
+        get_data_release_manifest.cache_clear()
+
+    def teardown_method(self):
+        get_data_release_manifest.cache_clear()
+
+    def _patched(self, remote_payload: dict, country_manifest=None):
+        return (
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=country_manifest or folder_layout_country_manifest(),
+            ),
+            patch(
+                "policyengine.provenance.manifest.requests.get",
+                return_value=manifest_response(remote_payload),
+            ),
+        )
+
+    def test__given_remote_manifest_of_its_folder__then_artifacts_resolve_in_it(
+        self,
+    ):
+        bundle_patch, request_patch = self._patched(folder_layout_manifest_payload())
+        with bundle_patch, request_patch as get:
+            manifest = get_data_release_manifest("uk")
+
+        assert get.call_args.args[0] == (
+            f"https://huggingface.co/datasets/{REPOSITORY}/resolve/"
+            f"{NATIONAL_COMMIT}/{NATIONAL_FOLDER}/release_manifest.json"
+        )
+        assert manifest.artifacts["microcosm_uk_2024_25"].uri == (
+            f"hf://{REPOSITORY}/{NATIONAL_FOLDER}/microcosm_uk_2024_25.h5"
+            f"@{NATIONAL_COMMIT}"
+        )
+
+    def test__given_remote_manifest_naming_another_build__then_refuses(self):
+        bundle_patch, request_patch = self._patched(
+            folder_layout_manifest_payload(build=EARLIER_NATIONAL_BUILD)
+        )
+        with (
+            bundle_patch,
+            request_patch,
+            pytest.raises(ReleaseBuildFolderError, match=EARLIER_NATIONAL_BUILD),
+        ):
+            get_data_release_manifest("uk")
+
+    def test__given_mismatched_remote_manifest__then_bundled_certificate_is_not_used(
+        self,
+    ):
+        # A manifest naming another build is wrong, not unavailable: the
+        # fallback to the bundled certificate must not hide it.
+        bundled = folder_layout_country_manifest(
+            certification={
+                "compatibility_basis": "legacy_compatible_model_package",
+                "certified_for_model_version": UK_MODEL_VERSION,
+                "data_build_id": NATIONAL_BUILD,
+            }
+        )
+        bundle_patch, request_patch = self._patched(
+            folder_layout_manifest_payload(build=EARLIER_NATIONAL_BUILD), bundled
+        )
+        with (
+            bundle_patch,
+            request_patch,
+            pytest.raises(ValueError, match=EARLIER_NATIONAL_BUILD),
+        ):
+            certify_data_release_compatibility(
+                "uk", runtime_model_version=UK_MODEL_VERSION
+            )
+
+    def test__given_publisher_claim_on_folder_build__then_build_names_it(self):
+        bundle_patch, request_patch = self._patched(folder_layout_manifest_payload())
+        with bundle_patch, request_patch:
+            certification = certify_data_release_compatibility(
+                "uk", runtime_model_version=UK_MODEL_VERSION
+            )
+
+        assert certification.compatibility_basis == "legacy_compatible_model_package"
+        assert certification.data_build_id == NATIONAL_BUILD
+
+    def test__given_qualified_folder_build__then_import_check_honours_its_build(
+        self,
+    ):
+        qualified = {
+            "compatibility_basis": "qualified_exact_pair",
+            "certified_for_model_version": "2.130.1",
+            "certified_for_core_version": "3.33.0",
+            "data_build_id": NATIONAL_BUILD,
+            "qualification_pair_id": PAIR_ID,
+        }
+        remote = folder_layout_manifest_payload()
+        remote["compatible_model_packages"] = []
+        bundle_patch, request_patch = self._patched(
+            remote, folder_layout_country_manifest(certification=qualified)
+        )
+        with bundle_patch, request_patch:
+            certification = certify_data_release_compatibility(
+                "uk", runtime_model_version="2.130.1", runtime_core_version="3.33.0"
+            )
+
+        assert certification.compatibility_basis == "qualified_exact_pair"
+        assert certification.data_build_id == NATIONAL_BUILD
