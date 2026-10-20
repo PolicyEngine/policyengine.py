@@ -1372,6 +1372,23 @@ def certify_data_release(
         qualified_pair_id=qualified_pair_id,
     )
     bundle.setdefault("data_releases", {})[country] = data_release
+    # Overlays may never shadow a certified name, so a release that certifies
+    # a name the bundle keeps as an overlay (a rollback to the release it came
+    # from, or the dataset a national-first route carries) supersedes it.
+    overlays = (bundle.get("dataset_overlays") or {}).get(country) or {}
+    superseded = sorted(
+        name
+        for name in overlays
+        if name in data_release["datasets"] or name == data_release["default_dataset"]
+    )
+    for name in superseded:
+        del overlays[name]
+    if superseded:
+        warnings = [
+            *warnings,
+            f"Removed the dataset_overlays.{country} entries this release now "
+            f"certifies: {', '.join(superseded)}.",
+        ]
     bundle.setdefault("countries", {}).setdefault(country, {})["model_package"] = (
         model_package
     )

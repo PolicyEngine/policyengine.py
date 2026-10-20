@@ -24,6 +24,26 @@ def _is_normalized_version(value: Any) -> bool:
     )
 
 
+def validate_dataset_overlays(bundle: Mapping[str, Any]) -> None:
+    """Refuse an overlay that shadows a certified dataset name.
+
+    The runtime refuses such a bundle on every release-manifest read, so
+    ``import policyengine`` would fail; maintenance checks refuse it first.
+    """
+    overlays = bundle.get("dataset_overlays") or {}
+    for country, entries in overlays.items():
+        release = (bundle.get("data_releases") or {}).get(country) or {}
+        certified = set(release.get("datasets") or {})
+        if release.get("default_dataset"):
+            certified.add(release["default_dataset"])
+        shadowed = sorted(set(entries or {}) & certified)
+        if shadowed:
+            raise ValueError(
+                f"dataset_overlays.{country} shadows certified datasets: "
+                f"{', '.join(shadowed)}. Remove those overlays."
+            )
+
+
 def validate_spm_configuration(configuration: Any) -> None:
     """Validate JSON defaults using only the standard library.
 

@@ -92,6 +92,12 @@ a run without `--regional-manifest-uri` is refused; pass the current regional
 release again (or its replacement), or `--drop-regional-release` to remove the
 routing on purpose. The two flags cannot be combined.
 
+An overlay may never shadow a certified dataset name, so certification removes
+any `dataset_overlays.<country>` entry whose name the new release certifies. A
+rollback to policyengine-uk-data with `--drop-regional-release`, for example,
+removes the enhanced FRS overlays. `bundle.py check` refuses a bundle with an
+overlay that shadows a certified name.
+
 ### US
 
 For US Populace certification, certify the Populace release manifest directly:

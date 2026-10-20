@@ -29,6 +29,7 @@ from policyengine.provenance.certification import (
 from policyengine.provenance.manifest import (
     CountryReleaseManifest,
     DataReleaseManifest,
+    _apply_dataset_overlays,
 )
 
 TAG = "populace-us-2024-aaaaaaa-20260101"
@@ -1171,7 +1172,9 @@ def _response(payload: dict) -> MagicMock:
     return response
 
 
-def _certify_uk(bundle_path: Path, responses: list, **kwargs):
+def _certify_uk(
+    bundle_path: Path, responses: list, manifest_uri: str = UK_NATIONAL_URI, **kwargs
+):
     with (
         patch(
             "policyengine.provenance.certification.requests.get",
@@ -1197,7 +1200,7 @@ def _certify_uk(bundle_path: Path, responses: list, **kwargs):
         return certify_data_release(
             country="uk",
             data_producer="populace",
-            manifest_uri=UK_NATIONAL_URI,
+            manifest_uri=manifest_uri,
             model_version=UK_MODEL_VERSION,
             bundle_path=bundle_path,
             **kwargs,
@@ -1497,6 +1500,52 @@ class TestUKRegionalCertification:
         assert "regional_source_manifest_uri" not in release
         assert "regional_release_kind" not in release
         assert set(release["region_datasets"]) == {"national"}
+
+    def test__given_a_rollback_to_overlaid_names__then_their_overlays_go(
+        self, tmp_path
+    ):
+        """A rollback certifies names the bundle keeps as overlays.
+
+        Overlays may not shadow certified names, so a bundle that kept them
+        would refuse every release-manifest read, and import with it.
+        """
+        bundle_path = _tmp_bundle(tmp_path)
+        _certify_uk(
+            bundle_path,
+            [
+                _response(_microcosm_uk_national_payload()),
+                _response(_microcosm_uk_dense_payload()),
+            ],
+            regional_manifest_uri=UK_DENSE_URI,
+        )
+        bundle = json.loads(bundle_path.read_text())
+        kept = {"path": "populace_uk_2023.h5", "repo_id": "x", "revision": "r"}
+        bundle["dataset_overlays"] = {
+            "uk": {
+                "enhanced_frs_2024_25": {"path": "enhanced_frs_2024_25.h5"},
+                "frs_2024_25": {"path": "frs_2024_25.h5"},
+                "populace_uk_2023": kept,
+            }
+        }
+        bundle_path.write_text(json.dumps(bundle))
+
+        result = _certify_uk(
+            bundle_path,
+            [_response(_efrs_release_payload())],
+            manifest_uri=EFRS_URI,
+            drop_regional_release=True,
+        )
+
+        bundle = json.loads(bundle_path.read_text())
+        assert bundle["data_releases"]["uk"]["default_dataset"] == (
+            "enhanced_frs_2024_25"
+        )
+        assert bundle["dataset_overlays"]["uk"] == {"populace_uk_2023": kept}
+        assert any("enhanced_frs_2024_25, frs_2024_25" in w for w in result.warnings)
+        manifest = CountryReleaseManifest.model_validate(
+            _apply_dataset_overlays("uk", bundle["data_releases"]["uk"], bundle)
+        )
+        assert "populace_uk_2023" in manifest.datasets
 
     def test__given_drop_and_a_regional_release__then_refuses_both(self, tmp_path):
         # Dropping the routing and routing to a release are opposite requests;

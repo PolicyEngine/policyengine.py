@@ -143,3 +143,21 @@ def test_export_release_assets_writes_bundle_assets(monkeypatch, tmp_path):
         "PolicyEngine bundle"
         in (tmp_path / f"policyengine-bundle-{version}.citation.txt").read_text()
     )
+
+
+def test_dataset_overlays_may_not_shadow_certified_names():
+    import copy
+
+    import pytest
+
+    from policyengine.provenance.bundle_validation import validate_dataset_overlays
+
+    current = bundle.get_current_bundle()
+    validate_dataset_overlays(current)
+
+    release = current["data_releases"]["uk"]
+    for name in (release["default_dataset"], next(iter(release["datasets"]))):
+        shadowing = copy.deepcopy(current)
+        shadowing["dataset_overlays"]["uk"][name] = {"path": f"{name}.h5"}
+        with pytest.raises(ValueError, match=f"shadows certified datasets: {name}"):
+            validate_dataset_overlays(shadowing)
