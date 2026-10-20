@@ -102,12 +102,16 @@ when nothing is routed:
 
 | `regional_release_kind` | Area regions load | In the default registry |
 | --- | --- | --- |
-| none (today) | the national dataset | no |
+| none | the national dataset | no |
 | `area_coded_national` | another release's area-coded national dataset (the enhanced FRS), while the default is a national file without area codes | no |
 | `local_area` | a certified local-area release | yes |
 
-Pass `include_constituencies=True` and `include_local_authorities=True` to
-`build_uk_region_registry` to include them regardless.
+The certified bundle routes both to the Microcosm local-area release
+(`local_area`, `microcosm_uk_2024_25_dense.h5`), so the default registry has
+all 650 constituencies and 361 local authorities. Pass
+`include_constituencies=True` and `include_local_authorities=True` to
+`build_uk_region_registry` to include them regardless of routing, or `False`
+to leave them out.
 
 ```python
 from policyengine.countries.uk.regions import build_uk_region_registry
