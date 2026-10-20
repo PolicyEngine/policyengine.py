@@ -17,6 +17,7 @@ Invariants:
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -24,6 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import jsonschema
 import pytest
@@ -3310,39 +3312,57 @@ def test_release_payload_names_the_qualification_receipt():
     }
 
 
-def test_released_bundle_request_is_valid_for_the_scorecard():
+@pytest.mark.parametrize(
+    ("bundle", "manifest_size"),
+    [(BUNDLE, 128369110), (PACKAGED_BUNDLE, None)],
+    ids=["uk-data model repo", "packaged dataset repo without sizes"],
+)
+def test_released_bundle_request_is_valid_for_the_scorecard(bundle, manifest_size):
     from policyengine.provenance.uk_qualification import released_bundle_request
 
-    record = BUNDLE["data_releases"]["uk"]
+    record = bundle["data_releases"]["uk"]
     dataset = record["default_dataset"]
+    reference = record["datasets"][dataset]
+    artifact = {
+        "kind": "microdata",
+        "path": reference["path"],
+        "repo_id": reference.get("repo_id") or record["data_package"]["repo_id"],
+        "revision": reference["revision"],
+        "sha256": reference["sha256"],
+    }
+    if manifest_size is not None:
+        artifact["size_bytes"] = manifest_size
     manifest = {
         "schema_version": 1,
         "data_package": {
-            "name": "policyengine-uk-data",
+            "name": record["data_package"]["name"],
             "version": record["data_package"]["version"],
         },
         "default_datasets": {"national": dataset},
-        "artifacts": {
-            dataset: {
-                "kind": "microdata",
-                "path": record["datasets"][dataset]["path"],
-                "repo_id": record["datasets"][dataset]["repo_id"],
-                "revision": record["datasets"][dataset]["revision"],
-                "sha256": record["datasets"][dataset]["sha256"],
-                "size_bytes": 128369110,
-            }
-        },
+        "artifacts": {dataset: artifact},
     }
-    core = BUNDLE["packages"]["policyengine-core"]["version"]
+    repo_type = record["data_package"]["repo_type"]
+    fetched = []
+
+    def hf_file(repo, rev, path, kind):
+        fetched.append(("file", repo, kind))
+        return json.dumps(manifest).encode()
+
+    def hf_size(repo, rev, path, kind):
+        fetched.append(("size", repo, kind))
+        return 321798995
+
+    core = bundle["packages"]["policyengine-core"]["version"]
     request = released_bundle_request(
-        BUNDLE,
-        version=BUNDLE["policyengine_version"],
+        bundle,
+        version=bundle["policyengine_version"],
         wheel_sha256=sha("7"),
         packaged_manifest_sha256=sha("8"),
         release_bundle=golden("qualification_request_golden")["candidate"][
             "expected_release_bundle"
         ],
-        hf_file=lambda repo, rev, path: json.dumps(manifest).encode(),
+        hf_file=hf_file,
+        hf_size=hf_size,
         pypi_project=lambda name: {
             "releases": {core: [_wheel("policyengine-core", core, sha("6"))]}
         },
@@ -3360,6 +3380,74 @@ def test_released_bundle_request_is_valid_for_the_scorecard():
     assert request.document()["candidate"]["policyengine"]["source"] == {
         "pypi": {"wheel_sha256": sha("7")}
     }
+    data = request.document()["candidate"]["data"]
+    assert data["repo_type"] == repo_type
+    # The manifest's size when it records one, else the file's own size.
+    assert data["size_bytes"] == manifest_size or (
+        manifest_size is None and data["size_bytes"] == 321798995
+    )
+    assert fetched[0] == ("file", record["data_package"]["repo_id"], repo_type)
+    assert [item[0] for item in fetched] == (
+        ["file"] if manifest_size is not None else ["file", "size"]
+    )
+
+
+def test_released_bundle_request_needs_a_size_source():
+    from policyengine.provenance.uk_qualification import released_bundle_request
+
+    record = PACKAGED_BUNDLE["data_releases"]["uk"]
+    dataset = record["default_dataset"]
+    reference = record["datasets"][dataset]
+    manifest = {
+        "schema_version": 1,
+        "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+        "default_datasets": {"national": dataset},
+        "artifacts": {
+            dataset: {
+                "kind": "microdata",
+                "path": reference["path"],
+                "repo_id": reference["repo_id"],
+                "revision": reference["revision"],
+                "sha256": reference["sha256"],
+            }
+        },
+    }
+    with pytest.raises(ValueError, match="records no size"):
+        released_bundle_request(
+            PACKAGED_BUNDLE,
+            version=PACKAGED_BUNDLE["policyengine_version"],
+            wheel_sha256=sha("7"),
+            packaged_manifest_sha256=sha("8"),
+            release_bundle={},
+            hf_file=lambda *args: json.dumps(manifest).encode(),
+            pypi_project=lambda name: {},
+            requested_by={},
+        )
+
+
+def test_release_consumers_address_dataset_repositories(monkeypatch):
+    monkeypatch.setenv("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+    spec = importlib.util.spec_from_file_location(
+        "release_consumers_for_test", REPO_ROOT / "scripts" / "release_consumers.py"
+    )
+    consumers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(consumers)
+
+    assert consumers._hf_url("org/data", "v1", "a.h5", "dataset") == (
+        "https://huggingface.co/datasets/org/data/resolve/v1/a.h5"
+    )
+    assert consumers._hf_url("org/model", "v1", "a.h5", "model") == (
+        "https://huggingface.co/org/model/resolve/v1/a.h5"
+    )
+
+    def head(url, **kwargs):
+        assert kwargs["allow_redirects"] is False
+        response = MagicMock(status_code=302, headers={"X-Linked-Size": "321"})
+        response.raise_for_status = lambda: None
+        return response
+
+    monkeypatch.setattr(consumers.requests, "head", head)
+    assert consumers._hf_size("org/data", "v1", "a.h5", "dataset") == 321
 
 
 def test_expected_release_bundle_uses_the_scorecard_certification_environment(

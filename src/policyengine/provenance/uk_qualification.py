@@ -1757,18 +1757,26 @@ def released_bundle_request(
     wheel_sha256: str,
     packaged_manifest_sha256: str,
     release_bundle: Mapping[str, Optional[str]],
-    hf_file: Callable[[str, str, str], bytes],
+    hf_file: Callable[[str, str, str, str], bytes],
     pypi_project: Callable[[str], Mapping[str, Any]],
     requested_by: Mapping[str, Any],
+    hf_size: Optional[Callable[[str, str, str, str], int]] = None,
 ) -> ReplayQualificationRequest:
-    """``released_bundle`` replay request for a published policyengine release."""
+    """``released_bundle`` replay request for a published policyengine release.
+
+    ``hf_file`` and ``hf_size`` take a repository id, revision, path and
+    repository type. The dataset's size comes from the release manifest, or
+    from ``hf_size`` when the manifest records none, as Microcosm's do not.
+    """
 
     record = bundle["data_releases"]["uk"]
     data_package = record["data_package"]
+    repo_type = data_package.get("repo_type", "model")
     manifest_bytes = hf_file(
         data_package["repo_id"],
         data_package["release_manifest_revision"],
         data_package["release_manifest_path"],
+        repo_type,
     )
     manifest = DataReleaseManifest.model_validate_json(manifest_bytes)
     dataset = record["default_dataset"]
@@ -1777,6 +1785,18 @@ def released_bundle_request(
     if reference.get("sha256") != artifact.sha256:
         raise ValueError(
             "The release manifest's dataset hash differs from the bundle's."
+        )
+    data_repo_id = reference.get("repo_id") or data_package["repo_id"]
+    data_repo_type = reference.get("repo_type") or repo_type
+    size_bytes = artifact.size_bytes
+    if size_bytes is None:
+        if hf_size is None:
+            raise ValueError(
+                f"The release manifest records no size for {dataset!r}; pass "
+                "hf_size to read it from Hugging Face."
+            )
+        size_bytes = hf_size(
+            data_repo_id, reference["revision"], reference["path"], data_repo_type
         )
     core_version = bundle["packages"][CORE_PACKAGE]["version"]
     core_wheel = _wheel(
@@ -1805,13 +1825,12 @@ def released_bundle_request(
                     "build_id": record["certified_data_artifact"].get("build_id")
                     or record["build_id"],
                     "dataset": dataset,
-                    "repo_id": reference.get("repo_id") or data_package["repo_id"],
-                    "repo_type": reference.get("repo_type")
-                    or data_package.get("repo_type", "model"),
+                    "repo_id": data_repo_id,
+                    "repo_type": data_repo_type,
                     "revision": reference["revision"],
                     "path": reference["path"],
                     "sha256": reference["sha256"],
-                    "size_bytes": artifact.size_bytes,
+                    "size_bytes": size_bytes,
                     "release_manifest_sha256": hashlib.sha256(
                         manifest_bytes
                     ).hexdigest(),
