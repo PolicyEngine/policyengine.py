@@ -44,7 +44,7 @@ import re
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args
 
 import requests
 
@@ -101,10 +101,7 @@ LOCAL_AREA_REGION_TYPES = {
     "us": ("state", "congressional_district"),
     "uk": ("constituency", "local_authority"),
 }
-REGIONAL_RELEASE_KINDS: tuple[RegionalReleaseKind, ...] = (
-    "local_area",
-    "area_coded_national",
-)
+REGIONAL_RELEASE_KINDS: tuple[RegionalReleaseKind, ...] = get_args(RegionalReleaseKind)
 # A UK area-coded national release (the enhanced FRS) serves constituency and
 # local-authority runs with these weight matrices as well as its households.
 # Consumers bind a matrix only to the release of the dataset it reweights, so
@@ -302,7 +299,7 @@ def validate_release_manifest(
         if not artifact.sha256:
             warnings.append(f"artifact {name!r} has no sha256")
 
-    built_with, claim_specifiers, claim_matches = _model_claims(
+    basis, basis_warning, refusal = _release_model_basis(
         manifest, model_package, model_version
     )
 
@@ -321,16 +318,10 @@ def validate_release_manifest(
         )
         return BASIS_QUALIFIED_PAIR, warnings
 
-    if built_with == model_version:
-        return BASIS_BUILT_WITH, warnings
-    if claim_matches:
-        warnings.append(
-            f"certifying {model_package} {model_version} on the publisher's "
-            f"compatibility claim {claim_specifiers}; the data was built "
-            f"with {built_with or 'an unrecorded model version'} — the test "
-            "suite is the arbiter"
-        )
-        return BASIS_PUBLISHER_CLAIM, warnings
+    if basis is not None:
+        if basis_warning is not None:
+            warnings.append(basis_warning)
+        return basis, warnings
     if qualified_pair_id is not None:
         if core_version is None:
             raise CertificationError(
@@ -344,38 +335,53 @@ def validate_release_manifest(
         )
         return BASIS_QUALIFIED_PAIR, warnings
     raise CertificationError(
-        f"{model_package} {model_version} matches neither the build-time "
-        f"model ({built_with or 'unrecorded'}) nor any publisher "
-        f"compatibility claim {claim_specifiers or '(none declared)'}; "
-        "a new data build, a published compatibility claim or an automated "
-        "qualification of the exact pair is required."
+        f"{refusal}; a new data build, a published compatibility claim or an "
+        "automated qualification of the exact pair is required."
     )
 
 
-def _model_claims(
+def _release_model_basis(
     manifest: DataReleaseManifest,
     model_package: str,
     model_version: str,
-) -> tuple[Optional[str], list[str], bool]:
-    """A release's build-time model version and its claims on ``model_version``.
+) -> tuple[Optional[str], Optional[str], str]:
+    """How a release serves ``model_version`` by its own build or claims.
 
-    Returns ``(built_with, claim_specifiers, claim_matches)``.
+    Returns ``(basis, warning, refusal)``. ``basis`` is the built-with or
+    publisher-claim basis, or ``None`` when neither covers the version;
+    ``warning`` goes with the publisher-claim basis; ``refusal`` says why
+    neither applies, for the caller to complete with its remedy.
     """
     built_with = None
     if manifest.build is not None and manifest.build.built_with_model_package:
         build_pkg = manifest.build.built_with_model_package
         if build_pkg.name == model_package:
             built_with = build_pkg.version
-
     claim_specifiers = [
         package.specifier
         for package in manifest.compatible_model_packages
         if package.name == model_package
     ]
-    claim_matches = any(
+    if built_with == model_version:
+        return BASIS_BUILT_WITH, None, ""
+    if any(
         _specifier_matches(model_version, specifier) for specifier in claim_specifiers
+    ):
+        return (
+            BASIS_PUBLISHER_CLAIM,
+            f"certifying {model_package} {model_version} on the publisher's "
+            f"compatibility claim {claim_specifiers}; the data was built "
+            f"with {built_with or 'an unrecorded model version'} — the test "
+            "suite is the arbiter",
+            "",
+        )
+    return (
+        None,
+        None,
+        f"{model_package} {model_version} matches neither the build-time "
+        f"model ({built_with or 'unrecorded'}) nor any publisher "
+        f"compatibility claim {claim_specifiers or '(none declared)'}",
     )
-    return built_with, claim_specifiers, claim_matches
 
 
 def model_compatibility_basis(
@@ -390,24 +396,15 @@ def model_compatibility_basis(
     uses this for a regional release, which no qualification names. Returns
     ``(compatibility_basis, warnings)``.
     """
-    built_with, claim_specifiers, claim_matches = _model_claims(
+    basis, warning, refusal = _release_model_basis(
         manifest, model_package, model_version
     )
-    if built_with == model_version:
-        return BASIS_BUILT_WITH, []
-    if claim_matches:
-        return BASIS_PUBLISHER_CLAIM, [
-            f"certifying {model_package} {model_version} on the publisher's "
-            f"compatibility claim {claim_specifiers}; the data was built "
-            f"with {built_with or 'an unrecorded model version'} — the test "
-            "suite is the arbiter"
-        ]
-    raise CertificationError(
-        f"{model_package} {model_version} matches neither the build-time "
-        f"model ({built_with or 'unrecorded'}) nor any publisher "
-        f"compatibility claim {claim_specifiers or '(none declared)'}; "
-        "a new data build or a published compatibility claim is required."
-    )
+    if basis is None:
+        raise CertificationError(
+            f"{refusal}; a new data build or a published compatibility claim "
+            "is required."
+        )
+    return basis, [] if warning is None else [warning]
 
 
 def _check_core_compatibility(

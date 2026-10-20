@@ -20,6 +20,7 @@ from policyengine.provenance.certification import (
     merge_us_local_area_release_manifest,
     merge_us_regional_release_manifest,
     merge_us_state_release_manifest,
+    model_compatibility_basis,
     parse_manifest_uri,
     required_supplemental_release_files,
     should_validate_vendored_artifacts,
@@ -272,6 +273,40 @@ class TestParseManifestUri:
     def test__given_bare_path__then_raises(self):
         with pytest.raises(CertificationError, match="hf://dataset"):
             parse_manifest_uri("https://example.com/manifest.json")
+
+
+class TestModelBasisAgreement:
+    """The primary and regional checks share one model-basis decision."""
+
+    def test__given_claim_only__then_both_paths_give_the_same_warning(self):
+        manifest = _manifest()
+        manifest.build.built_with_model_package = None
+
+        basis, warnings = validate_release_manifest(
+            manifest, "policyengine-us", "1.723.0"
+        )
+        regional_basis, regional_warnings = model_compatibility_basis(
+            manifest, "policyengine-us", "1.723.0"
+        )
+
+        assert basis == regional_basis == "legacy_compatible_model_package"
+        assert regional_warnings == [
+            warning for warning in warnings if "compatibility claim" in warning
+        ]
+
+    def test__given_no_basis__then_both_refusals_state_the_same_reason(self):
+        manifest = _manifest()
+        manifest.build.built_with_model_package = None
+
+        with pytest.raises(CertificationError) as primary:
+            validate_release_manifest(manifest, "policyengine-us", "9.9.9")
+        with pytest.raises(CertificationError) as regional:
+            model_compatibility_basis(manifest, "policyengine-us", "9.9.9")
+
+        reason = str(regional.value).split(";")[0]
+        assert str(primary.value).startswith(reason + ";")
+        assert "automated qualification" in str(primary.value)
+        assert "automated qualification" not in str(regional.value)
 
 
 class TestValidateReleaseManifest:

@@ -35,6 +35,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from generate_bundle_artifacts import generate  # noqa: E402
 
 from policyengine.provenance.certification import (  # noqa: E402
+    REGIONAL_RELEASE_KINDS,
     certify_data_release,
 )
 
@@ -66,7 +67,7 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--regional-release-kind",
         default="local_area",
-        choices=["local_area", "area_coded_national"],
+        choices=REGIONAL_RELEASE_KINDS,
         help=(
             "local_area: a non-default local-area release. "
             "area_coded_national (UK only): another certified national release "
