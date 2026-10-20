@@ -1,0 +1,13 @@
+{
+  "built_with_core_version": "3.32.13",
+  "built_with_model_version": "2.122.2",
+  "model_requires_core": ">=3.32.27",
+  "publisher_claim_covers_core": false,
+  "publisher_claim_covers_model": false,
+  "publisher_core_claims": [
+    "==3.32.13"
+  ],
+  "publisher_model_claims": [
+    "==2.122.2"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "details": {
+    "data_only": "needs_review",
+    "model_only": "needs_review"
+  },
+  "evidence_sha256": "58e907aad80335533cea32184ce2e790b74c5aa5222b0e016414f12098d4028d",
+  "gate_id": "metrics_review",
+  "status": "needs_review",
+  "summary": "model_only: checks newly warn: inert:war_widows_pension; the model's fiscal partition changed; metrics have no baseline: caseloads.war_widows_pension 2025, caseloads.war_widows_pension 2026, caseloads.war_widows_pension 2027, caseloads.war_widows_pension 2028, caseloads.war_widows_pension 2029, caseloads.war_widows_pension 2030, caseloads.war_widows_pension 2031, spending.war_widows_pension 2025; 145 metric move(s) exceed their review bounds; data_only: 106 metric move(s) exceed their review bounds"
+}
