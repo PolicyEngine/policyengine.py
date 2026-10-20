@@ -14,9 +14,11 @@
 ``prepare``
     On a checkout of ``main``, certify the pair into the bundle manifest
     (exact ``==`` claim backed by the pair id when no publisher claim covers
-    it), regenerate pins, ``uv.lock``, TROs, the certified-version test
-    constants and household snapshots together, and commit that as the
-    candidate commit on ``candidate/uk/<model>-<data>``.
+    it), regenerate pins, ``uv.lock``, TROs and household snapshots
+    together, and the certified-version test constants for a pair on main's
+    data line, and commit that as the candidate commit on
+    ``candidate/uk/<model>-<data>``. A routed bundle keeps its regional
+    release for a pair on its line and drops it for a pair from another.
 ``gates``
     Run the mandatory local gates on the candidate commit
     (:mod:`policyengine.provenance.uk_candidate`).
@@ -1585,6 +1587,9 @@ class PromotionPlan:
     #: The target, when its qualification compared against an earlier
     #: certificate than main's: it needs requalifying before promotion.
     requalify: Optional[CandidatePair] = None
+    #: Open candidate branches whose pair is not on main's data line. They are
+    #: never promoted, so their pull requests are closed.
+    close_off_line: list[str] = field(default_factory=list)
 
 
 def plan_promotion(
@@ -1604,9 +1609,24 @@ def plan_promotion(
     A branch that moved since is left alone and reported.
     """
 
-    # Only pairs on main's data line are ordered against it; others are left
-    # alone (neither promoted nor closed).
+    # Only pairs on main's data line are ordered against it. A pair from
+    # another line is never promoted, so its open pull request is closed; the
+    # ledger keeps its evidence.
+    receipts = list(receipts)
+    line = certified_data_line(bundle)
+    off_line = sorted(
+        {
+            candidate_branch(receipt.pair)
+            for receipt in receipts
+            if data_line(receipt.pair) != line
+        }
+        & set(open_candidate_branches)
+    )
     receipts = _same_line_receipts(receipts, bundle)
+
+    def plan(**fields: Any) -> PromotionPlan:
+        return PromotionPlan(**fields, close_off_line=off_line)
+
     current = certified_order_key(bundle)
     target = select_promotion_target(receipts, current)
     baseline_matches = target is not None and (
@@ -1625,14 +1645,14 @@ def plan_promotion(
         elif baseline_matches and dominates(target.pair.order_key, key):
             close.append(branch)
     if target is None:
-        return PromotionPlan(
+        return plan(
             target=None,
             ready_branch=None,
             close_branches=sorted(close),
             reason=f"no promotable pair advances {current}",
         )
     if not baseline_matches:
-        return PromotionPlan(
+        return plan(
             target=target,
             ready_branch=None,
             close_branches=sorted(close),
@@ -1647,7 +1667,7 @@ def plan_promotion(
     qualified_commit = target.harness.git_commit
     head = open_candidate_branches.get(branch)
     if head is None:
-        return PromotionPlan(
+        return plan(
             target=target,
             ready_branch=None,
             close_branches=sorted(close),
@@ -1657,7 +1677,7 @@ def plan_promotion(
             ),
         )
     if head != qualified_commit:
-        return PromotionPlan(
+        return plan(
             target=target,
             ready_branch=None,
             close_branches=sorted(close),
@@ -1667,7 +1687,7 @@ def plan_promotion(
                 "nothing is promoted"
             ),
         )
-    return PromotionPlan(
+    return plan(
         target=target,
         ready_branch=branch,
         ready_commit=qualified_commit,
@@ -1682,8 +1702,13 @@ def candidate_pr_body(
     *,
     ledger_url: str,
     prepared: Optional[Mapping[str, Any]] = None,
+    on_main_line: bool = True,
 ) -> str:
-    """Markdown body for a candidate PR: the pair, the gates and the verdict."""
+    """Markdown body for a candidate PR: the pair, the gates and the verdict.
+
+    ``on_main_line`` is false for a pair from another data line than main's
+    certificate (a forced qualification), which is never promoted.
+    """
 
     lines = [
         f"Automated certification candidate for **policyengine-uk {pair.model.version}**, "
@@ -1705,11 +1730,21 @@ def candidate_pr_body(
             summary = gate.summary.replace("|", "\\|").replace("\n", " ")
             lines.append(f"| `{gate_id}` | {gate.status} | {summary} |")
     verdict = receipt.verdict if receipt else "pending"
+    if on_main_line:
+        outcome = (
+            "Merging this PR promotes the pair. Until cos d1344 is ruled, "
+            "promotion is a reviewed merge; the certification evidence test "
+            "refuses an exact-pair certificate without a promotable ledger receipt."
+        )
+    else:
+        outcome = (
+            "This pair is not on main's data line, so it was qualified for "
+            "evidence only and is never promoted. Its tests fail by design, and "
+            "promotion closes this PR; the ledger keeps the evidence."
+        )
     lines += [
         "",
-        f"**Verdict: {verdict}.** Merging this PR promotes the pair. Until cos d1344 "
-        "is ruled, promotion is a reviewed merge; the certification evidence test "
-        "refuses an exact-pair certificate without a promotable ledger receipt.",
+        f"**Verdict: {verdict}.** {outcome}",
         "",
         "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
     ]

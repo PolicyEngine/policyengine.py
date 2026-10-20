@@ -466,8 +466,12 @@ def cmd_finalize(args: argparse.Namespace) -> int:
         attempt, Path(args.ledger), issued_by=issued_by(), completed_at=utc_now()
     )
     payload = read_json(attempt / "candidate.json")
+    line = certified_data_line(json.loads(BUNDLE_PATH.read_text()))
     body = candidate_pr_body(
-        receipt, receipt.pair, ledger_url=ledger_url(receipt.pair_id)
+        receipt,
+        receipt.pair,
+        ledger_url=ledger_url(receipt.pair_id),
+        on_main_line=data_line(receipt.pair) == line,
     )
     if args.pr_body:
         Path(args.pr_body).write_text(body)
@@ -547,20 +551,22 @@ def cmd_recoverable(args: argparse.Namespace) -> int:
                 attempt, terminal
             ):
                 continue
-        candidate = read_json(attempt / "candidate.json")
-        # An unforced run of a pair from another data line resolves as
-        # other_line before any recovery, so dispatching it clears nothing.
-        if not candidate.get("force") and (
-            data_line(CandidatePair.model_validate(candidate["pair"])) != line
+        if not attempt_is_recoverable(
+            attempt, now=now, owner_is_failed=owner_run_failed
         ):
+            continue
+        candidate = read_json(attempt / "candidate.json")
+        # The catch-up re-dispatches without force, and a pair from another
+        # data line then resolves as other_line before any recovery, so the
+        # dispatch would clear nothing. A forced run is re-run by hand.
+        if data_line(CandidatePair.model_validate(candidate["pair"])) != line:
             print(
                 f"::notice::not recovering {pair_dir.name}: its pair is not on "
-                "main's data line",
+                "main's data line; re-run it by hand with force",
                 file=sys.stderr,
             )
             continue
-        if attempt_is_recoverable(attempt, now=now, owner_is_failed=owner_run_failed):
-            print(json.dumps(candidate))
+        print(json.dumps(candidate))
     return 0
 
 
@@ -950,6 +956,8 @@ def cmd_promote(args: argparse.Namespace) -> int:
         )
     for branch in plan.close_branches:
         print(f"superseded {branch}")
+    for branch in plan.close_off_line:
+        print(f"off main's data line {branch}")
     if not args.apply:
         return 0
     for branch in plan.close_branches:
@@ -963,6 +971,21 @@ def cmd_promote(args: argparse.Namespace) -> int:
                 LEDGER_REPOSITORY,
                 "--comment",
                 f"Superseded: {plan.reason}. The ledger keeps this candidate's evidence.",
+            ],
+            check=False,
+        )
+    for branch in plan.close_off_line:
+        subprocess.run(
+            [
+                "gh",
+                "pr",
+                "close",
+                numbers.get(branch, branch),
+                "--repo",
+                LEDGER_REPOSITORY,
+                "--comment",
+                "This pair is not on main's data line, so it is never promoted. "
+                "The ledger keeps this candidate's evidence.",
             ],
             check=False,
         )

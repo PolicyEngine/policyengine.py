@@ -29,6 +29,16 @@ UK_DATA_LINE_BUNDLE_PATH = (
     Path(__file__).parent / "fixtures" / "uk_qualification" / "uk_data_line_bundle.json"
 )
 UK_DATA_LINE_BUNDLE = json.loads(UK_DATA_LINE_BUNDLE_PATH.read_text())
+#: A main certified on the Microcosm line with its area regions routed to a
+#: local-area release: the bundle #685 certified, frozen, so that tests of
+#: other-line pairs do not depend on what main certifies now.
+MICROCOSM_ROUTED_BUNDLE_PATH = (
+    Path(__file__).parent
+    / "fixtures"
+    / "uk_qualification"
+    / "microcosm_routed_bundle.json"
+)
+MICROCOSM_ROUTED_BUNDLE = json.loads(MICROCOSM_ROUTED_BUNDLE_PATH.read_text())
 
 
 def load_candidate_cli(
