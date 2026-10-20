@@ -44,7 +44,7 @@ import re
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional, get_args
+from typing import Literal, Optional, cast, get_args
 
 import requests
 
@@ -54,6 +54,7 @@ from policyengine.data.uk_geography_assets import (
 )
 from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
+    DataReleaseArtifact,
     DataReleaseManifest,
     RegionalReleaseKind,
     _specifier_matches,
@@ -66,7 +67,8 @@ MANIFEST_URI_PATTERN = re.compile(
     r"/(?P<path>.+)$"
 )
 
-COUNTRY_MODEL_PACKAGES = {
+CertifiedCountry = Literal["us", "uk"]
+COUNTRY_MODEL_PACKAGES: dict[CertifiedCountry, str] = {
     "us": "policyengine-us",
     "uk": "policyengine-uk",
 }
@@ -97,7 +99,7 @@ POPULACE_RELEASE_REPOS = {
 }
 # Region types a regional release serves. Their regions load the routed dataset
 # and keep row-filtering it on their own geography column.
-LOCAL_AREA_REGION_TYPES = {
+LOCAL_AREA_REGION_TYPES: dict[CertifiedCountry, tuple[str, ...]] = {
     "us": ("state", "congressional_district"),
     "uk": ("constituency", "local_authority"),
 }
@@ -633,7 +635,14 @@ def merge_us_state_release_manifest(
     return DataReleaseManifest.model_validate(primary_payload)
 
 
-def _local_area_region_types(country: str) -> tuple[str, ...]:
+def _certified_country(country: str) -> CertifiedCountry:
+    """``country`` as a certified country id; any other value is refused."""
+    if country not in get_args(CertifiedCountry):
+        raise CertificationError(f"Unknown country {country!r}.")
+    return cast(CertifiedCountry, country)
+
+
+def _local_area_region_types(country: CertifiedCountry) -> tuple[str, ...]:
     try:
         return LOCAL_AREA_REGION_TYPES[country]
     except KeyError:
@@ -643,7 +652,7 @@ def _local_area_region_types(country: str) -> tuple[str, ...]:
 
 
 def _route_region_types(
-    country: str,
+    country: CertifiedCountry,
     primary_manifest: DataReleaseManifest,
     primary_payload: dict,
     path: str,
@@ -670,9 +679,9 @@ def _route_region_types(
 
 
 def _add_regional_artifact(
-    merged_artifacts: dict,
+    merged_artifacts: dict[str, dict],
     name: str,
-    artifact,
+    artifact: DataReleaseArtifact,
     regional_repo_type: Optional[Literal["model", "dataset"]],
 ) -> None:
     if name in merged_artifacts:
@@ -690,7 +699,7 @@ def _add_regional_artifact(
 
 
 def merge_local_area_release_manifest(
-    country: str,
+    country: CertifiedCountry,
     primary_manifest: DataReleaseManifest,
     regional_manifest: DataReleaseManifest,
     *,
@@ -764,7 +773,7 @@ def merge_us_local_area_release_manifest(
 
 
 def merge_area_coded_national_release_manifest(
-    country: str,
+    country: CertifiedCountry,
     primary_manifest: DataReleaseManifest,
     regional_manifest: DataReleaseManifest,
     *,
@@ -835,7 +844,7 @@ def merge_area_coded_national_release_manifest(
 
 
 def merge_regional_release_manifest(
-    country: str,
+    country: CertifiedCountry,
     primary_manifest: DataReleaseManifest,
     regional_manifest: DataReleaseManifest,
     *,
@@ -1088,7 +1097,7 @@ class DataProducerCertificationStrategy:
     def certify(
         self,
         *,
-        country: str,
+        country: CertifiedCountry,
         manifest_uri: str,
         model_package: str,
         model_version: str,
@@ -1110,7 +1119,7 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
     def certify(
         self,
         *,
-        country: str,
+        country: CertifiedCountry,
         manifest_uri: str,
         model_package: str,
         model_version: str,
@@ -1135,7 +1144,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
     def certify(
         self,
         *,
-        country: str,
+        country: CertifiedCountry,
         manifest_uri: str,
         model_package: str,
         model_version: str,
@@ -1153,7 +1162,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         )
         regional_uri_parts = None
         recorded_release_kind = None
-        regional_artifacts: dict = {}
+        regional_artifacts: dict[str, DataReleaseArtifact] = {}
         regional_warnings: list[str] = []
         if regional_manifest_uri is not None:
             regional_manifest, _, regional_uri_parts = fetch_release_manifest(
@@ -1319,9 +1328,8 @@ def certify_data_release(
     release only. While the bundle routes regions, a run without
     ``regional_manifest_uri`` is refused unless ``drop_regional_release``.
     """
-    if country not in COUNTRY_MODEL_PACKAGES:
-        raise CertificationError(f"Unknown country {country!r}.")
-    model_package = COUNTRY_MODEL_PACKAGES[country]
+    certified_country = _certified_country(country)
+    model_package = COUNTRY_MODEL_PACKAGES[certified_country]
     model_version = model_version or installed_model_version(model_package)
     strategy = certification_strategy(country, data_producer)
     bundle_path = bundle_path or default_bundle_source_path()
@@ -1345,7 +1353,7 @@ def certify_data_release(
         )
 
     data_release, manifest_sha256, warnings = strategy.certify(
-        country=country,
+        country=certified_country,
         manifest_uri=manifest_uri,
         model_package=model_package,
         model_version=model_version,
