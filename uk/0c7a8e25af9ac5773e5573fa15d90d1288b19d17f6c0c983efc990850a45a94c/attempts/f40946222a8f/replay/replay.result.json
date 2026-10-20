@@ -1,8 +1,8 @@
 {
   "details": {
-    "status": "queued"
+    "status": "running"
   },
   "gate_id": "replay",
   "status": "unavailable",
-  "summary": "Replay is queued; the candidate stays incomplete until it finishes."
+  "summary": "Replay is running; the candidate stays incomplete until it finishes."
 }
