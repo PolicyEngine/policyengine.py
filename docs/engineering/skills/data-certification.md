@@ -188,7 +188,17 @@ python scripts/check_uk_uc_floor.py --dataset <candidate .h5 or bundle dataset n
 
 The benchmarks and their sources are in
 `src/policyengine/data/qualification/uk_uc_floor.json`. The receipt holds
-weighted national totals only. Before quoting any other figure from UK data
+weighted national totals only.
+
+**Recorded exception (policyengine.py#685, October 2026).** The Microcosm UK
+national cut `microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71` became
+the default with benefit units at 0.897 of the floor's 6.7m benchmark; spend
+passed at 0.959. The floor's benchmarks are not the figures Microcosm
+calibrates to (DWP Stat-Xplore's 6.2m households on Universal Credit in
+payment, and its own OBR spend line). Their definitions are to be settled
+when the UK data checks move to the data pipelines. Until then, a later
+Microcosm cut with the same gap needs the same explicit acceptance in its pull
+request, recorded here. Before quoting any other figure from UK data
 in a PR, apply the UKDS output rules: no unit-record values, no cells under
 10 unweighted cases, no differencing.
 
