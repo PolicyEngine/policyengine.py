@@ -1,0 +1,10 @@
+{
+  "details": {
+    "data_only": "fail",
+    "model_only": "fail"
+  },
+  "evidence_sha256": "3d095205ace59a20aef7caf481da03cfaa7c80b6ba096727c0b064a89bffe1b1",
+  "gate_id": "metrics_review",
+  "status": "fail",
+  "summary": "model_only: checks failed: closure; data_only: checks failed: closure"
+}
