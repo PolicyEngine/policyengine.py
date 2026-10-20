@@ -20,6 +20,7 @@ Invariants:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -240,13 +241,17 @@ def folder_layout_dense_payload() -> dict:
     }
 
 
-def manifest_response(payload: dict) -> MagicMock:
+def file_response(content: bytes) -> MagicMock:
     response = MagicMock()
     response.status_code = 200
-    response.content = json.dumps(payload).encode()
-    response.text = response.content.decode()
+    response.content = content
+    response.text = content.decode()
     response.raise_for_status.return_value = None
     return response
+
+
+def manifest_response(payload: dict) -> MagicMock:
+    return file_response(json.dumps(payload).encode())
 
 
 def missing_file_response() -> MagicMock:
@@ -268,10 +273,11 @@ def releases_record_payload(
 ) -> dict:
     """The repository's ``releases.json``, in the release writer's format.
 
-    Lists both national builds (the newer one current) and the dense build
-    (no current build), none withdrawn, except the ``(release, build)`` pairs
-    named in ``withdrawn`` or ``unlisted``. Certification never reads
-    ``current``, so whether the dense release has one does not matter here.
+    Lists both national builds and the dense build (no current build), none
+    withdrawn, except the ``(release, build)`` pairs named in ``withdrawn``
+    or ``unlisted``. The national release's current build is its newest build
+    that is listed and not withdrawn, so the record stays one the release
+    writer accepts.
     """
 
     builds_by_release = {
@@ -280,9 +286,19 @@ def releases_record_payload(
     }
     releases = {}
     for release_name, build_names in builds_by_release.items():
+        usable_builds = [
+            build_name
+            for build_name in build_names
+            if (release_name, build_name) not in withdrawn | unlisted
+        ]
+        current_build = (
+            usable_builds[-1]
+            if release_name == NATIONAL_RELEASE and usable_builds
+            else None
+        )
         releases[release_name] = {
             "role": "national_default" if release_name == NATIONAL_RELEASE else "dense",
-            "current": NATIONAL_BUILD if release_name == NATIONAL_RELEASE else None,
+            "current": current_build,
             "builds": {
                 build_name: {
                     "published_at": "2026-10-19T08:33:23Z",
@@ -321,7 +337,7 @@ def certify_uk(
     bundle_path: Path,
     manifests: list[dict],
     manifest_uri: str = NATIONAL_URI,
-    releases_record: dict | None = None,
+    releases_record: dict | bytes | None = None,
     requested_urls: list[str] | None = None,
     **options,
 ):
@@ -329,8 +345,9 @@ def certify_uk(
 
     Requests for the repository's ``releases.json`` at ``main`` get
     ``releases_record`` (``releases_record_payload()`` when ``None``, a 404
-    when empty); every other request gets the next of ``manifests``. Each
-    requested URL is appended to ``requested_urls`` when given.
+    when empty, served as they are when bytes); every other request gets the
+    next of ``manifests``. Each requested URL is appended to
+    ``requested_urls`` when given.
     """
 
     record_payload = (
@@ -344,6 +361,8 @@ def certify_uk(
         if url == RELEASES_RECORD_URL:
             if not record_payload:
                 return missing_file_response()
+            if isinstance(record_payload, bytes):
+                return file_response(record_payload)
             return manifest_response(record_payload)
         return manifest_response(manifests_to_serve.pop(0))
 
@@ -559,9 +578,195 @@ class TestCertifyBuildFolder:
         assert result.build_id == tag
 
 
+#: The largest ``releases.json`` the release writer accepts
+#: (``microcosm_emitter_interface.releases.MAX_RECORD_BYTES``).
+RELEASES_RECORD_SIZE_LIMIT = 4 * 1024 * 1024
+
+
+def national_release_entry(record: dict) -> dict:
+    return record["releases"][NATIONAL_RELEASE]
+
+
+def dense_release_entry(record: dict) -> dict:
+    return record["releases"][DENSE_RELEASE]
+
+
+def certified_build_entry(record: dict) -> dict:
+    return national_release_entry(record)["builds"][NATIONAL_BUILD]
+
+
+def earlier_national_build_entry(record: dict) -> dict:
+    return national_release_entry(record)["builds"][EARLIER_NATIONAL_BUILD]
+
+
+def make_withdrawn_build_current(record: dict) -> None:
+    earlier_national_build_entry(record)["withdrawn"] = True
+    national_release_entry(record)["current"] = EARLIER_NATIONAL_BUILD
+
+
+def published_build_entry() -> dict:
+    return {"published_at": "2026-10-19T08:33:23Z", "withdrawn": False}
+
+
+#: Changes that turn ``releases_record_payload()`` into a record the release
+#: writer's parser (``ReleasesRecord.parse`` with ``check_record``,
+#: microcosm-emitter#24) refuses. Unless the rule needs otherwise, each record
+#: still lists the certified national build as not withdrawn.
+RECORD_CHANGES_THE_WRITER_REFUSES = [
+    pytest.param(
+        lambda record: record.pop("schema_version"), id="missing schema_version"
+    ),
+    pytest.param(lambda record: record.update(schema_version=2), id="schema_version 2"),
+    pytest.param(lambda record: record.pop("default"), id="missing default"),
+    pytest.param(lambda record: record.pop("releases"), id="missing releases"),
+    pytest.param(
+        lambda record: record.update(comment="edited by hand"),
+        id="unknown top-level key",
+    ),
+    pytest.param(lambda record: record.update(default=1), id="default not a string"),
+    pytest.param(
+        lambda record: record.update(default="microcosm-uk-2024-25-unlisted"),
+        id="default names an unlisted release",
+    ),
+    pytest.param(
+        lambda record: record["releases"].update(
+            {"../escape": {"role": "dense", "current": None, "builds": {}}}
+        ),
+        id="unsafe release name",
+    ),
+    pytest.param(lambda record: dense_release_entry(record).pop("role"), id="no role"),
+    pytest.param(
+        lambda record: dense_release_entry(record).update(role="Dense-Release"),
+        id="invalid role",
+    ),
+    pytest.param(
+        lambda record: dense_release_entry(record).pop("current"), id="no current"
+    ),
+    pytest.param(
+        lambda record: dense_release_entry(record).update(current=1),
+        id="current not a string",
+    ),
+    pytest.param(
+        lambda record: dense_release_entry(record).pop("builds"), id="no builds"
+    ),
+    pytest.param(
+        lambda record: dense_release_entry(record).update(builds=[]),
+        id="builds not an object",
+    ),
+    pytest.param(
+        lambda record: dense_release_entry(record).update(note="edited by hand"),
+        id="unknown release key",
+    ),
+    pytest.param(
+        lambda record: dense_release_entry(record)["builds"].update(
+            {"build with spaces": published_build_entry()}
+        ),
+        id="unsafe build name",
+    ),
+    pytest.param(
+        lambda record: certified_build_entry(record).pop("published_at"),
+        id="certified build without published_at",
+    ),
+    pytest.param(
+        lambda record: earlier_national_build_entry(record).update(published_at=""),
+        id="empty published_at",
+    ),
+    pytest.param(
+        lambda record: earlier_national_build_entry(record).update(
+            published_at=20261019
+        ),
+        id="published_at not a string",
+    ),
+    pytest.param(
+        lambda record: earlier_national_build_entry(record).update(withdrawn="false"),
+        id="withdrawn not a boolean",
+    ),
+    pytest.param(
+        lambda record: earlier_national_build_entry(record).update(sha256="a" * 64),
+        id="unknown build key",
+    ),
+    pytest.param(
+        lambda record: national_release_entry(record)["builds"].update(
+            {EARLIER_NATIONAL_BUILD: "2026-10-14T21:44:43Z"}
+        ),
+        id="build entry not an object",
+    ),
+    pytest.param(
+        lambda record: national_release_entry(record).update(
+            current="uk-frs-calibration-attempt-20261020T000000Z-unlisted"
+        ),
+        id="current names an unlisted build",
+    ),
+    pytest.param(make_withdrawn_build_current, id="current names a withdrawn build"),
+]
+
+#: Changes after which the release writer's parser still accepts the record.
+RECORD_CHANGES_THE_WRITER_ACCEPTS = [
+    pytest.param(lambda record: record.update(default=None), id="no default"),
+    pytest.param(
+        lambda record: record["releases"].update(
+            {
+                "microcosm-uk-2024-25-empty": {
+                    "role": "dense",
+                    "current": None,
+                    "builds": {},
+                }
+            }
+        ),
+        id="release without builds",
+    ),
+    pytest.param(
+        lambda record: earlier_national_build_entry(record).update(withdrawn=True),
+        id="withdrawn build that is not current",
+    ),
+]
+
+
 class TestCertifyOnlyListedBuilds:
     """``releases.json`` at ``main`` is the record of every published build
     and of which ones are withdrawn; certification reads it."""
+
+    @pytest.mark.parametrize("change_record", RECORD_CHANGES_THE_WRITER_REFUSES)
+    def test__given_record_the_release_writer_refuses__then_refuses(
+        self, tmp_path, change_record: Callable[[dict], object]
+    ):
+        record = releases_record_payload()
+        change_record(record)
+
+        with pytest.raises(CertificationError, match="releases.json"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [folder_layout_manifest_payload()],
+                releases_record=record,
+            )
+
+    def test__given_record_larger_than_the_release_writer_accepts__then_refuses(
+        self, tmp_path
+    ):
+        record_bytes = json.dumps(releases_record_payload()).encode()
+        padding = b" " * (RELEASES_RECORD_SIZE_LIMIT + 1 - len(record_bytes))
+
+        with pytest.raises(CertificationError, match="releases.json"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [folder_layout_manifest_payload()],
+                releases_record=record_bytes + padding,
+            )
+
+    @pytest.mark.parametrize("change_record", RECORD_CHANGES_THE_WRITER_ACCEPTS)
+    def test__given_record_the_release_writer_accepts__then_certifies(
+        self, tmp_path, change_record: Callable[[dict], object]
+    ):
+        record = releases_record_payload()
+        change_record(record)
+
+        _, release, _ = certify_uk(
+            empty_bundle(tmp_path),
+            [folder_layout_manifest_payload()],
+            releases_record=record,
+        )
+
+        assert release["version"] == NATIONAL_BUILD
 
     def test__given_listed_build__then_reads_releases_record_at_main(self, tmp_path):
         requested_urls: list[str] = []
