@@ -114,6 +114,28 @@ def test_runtime_pin_update_requires_matching_certified_model(release):
     assert maintenance._check_tros(strict=True) == 0
 
 
+def test_runtime_core_must_match_a_core_the_certificate_names(release):
+    """A core-only pin change must not leave receipts on another core."""
+
+    path = release[0] / "manifest.json"
+    payload = json.loads(path.read_bytes())
+    # The fixture release was built with, and claims, this core.
+    certified_core = "3.26.11"
+    payload["data_releases"]["us"]["certification"]["certified_for_core_version"] = (
+        certified_core
+    )
+    payload["packages"]["policyengine-core"]["version"] = certified_core
+    path.write_text(json.dumps(payload))
+    manifest.get_release_manifest.cache_clear()
+    generator.generated_tros(strict=True)
+
+    payload["packages"]["policyengine-core"]["version"] = "99.0.0"
+    path.write_text(json.dumps(payload))
+    manifest.get_release_manifest.cache_clear()
+    with pytest.raises(ValueError, match="runtime core 99.0.0 differs"):
+        generator.generated_tros(strict=True)
+
+
 @pytest.mark.parametrize("field", ["name", "version", "sha256", "wheel_url"])
 def test_runtime_model_identity_must_match_certification(release, field):
     path = release[0] / "manifest.json"

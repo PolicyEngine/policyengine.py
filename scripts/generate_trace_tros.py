@@ -138,8 +138,8 @@ def _validate_runtime_model(bundle: dict, country: CountryReleaseManifest) -> No
     model = country.model_package
     prefix = f"{country.country_id}: strict TRACE release"
     certification = country.certification
+    core = bundle.get("packages", {}).get("policyengine-core", {})
     if certification and certification.compatibility_basis == "qualified_exact_pair":
-        core = bundle.get("packages", {}).get("policyengine-core", {})
         if (
             not certification.qualification_pair_id
             or not certification.certified_for_core_version
@@ -148,6 +148,18 @@ def _validate_runtime_model(bundle: dict, country: CountryReleaseManifest) -> No
             raise ValueError(
                 f"{prefix}: runtime core differs from the qualified exact pair"
             )
+    elif (
+        certification
+        and certification.certified_for_core_version
+        and core.get("version") != certification.certified_for_core_version
+    ):
+        # Receipts certify the core the certificate names, not the pin, so a
+        # core-only pin change would leave every receipt uncertified.
+        raise ValueError(
+            f"{prefix}: runtime core {core.get('version')} differs from the "
+            f"certified core {certification.certified_for_core_version}; "
+            "re-certify the data release for the new core"
+        )
     if (
         model.name != key
         or component.get("name") != model.name
