@@ -249,6 +249,52 @@ def manifest_response(payload: dict) -> MagicMock:
     return response
 
 
+def missing_file_response() -> MagicMock:
+    response = MagicMock()
+    response.status_code = 404
+    response.content = b"Entry not found"
+    response.text = response.content.decode()
+    return response
+
+
+RELEASES_RECORD_URL = (
+    f"https://huggingface.co/datasets/{REPOSITORY}/resolve/main/releases.json"
+)
+
+
+def releases_record_payload(
+    withdrawn: frozenset[tuple[str, str]] = frozenset(),
+    unlisted: frozenset[tuple[str, str]] = frozenset(),
+) -> dict:
+    """The repository's ``releases.json``, in the release writer's format.
+
+    Lists both national builds (the newer one current) and the dense build
+    (no current build), none withdrawn, except the ``(release, build)`` pairs
+    named in ``withdrawn`` or ``unlisted``. Certification never reads
+    ``current``, so whether the dense release has one does not matter here.
+    """
+
+    builds_by_release = {
+        NATIONAL_RELEASE: [EARLIER_NATIONAL_BUILD, NATIONAL_BUILD],
+        DENSE_RELEASE: [DENSE_BUILD],
+    }
+    releases = {}
+    for release_name, build_names in builds_by_release.items():
+        releases[release_name] = {
+            "role": "national_default" if release_name == NATIONAL_RELEASE else "dense",
+            "current": NATIONAL_BUILD if release_name == NATIONAL_RELEASE else None,
+            "builds": {
+                build_name: {
+                    "published_at": "2026-10-19T08:33:23Z",
+                    "withdrawn": (release_name, build_name) in withdrawn,
+                }
+                for build_name in build_names
+                if (release_name, build_name) not in unlisted
+            },
+        }
+    return {"schema_version": 1, "default": NATIONAL_RELEASE, "releases": releases}
+
+
 def empty_bundle(tmp_path: Path) -> Path:
     bundle_path = tmp_path / "manifest.json"
     bundle_path.write_text(
@@ -275,14 +321,36 @@ def certify_uk(
     bundle_path: Path,
     manifests: list[dict],
     manifest_uri: str = NATIONAL_URI,
+    releases_record: dict | None = None,
+    requested_urls: list[str] | None = None,
     **options,
 ):
-    """Certify with fetched manifests and reachability checks replaced."""
+    """Certify with fetched files and reachability checks replaced.
+
+    Requests for the repository's ``releases.json`` at ``main`` get
+    ``releases_record`` (``releases_record_payload()`` when ``None``, a 404
+    when empty); every other request gets the next of ``manifests``. Each
+    requested URL is appended to ``requested_urls`` when given.
+    """
+
+    record_payload = (
+        releases_record_payload() if releases_record is None else releases_record
+    )
+    manifests_to_serve = list(manifests)
+
+    def fake_get(url: str, headers=None, timeout=None) -> MagicMock:
+        if requested_urls is not None:
+            requested_urls.append(url)
+        if url == RELEASES_RECORD_URL:
+            if not record_payload:
+                return missing_file_response()
+            return manifest_response(record_payload)
+        return manifest_response(manifests_to_serve.pop(0))
 
     with (
         patch(
             "policyengine.provenance.certification.requests.get",
-            side_effect=[manifest_response(payload) for payload in manifests],
+            side_effect=fake_get,
         ),
         patch(
             "policyengine.provenance.certification.head_artifact",
@@ -465,6 +533,80 @@ class TestCertifyBuildFolder:
             f"releases/{NATIONAL_RELEASE}/calibration_diagnostics.json"
         )
         assert result.build_id == tag
+
+
+class TestCertifyOnlyListedBuilds:
+    """``releases.json`` at ``main`` is the record of every published build
+    and of which ones are withdrawn; certification reads it."""
+
+    def test__given_listed_build__then_reads_releases_record_at_main(self, tmp_path):
+        requested_urls: list[str] = []
+
+        certify_uk(
+            empty_bundle(tmp_path),
+            [folder_layout_manifest_payload()],
+            requested_urls=requested_urls,
+        )
+
+        assert RELEASES_RECORD_URL in requested_urls
+
+    def test__given_build_withdrawn_in_releases_record__then_refuses(self, tmp_path):
+        record = releases_record_payload(
+            withdrawn=frozenset({(NATIONAL_RELEASE, NATIONAL_BUILD)})
+        )
+
+        with pytest.raises(CertificationError, match="withdrawn"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [folder_layout_manifest_payload()],
+                releases_record=record,
+            )
+
+    def test__given_build_not_listed_in_releases_record__then_refuses(self, tmp_path):
+        record = releases_record_payload(
+            unlisted=frozenset({(NATIONAL_RELEASE, NATIONAL_BUILD)})
+        )
+
+        with pytest.raises(CertificationError, match="does not list"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [folder_layout_manifest_payload()],
+                releases_record=record,
+            )
+
+    def test__given_withdrawn_local_area_build__then_refuses(self, tmp_path):
+        record = releases_record_payload(
+            withdrawn=frozenset({(DENSE_RELEASE, DENSE_BUILD)})
+        )
+
+        with pytest.raises(CertificationError, match=f"{DENSE_BUILD}.*withdrawn"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [folder_layout_manifest_payload(), folder_layout_dense_payload()],
+                releases_record=record,
+                regional_manifest_uri=DENSE_URI,
+            )
+
+    def test__given_no_releases_record__then_refuses(self, tmp_path):
+        with pytest.raises(CertificationError, match="releases.json"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [folder_layout_manifest_payload()],
+                releases_record={},
+            )
+
+    def test__given_tagged_release__then_releases_record_is_not_read(self, tmp_path):
+        tag = f"{NATIONAL_RELEASE}-20261019T083323Z-6cba5d71"
+        requested_urls: list[str] = []
+
+        certify_uk(
+            empty_bundle(tmp_path),
+            [tagged_layout_manifest_payload()],
+            manifest_uri=manifest_uri(f"releases/{NATIONAL_RELEASE}", tag),
+            requested_urls=requested_urls,
+        )
+
+        assert RELEASES_RECORD_URL not in requested_urls
 
 
 PAIR_ID = "a" * 64
