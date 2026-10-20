@@ -26,6 +26,12 @@ PYPI_REQUEST_TIMEOUT_SECONDS = 30
 #: (microcosm-emitter's ``microcosm_emitter_interface.releases``).
 RELEASES_FOLDER = "releases"
 RELEASE_MANIFEST_NAME = "release_manifest.json"
+#: The record of every published build and of which ones are withdrawn, at
+#: the repository's root. Only the release writer changes it, always on
+#: ``main``, so ``main`` holds the current record.
+RELEASES_RECORD_NAME = "releases.json"
+RELEASES_RECORD_REVISION = "main"
+RELEASES_RECORD_SCHEMA_VERSION = 1
 #: The publisher refuses any other release or build name
 #: (``microcosm_emitter_interface.identifiers.SAFE_IDENTIFIER``), and both
 #: are interpolated into repository paths.
@@ -378,6 +384,61 @@ def read_build_folder(
             )
         artifact.revision = revision
     return pinned
+
+
+def check_build_listed(record_bytes: bytes, *, release: str, build: str) -> None:
+    """Refuse a build that ``releases.json`` does not list, or has withdrawn.
+
+    ``record_bytes`` is the repository's ``releases.json`` in the release
+    writer's format (``microcosm_emitter_interface.releases``)::
+
+        {"schema_version": 1, "default": ..., "releases": {<release>: {
+            "role": ..., "current": ..., "builds": {<build>: {
+                "published_at": ..., "withdrawn": <bool>}}}}}
+
+    Which build is current does not matter here: a certificate pins one
+    build, current or not.
+
+    Raises:
+        ReleaseBuildFolderError: If the record is unreadable, has another
+            schema version, does not list the build, or marks it withdrawn.
+    """
+
+    try:
+        record = json.loads(record_bytes)
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        raise ReleaseBuildFolderError(
+            f"{RELEASES_RECORD_NAME} is not a readable JSON document."
+        ) from None
+    schema_version = record.get("schema_version") if isinstance(record, dict) else None
+    # ``True`` and ``1.0`` equal 1 in Python; only the integer is the version.
+    if (
+        type(schema_version) is not int
+        or schema_version != RELEASES_RECORD_SCHEMA_VERSION
+    ):
+        raise ReleaseBuildFolderError(
+            f"{RELEASES_RECORD_NAME} must have schema_version "
+            f"{RELEASES_RECORD_SCHEMA_VERSION}."
+        )
+    releases = record.get("releases")
+    release_entry = releases.get(release) if isinstance(releases, dict) else None
+    builds = release_entry.get("builds") if isinstance(release_entry, dict) else None
+    build_entry = builds.get(build) if isinstance(builds, dict) else None
+    if not isinstance(build_entry, dict):
+        raise ReleaseBuildFolderError(
+            f"{RELEASES_RECORD_NAME} does not list build {build} of release {release}."
+        )
+    withdrawn = build_entry.get("withdrawn")
+    if not isinstance(withdrawn, bool):
+        raise ReleaseBuildFolderError(
+            f"{RELEASES_RECORD_NAME} gives build {build} of release {release} "
+            "no withdrawn flag."
+        )
+    if withdrawn:
+        raise ReleaseBuildFolderError(
+            f"Build {build} of release {release} is withdrawn in "
+            f"{RELEASES_RECORD_NAME}."
+        )
 
 
 def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
