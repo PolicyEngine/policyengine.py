@@ -719,15 +719,23 @@ def test_regional_flags_keep_routing_on_its_line_and_drop_it_across_lines():
 
     uk_data_pair = make_pair()
     record = MICROCOSM_ROUTED_BUNDLE["data_releases"]["uk"]
-    microcosm_pair = uk_data_pair.model_copy(
-        update={
-            "data": uk_data_pair.data.model_copy(
-                update={
-                    "data_package": record["data_package"]["name"],
-                    "repo_id": record["data_package"]["repo_id"],
-                }
-            )
-        }
+
+    def microcosm_pair(model, core):
+        pair = make_pair(model=model, core=core)
+        return pair.model_copy(
+            update={
+                "data": pair.data.model_copy(
+                    update={
+                        "data_package": record["data_package"]["name"],
+                        "repo_id": record["data_package"]["repo_id"],
+                    }
+                )
+            }
+        )
+
+    certified = (
+        record["model_package"]["version"],
+        record["certification"]["certified_for_core_version"],
     )
 
     assert regional_certification_arguments(BUNDLE, uk_data_pair) == []
@@ -735,13 +743,19 @@ def test_regional_flags_keep_routing_on_its_line_and_drop_it_across_lines():
         "--drop-regional-release"
     ]
     assert regional_certification_arguments(
-        MICROCOSM_ROUTED_BUNDLE, microcosm_pair
+        MICROCOSM_ROUTED_BUNDLE, microcosm_pair(*certified)
     ) == [
         "--regional-manifest-uri",
         record["regional_source_manifest_uri"],
         "--regional-release-kind",
         record["regional_release_kind"],
     ]
+    # Main's local-area cut serves only main's model and core.
+    for model, core in (("2.140.0", certified[1]), (certified[0], "3.34.0")):
+        with pytest.raises(ValueError, match="needs a local-area cut"):
+            regional_certification_arguments(
+                MICROCOSM_ROUTED_BUNDLE, microcosm_pair(model, core)
+            )
 
 
 def test_replay_request_is_valid_for_the_scorecard():

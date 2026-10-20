@@ -773,6 +773,23 @@ def regional_certification_arguments(
         return []
     if data_line(pair) != certified_data_line(bundle):
         return ["--drop-regional-release"]
+    # Main's regional release was certified for main's model and core, and
+    # gets no qualified-pair escape. A pair on other versions needs its own
+    # local-area cut, which a candidate pair does not carry.
+    certified_core = (record.get("certification") or {}).get(
+        "certified_for_core_version"
+    ) or bundle["packages"][CORE_PACKAGE]["version"]
+    if (pair.model.version, pair.core.version) != (
+        record["model_package"]["version"],
+        certified_core,
+    ):
+        raise ValueError(
+            f"Main routes UK area regions to {regional_uri}, certified for "
+            f"policyengine-uk {record['model_package']['version']} and "
+            f"policyengine-core {certified_core}. A candidate on "
+            f"{pair.model.version} and {pair.core.version} needs a local-area "
+            "cut for those versions; certify it by hand with that cut."
+        )
     return [
         "--regional-manifest-uri",
         regional_uri,
