@@ -1542,6 +1542,9 @@ class TestUKRegionalCertification:
         )
         assert bundle["dataset_overlays"]["uk"] == {"populace_uk_2023": kept}
         assert any("enhanced_frs_2024_25, frs_2024_25" in w for w in result.warnings)
+        # The Microcosm names stop resolving, and certification says so.
+        dropped = next(w for w in result.warnings if "no longer resolve" in w)
+        assert "microcosm_uk_2024_25_dense" in dropped
         manifest = CountryReleaseManifest.model_validate(
             _apply_dataset_overlays("uk", bundle["data_releases"]["uk"], bundle)
         )

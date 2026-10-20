@@ -1202,8 +1202,9 @@ class TestDatasetOverlays:
 
     ``dataset_overlays`` is the hand-maintained sibling of ``data_releases``.
     ``certify_data_release`` rewrites ``data_releases.{country}`` wholesale, so
-    these tests pin the invariant that overlays are additive, survive
-    re-certification, and can never hijack default resolution.
+    these tests pin the invariant that overlays are additive, survive a
+    re-certification that does not certify their names, and can never hijack
+    default resolution.
     """
 
     def teardown_method(self):

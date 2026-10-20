@@ -10,6 +10,8 @@ from urllib.parse import quote
 import requests
 from pydantic import BaseModel, Field
 
+from policyengine.provenance.bundle_validation import shadowed_dataset_overlays
+
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
 
@@ -315,33 +317,34 @@ def _apply_dataset_overlays(
     registry of *additional* named datasets that resolution should expose
     without ever certifying them as the default — for example a staged
     artifact published in its own immutable release (see
-    ``docs/release-bundles.md``). Because certification only rewrites
-    ``data_releases``, overlays survive re-certification untouched.
+    ``docs/release-bundles.md``). Certification keeps every overlay except
+    one whose name the new release certifies itself, which it removes and
+    reports; re-add such an overlay if a later release stops certifying it.
 
-    Overlays are strictly additive: an overlay may not shadow the certified
-    default dataset or any certified dataset entry, so it can never alter
-    default resolution.
+    Overlays are strictly additive (``shadowed_dataset_overlays``): an overlay
+    may not shadow the certified default dataset or any certified dataset
+    entry, so it can never alter default resolution.
     """
     overlays = (bundle.get(DATASET_OVERLAYS_KEY) or {}).get(country_id) or {}
     if not overlays:
         return release_payload
 
-    certified_datasets = dict(release_payload.get("datasets") or {})
+    shadowed = shadowed_dataset_overlays(release_payload, overlays)
     default_dataset = release_payload.get("default_dataset")
-    for overlay_name, overlay_reference in overlays.items():
-        if overlay_name == default_dataset:
-            raise ValueError(
-                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
-                "shadows the certified default dataset. Overlays must never "
-                "change default resolution."
-            )
-        if overlay_name in certified_datasets:
-            raise ValueError(
-                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
-                "collides with a certified dataset entry. Overlays must be "
-                "additive, not overrides."
-            )
-        certified_datasets[overlay_name] = overlay_reference
+    if default_dataset in shadowed:
+        raise ValueError(
+            f"Dataset overlay '{default_dataset}' for country '{country_id}' "
+            "shadows the certified default dataset. Overlays must never "
+            "change default resolution."
+        )
+    if shadowed:
+        raise ValueError(
+            f"Dataset overlay '{shadowed[0]}' for country '{country_id}' "
+            "collides with a certified dataset entry. Overlays must be "
+            "additive, not overrides."
+        )
+    certified_datasets = dict(release_payload.get("datasets") or {})
+    certified_datasets.update(overlays)
 
     return {**release_payload, "datasets": certified_datasets}
 

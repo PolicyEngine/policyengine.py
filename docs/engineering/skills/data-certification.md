@@ -108,6 +108,13 @@ rollback to policyengine-uk-data with `--drop-regional-release`, for example,
 removes the enhanced FRS overlays. `bundle.py check` refuses a bundle with an
 overlay that shadows a certified name.
 
+Removed overlays do not come back by themselves. Certification warns about
+every dataset name that stops resolving. After a certification that stops
+certifying a name that must stay loadable (rolling forward after a rollback,
+or a ship-together run after a national-first one), re-add its overlay from
+the previous bundle, as #685 did for `enhanced_frs_2024_25`, `frs_2024_25` and
+their `_tiny` files.
+
 ### US
 
 For US Populace certification, certify the Populace release manifest directly:

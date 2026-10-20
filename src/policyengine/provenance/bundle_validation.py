@@ -24,6 +24,22 @@ def _is_normalized_version(value: Any) -> bool:
     )
 
 
+def shadowed_dataset_overlays(
+    release: Mapping[str, Any], overlays: Mapping[str, Any]
+) -> list[str]:
+    """The overlay names a country's certified release itself certifies.
+
+    Overlays are strictly additive: one may never shadow the certified default
+    or any certified dataset, so it can never alter resolution. The runtime
+    refuses a shadowing overlay, maintenance checks refuse it first, and
+    certification removes the overlays a new release supersedes.
+    """
+    certified = set(release.get("datasets") or {})
+    if release.get("default_dataset"):
+        certified.add(release["default_dataset"])
+    return sorted(set(overlays or {}) & certified)
+
+
 def validate_dataset_overlays(bundle: Mapping[str, Any]) -> None:
     """Refuse an overlay that shadows a certified dataset name.
 
@@ -33,10 +49,7 @@ def validate_dataset_overlays(bundle: Mapping[str, Any]) -> None:
     overlays = bundle.get("dataset_overlays") or {}
     for country, entries in overlays.items():
         release = (bundle.get("data_releases") or {}).get(country) or {}
-        certified = set(release.get("datasets") or {})
-        if release.get("default_dataset"):
-            certified.add(release["default_dataset"])
-        shadowed = sorted(set(entries or {}) & certified)
+        shadowed = shadowed_dataset_overlays(release, entries)
         if shadowed:
             raise ValueError(
                 f"dataset_overlays.{country} shadows certified datasets: "

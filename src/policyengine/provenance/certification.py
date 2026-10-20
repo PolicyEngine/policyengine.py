@@ -52,6 +52,7 @@ from policyengine.data.uk_geography_assets import (
     CONSTITUENCY_ASSET_SPEC,
     LOCAL_AUTHORITY_ASSET_SPEC,
 )
+from policyengine.provenance.bundle_validation import shadowed_dataset_overlays
 from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
     DataReleaseArtifact,
@@ -1371,16 +1372,13 @@ def certify_data_release(
         core_version=core_version,
         qualified_pair_id=qualified_pair_id,
     )
+    previous_release = (bundle.get("data_releases") or {}).get(country) or {}
     bundle.setdefault("data_releases", {})[country] = data_release
     # Overlays may never shadow a certified name, so a release that certifies
     # a name the bundle keeps as an overlay (a rollback to the release it came
     # from, or the dataset a national-first route carries) supersedes it.
     overlays = (bundle.get("dataset_overlays") or {}).get(country) or {}
-    superseded = sorted(
-        name
-        for name in overlays
-        if name in data_release["datasets"] or name == data_release["default_dataset"]
-    )
+    superseded = shadowed_dataset_overlays(data_release, overlays)
     for name in superseded:
         del overlays[name]
     if superseded:
@@ -1388,6 +1386,20 @@ def certify_data_release(
             *warnings,
             f"Removed the dataset_overlays.{country} entries this release now "
             f"certifies: {', '.join(superseded)}.",
+        ]
+    # A name the previous release certified, and neither the new release nor
+    # an overlay keeps, stops resolving. Say so, so that it can be re-added.
+    dropped = sorted(
+        set(previous_release.get("datasets") or {})
+        - set(data_release["datasets"])
+        - set(overlays)
+    )
+    if dropped:
+        warnings = [
+            *warnings,
+            f"These {country.upper()} datasets no longer resolve by name: "
+            f"{', '.join(dropped)}. Re-add any that must stay loadable under "
+            f"dataset_overlays.{country}.",
         ]
     bundle.setdefault("countries", {}).setdefault(country, {})["model_package"] = (
         model_package
