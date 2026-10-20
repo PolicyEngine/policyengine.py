@@ -7,8 +7,10 @@
     Find the candidate pair: the newest (or requested) policyengine-uk wheel
     from PyPI, the core it needs, and the newest (or requested) uk-data
     release at the data repository's current manifest revision. Decide
-    whether to qualify it, or whether it is already certified, stale, or a
-    duplicate of an attempt in the ledger.
+    whether to qualify it, or whether it is already certified, stale, a
+    duplicate of an attempt in the ledger, or from another data line than
+    main's certificate (``other_line``: versions are compared only within
+    one line, so a uk-data pair is never ordered against a Microcosm one).
 ``prepare``
     On a checkout of ``main``, certify the pair into the bundle manifest
     (exact ``==`` claim backed by the pair id when no publisher claim covers
@@ -48,7 +50,7 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from policyengine.provenance.manifest import DataReleaseManifest
+from policyengine.provenance.manifest import DataReleaseManifest, release_build_id
 from policyengine.provenance.qualification import (
     REQUIRED_GATES,
     CandidatePair,
@@ -126,7 +128,7 @@ def certification_environment(environ: Mapping[str, str]) -> dict[str, str]:
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-Action = Literal["qualify", "already_certified", "stale", "duplicate"]
+Action = Literal["qualify", "already_certified", "stale", "duplicate", "other_line"]
 
 
 # --- Resolution ------------------------------------------------------------
@@ -286,9 +288,8 @@ def resolve_candidate(
     artifact = manifest.artifacts[dataset]
     if not artifact.sha256 or not artifact.size_bytes:
         raise ValueError(f"uk-data {data_version} {dataset} has no sha256 or size.")
-    build_id = (
-        manifest.build.build_id if manifest.build and manifest.build.build_id else None
-    )
+    # Named as certification names it: the cut tag when the release has one.
+    build_id = release_build_id(manifest.build)
     if build_id is None:
         raise ValueError(f"uk-data {data_version} records no build id.")
 
@@ -330,6 +331,32 @@ def resolve_candidate(
 
 
 # --- Deciding what to do ------------------------------------------------------
+
+
+def certified_data_line(bundle: Mapping[str, Any]) -> tuple[str, str]:
+    """The data package and repository of main's UK certificate.
+
+    Promotion orders pairs by their data release version, which compares
+    only within one data line: a uk-data release number says nothing about
+    a Microcosm build. A pair from another line is never older or newer
+    than main's certificate; changing the line is a reviewed certification.
+    """
+
+    data_package = bundle["data_releases"]["uk"]["data_package"]
+    return (data_package["name"], data_package["repo_id"])
+
+
+def data_line(pair: CandidatePair) -> tuple[str, str]:
+    """The data package and repository a candidate pair's data comes from."""
+
+    return (pair.data.data_package, pair.data.repo_id)
+
+
+def _same_line_receipts(
+    receipts: Iterable[QualificationReceipt], bundle: Mapping[str, Any]
+) -> list[QualificationReceipt]:
+    line = certified_data_line(bundle)
+    return [receipt for receipt in receipts if data_line(receipt.pair) == line]
 
 
 def certified_order_key(bundle: Mapping[str, Any]) -> tuple[str, str, str]:
@@ -392,6 +419,19 @@ def candidate_action(
     promotion never waits on a manual ``--force``.
     """
 
+    line = certified_data_line(bundle)
+    if data_line(pair) != line:
+        if force:
+            return "qualify", (
+                f"forced across data lines: main certifies {line}, the pair "
+                f"is from {data_line(pair)}"
+            )
+        return "other_line", (
+            f"main certifies {line[0]} from {line[1]}; the pair is from "
+            f"{data_line(pair)[0]} in {data_line(pair)[1]}. Automated "
+            "qualification compares versions only within one data line, and "
+            "changing the line is a reviewed certification"
+        )
     current = certified_order_key(bundle)
     record = bundle["data_releases"]["uk"]
     if pair.order_key == current and (
@@ -527,7 +567,9 @@ def requalification_target(
 ) -> Optional[CandidatePair]:
     """The promotion target, when it must be requalified on current main."""
 
-    target = select_promotion_target(list(receipts), certified_order_key(bundle))
+    target = select_promotion_target(
+        _same_line_receipts(receipts, bundle), certified_order_key(bundle)
+    )
     if target is None:
         return None
     pair_dir = pair_directory(ledger_root, "uk", target.pair_id)
@@ -1524,7 +1566,9 @@ def plan_promotion(
     A branch that moved since is left alone and reported.
     """
 
-    receipts = list(receipts)
+    # Only pairs on main's data line are ordered against it; others are left
+    # alone (neither promoted nor closed).
+    receipts = _same_line_receipts(receipts, bundle)
     current = certified_order_key(bundle)
     target = select_promotion_target(receipts, current)
     baseline_matches = target is not None and (

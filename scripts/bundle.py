@@ -44,6 +44,10 @@ def _certify_data(args: argparse.Namespace) -> int:
         argv.extend(["--regional-artifact-prefix", args.regional_artifact_prefix])
     if args.regional_path_template:
         argv.extend(["--regional-path-template", args.regional_path_template])
+    if args.regional_release_kind:
+        argv.extend(["--regional-release-kind", args.regional_release_kind])
+    if args.drop_regional_release:
+        argv.append("--drop-regional-release")
     if args.no_generate:
         argv.append("--no-generate")
     if args.no_changelog:
@@ -200,8 +204,25 @@ def _parser() -> argparse.ArgumentParser:
     certify.add_argument(
         "--regional-manifest-uri",
         help=(
-            "Optional regional release_manifest.json URI to merge into US "
-            "Populace certification."
+            "Regional release_manifest.json URI whose dataset serves the local "
+            "region types (US states and districts, UK constituencies and local "
+            "authorities)."
+        ),
+    )
+    certify.add_argument(
+        "--regional-release-kind",
+        help=(
+            "How to read the regional release; forwarded to "
+            "scripts/certify_data_release.py, which lists and checks the kinds. "
+            "Defaults to local_area."
+        ),
+    )
+    certify.add_argument(
+        "--drop-regional-release",
+        action="store_true",
+        help=(
+            "Remove the bundle's current regional routing on re-certification. "
+            "Cannot be combined with --regional-manifest-uri."
         ),
     )
     certify.add_argument(

@@ -404,6 +404,20 @@ class TestDepositionMetadata:
         description = metadata["description"]
         assert "populace-us-2024" in description
 
+    def test__given_a_cut_tag__then_the_description_names_the_cut(self):
+        # Microcosm keeps build_id equal to the line name on every cut, so the
+        # deposit names the cut, as certification does.
+        cut = "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa"
+        manifest = _us_data_release_manifest()
+        manifest.build.build_id = "microcosm-uk-2024-25-national"
+        manifest.build.cut_tag = cut
+
+        description = deposition_metadata(get_release_manifest("us"), manifest)[
+            "description"
+        ]
+
+        assert f"Data build: {cut}." in description
+
 
 class TestCLI:
     def test__given_cli__then_prints_mirrors_json(self, monkeypatch, capsys):

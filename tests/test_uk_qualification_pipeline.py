@@ -233,6 +233,22 @@ def test_latest_data_release_ignores_non_version_tags():
     assert latest_data_release(["1.57.4", "1.58.0", "v1.11.1", "version_a"]) == "1.58.0"
 
 
+def test_resolution_names_the_data_build_by_its_cut_tag():
+    """A release that records a cut tag is named by it, as certification
+    names it, so the ledger's data build id matches the certificate's."""
+
+    cut = "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa"
+    manifest = {
+        **MANIFEST,
+        "build": {"build_id": "microcosm-uk-2024-25-national", "cut_tag": cut},
+    }
+    manifest_bytes = json.dumps(manifest).encode()
+
+    resolved, _ = _resolver(hf_file=lambda repo, rev, path: manifest_bytes)
+
+    assert resolved.pair.data.build_id == cut
+
+
 def test_resolution_refuses_unpublished_versions():
     with pytest.raises(ValueError):
         _resolver(model_version="9.9.9")
@@ -898,6 +914,52 @@ def test_promotion_plan():
         [candidate_branch(older.pair), candidate_branch(stale.pair)]
     )
     assert candidate_branch(rejected.pair) not in plan.close_branches
+
+
+def _microcosm_certified_bundle():
+    bundle = json.loads(json.dumps(BUNDLE))
+    bundle["data_releases"]["uk"]["data_package"].update(
+        name="microcosm-data",
+        repo_id="policyengine/populace-uk-private",
+        version="0.1.0",
+    )
+    return bundle
+
+
+def test_a_pair_from_another_data_line_is_never_ordered_against_main(tmp_path):
+    """A uk-data release number says nothing about a Microcosm build. With a
+    Microcosm certificate on main, every uk-data pair compared as newer
+    (1.58.x > 0.1.0) and would have been qualified and promoted back. Now
+    automated qualification skips it unless forced, and promotion neither
+    readies nor closes it."""
+
+    from policyengine.provenance.uk_qualification import requalification_target
+
+    bundle = _microcosm_certified_bundle()
+    uk_data = make_pair(model="2.900.0", data="1.58.2", core="3.99.0")
+
+    action, reason = candidate_action(uk_data, bundle, tmp_path, base_commit="a" * 40)
+    assert action == "other_line"
+    assert "microcosm-data" in reason and "policyengine-uk-data" in reason
+    assert (
+        candidate_action(uk_data, bundle, tmp_path, base_commit="a" * 40, force=True)[0]
+        == "qualify"
+    )
+
+    promotable = _promotion_receipt(pair=uk_data)
+    branch = candidate_branch(uk_data)
+    plan = plan_promotion([promotable], bundle, {branch: promotable.harness.git_commit})
+    assert plan.target is None and plan.ready_branch is None
+    assert branch not in plan.close_branches
+    assert requalification_target([promotable], bundle, tmp_path, "b" * 40) is None
+
+    # On main's own data line the same pair still advances.
+    assert (
+        plan_promotion(
+            [promotable], BUNDLE, {branch: promotable.harness.git_commit}
+        ).target
+        == promotable
+    )
 
 
 def _promotable_pair_and_branch(core=None):

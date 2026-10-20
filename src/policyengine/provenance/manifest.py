@@ -47,9 +47,20 @@ class BuiltWithModelPackage(PackageVersion):
 
 class DataBuildInfo(BaseModel):
     build_id: Optional[str] = None
+    cut_tag: Optional[str] = None
+    """The immutable tag of one cut of a release line. Microcosm keeps
+    ``build_id`` equal to the line name for every cut, so the cut tag is what
+    tells two cuts apart (see ``release_build_id``)."""
     built_at: Optional[str] = None
     built_with_core_package: Optional[PackageVersion] = None
     built_with_model_package: Optional[BuiltWithModelPackage] = None
+
+
+def release_build_id(build: Optional[DataBuildInfo]) -> Optional[str]:
+    """Identify one data build: its cut tag when it has one, else its build id."""
+    if build is None:
+        return None
+    return build.cut_tag or build.build_id
 
 
 class ArtifactPathReference(BaseModel):
@@ -175,6 +186,9 @@ class CertifiedDataArtifact(BaseModel):
     build_id: Optional[str] = None
 
 
+RegionalReleaseKind = Literal["local_area", "area_coded_national"]
+
+
 class CountryReleaseManifest(BaseModel):
     schema_version: int = 1
     bundle_id: Optional[str] = None
@@ -186,6 +200,11 @@ class CountryReleaseManifest(BaseModel):
     default_dataset: str
     datasets: dict[str, ArtifactPathReference] = Field(default_factory=dict)
     region_datasets: dict[str, ArtifactPathTemplate] = Field(default_factory=dict)
+    regional_release_kind: Optional[RegionalReleaseKind] = None
+    """How certification routed the local region types, when it did:
+    ``local_area`` for a non-default local-area release, and
+    ``area_coded_national`` for another release's national dataset that
+    carries area codes (and its area weight matrices)."""
     certified_data_artifact: Optional[CertifiedDataArtifact] = None
     certification: Optional[DataCertification] = None
     source_sha256: Optional[str] = Field(default=None, exclude=True)
@@ -474,11 +493,8 @@ def certify_data_release_compatibility(
     # exact-pair certificate beyond the model, core and recorded data build
     # that qualification tested. Check them before any acceptance path returns.
     bundled_certification = country_manifest.certification
-    remote_build_id = (
-        data_release_manifest.build.build_id
-        if data_release_manifest.build is not None
-        else None
-    )
+    # Named as certification names it: the cut tag when the release has one.
+    remote_build_id = release_build_id(data_release_manifest.build)
     if (
         bundled_certification is not None
         and bundled_certification.compatibility_basis == "qualified_exact_pair"
@@ -529,11 +545,7 @@ def certify_data_release_compatibility(
         return DataCertification(
             compatibility_basis="exact_build_model_version",
             certified_for_model_version=runtime_model_version,
-            data_build_id=(
-                data_release_manifest.build.build_id
-                if data_release_manifest.build is not None
-                else None
-            ),
+            data_build_id=release_build_id(data_release_manifest.build),
             built_with_model_version=built_with_model.version,
             built_with_model_git_sha=built_with_model.git_sha,
             data_build_fingerprint=built_with_model.data_build_fingerprint,
@@ -548,11 +560,7 @@ def certify_data_release_compatibility(
         return DataCertification(
             compatibility_basis="matching_data_build_fingerprint",
             certified_for_model_version=runtime_model_version,
-            data_build_id=(
-                data_release_manifest.build.build_id
-                if data_release_manifest.build is not None
-                else None
-            ),
+            data_build_id=release_build_id(data_release_manifest.build),
             built_with_model_version=built_with_model.version,
             built_with_model_git_sha=built_with_model.git_sha,
             data_build_fingerprint=built_with_model.data_build_fingerprint,
@@ -568,11 +576,7 @@ def certify_data_release_compatibility(
             return DataCertification(
                 compatibility_basis="legacy_compatible_model_package",
                 certified_for_model_version=runtime_model_version,
-                data_build_id=(
-                    data_release_manifest.build.build_id
-                    if data_release_manifest.build is not None
-                    else None
-                ),
+                data_build_id=release_build_id(data_release_manifest.build),
                 built_with_model_version=(
                     built_with_model.version if built_with_model is not None else None
                 ),
