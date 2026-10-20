@@ -354,11 +354,14 @@ def read_build_folder(
     files, while an artifact's own ``revision`` field cannot name that commit.
     Artifacts in other repositories keep their own paths and pins.
 
+    The publisher writes only bare file names, directly inside the folder, so
+    an own file's ``path`` must be such a name, alone or after the folder.
+
     A manifest published before that layout is returned unchanged.
 
     Raises:
         ReleaseBuildFolderError: If the manifest was read from another folder,
-            or one of its own files lies outside the folder.
+            or one of its own files is not directly inside the folder.
     """
 
     folder = manifest.build_folder
@@ -376,14 +379,31 @@ def read_build_folder(
         if artifact.repo_id != repo_id:
             continue
         if "/" not in artifact.path:
-            artifact.path = f"{folder}/{artifact.path}"
-        elif not artifact.path.startswith(f"{folder}/"):
+            file_name = artifact.path
+        elif artifact.path.startswith(f"{folder}/"):
+            file_name = artifact.path.removeprefix(f"{folder}/")
+        else:
             raise ReleaseBuildFolderError(
                 f"Artifact {name!r} ({artifact.path}) is outside its build "
                 f"folder {folder}/."
             )
+        if not _is_bare_file_name(file_name):
+            # HTTP clients remove dot segments, so "<folder>/../<other>/<file>"
+            # would fetch another build's file.
+            raise ReleaseBuildFolderError(
+                f"Artifact {name!r} ({artifact.path}) is not a file directly "
+                f"inside its build folder {folder}/."
+            )
+        artifact.path = f"{folder}/{file_name}"
         artifact.revision = revision
     return pinned
+
+
+def _is_bare_file_name(name: str) -> bool:
+    """One path segment that names a file: what the publisher accepts
+    (``microcosm_emitter_interface.identifiers.bare_file_name``)."""
+
+    return bool(name) and name not in {".", ".."} and not set(name) & {"/", "\\"}
 
 
 def check_build_listed(record_bytes: bytes, *, release: str, build: str) -> None:
