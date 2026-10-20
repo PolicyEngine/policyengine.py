@@ -104,7 +104,12 @@ when nothing is routed:
 | --- | --- | --- |
 | none | the national dataset | no |
 | `area_coded_national` | another release's area-coded national dataset (the enhanced FRS), while the default is a national file without area codes | no |
-| `local_area` | a certified local-area release | yes |
+| `local_area` | a local-area release that certification vets and pins | yes |
+
+Certification checks a local-area release's role, its single H5 file and its
+own model and core claims, and pins the file's bytes, but the certificate covers
+the national dataset only: receipts for runs on the local-area file are
+uncertified.
 
 The certified bundle routes both to the Microcosm local-area release
 (`local_area`, `microcosm_uk_2024_25_dense.h5`), so the default registry has
