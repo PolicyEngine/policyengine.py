@@ -1,17 +1,35 @@
 import hashlib
 import json
 import os
+import re
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import quote
 
 import requests
-from pydantic import BaseModel, Field
+from pydantic import (
+    BaseModel,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
+
+#: Microcosm publishes each build once, in its own folder
+#: ``releases/<release>/<build>/``, and never changes it afterwards; a root
+#: ``releases.json`` records which build of each release is current
+#: (microcosm-emitter's ``microcosm_emitter_interface.releases``).
+RELEASES_FOLDER = "releases"
+RELEASE_MANIFEST_NAME = "release_manifest.json"
+#: The publisher refuses any other release or build name
+#: (``microcosm_emitter_interface.identifiers.SAFE_IDENTIFIER``), and both
+#: are interpolated into repository paths.
+RELEASE_FOLDER_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 class DataReleaseManifestUnavailableError(ValueError):
@@ -47,17 +65,25 @@ class BuiltWithModelPackage(PackageVersion):
 
 class DataBuildInfo(BaseModel):
     build_id: Optional[str] = None
+    """The build's name. For a build published in its own release folder
+    (``DataReleaseManifest.release`` set), this is the manifest's ``build``
+    string, the attempt ID that names the folder."""
     cut_tag: Optional[str] = None
     """The immutable tag of one cut of a release line. Microcosm keeps
     ``build_id`` equal to the line name for every cut, so the cut tag is what
-    tells two cuts apart (see ``release_build_id``)."""
+    tells two cuts apart (see ``release_build_id``). Builds published in their
+    own release folders have no tag."""
     built_at: Optional[str] = None
     built_with_core_package: Optional[PackageVersion] = None
     built_with_model_package: Optional[BuiltWithModelPackage] = None
 
 
 def release_build_id(build: Optional[DataBuildInfo]) -> Optional[str]:
-    """Identify one data build: its cut tag when it has one, else its build id."""
+    """Identify one data build: its cut tag when it has one, else its build id.
+
+    A build published in its own release folder has no cut tag, and its build
+    id is the folder's build name, so two builds of one release differ.
+    """
     if build is None:
         return None
     return build.cut_tag or build.build_id
@@ -116,7 +142,10 @@ class DataReleaseArtifact(BaseModel):
     kind: str
     path: str
     repo_id: str
-    revision: str
+    revision: Optional[str] = None
+    """Required unless the manifest is a build in its own release folder,
+    whose own files are pinned at the revision its manifest is certified at
+    (``pin_build_folder_artifacts``)."""
     repo_type: Optional[Literal["model", "dataset"]] = None
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
@@ -127,6 +156,8 @@ class DataReleaseArtifact(BaseModel):
 
     @property
     def uri(self) -> str:
+        if self.revision is None:
+            raise ValueError(f"Artifact {self.path!r} has no revision pin.")
         return build_hf_uri(
             repo_id=self.repo_id,
             path_in_repo=self.path,
@@ -144,6 +175,12 @@ class DataReleaseManifest(BaseModel):
     compatible_model_packages: list[CompatiblePackage] = Field(default_factory=list)
     compatible_core_packages: list[CompatiblePackage] = Field(default_factory=list)
     default_datasets: dict[str, str] = Field(default_factory=dict)
+    release: Optional[str] = None
+    """The release of a build published in its own folder,
+    ``releases/<release>/<build>/``. Such a manifest names its ``release``
+    and ``build`` as strings; ``build`` is read as ``DataBuildInfo`` with only
+    ``build_id`` set, and written back as the string. ``None`` for a manifest
+    published before that layout, whose ``build`` is an object."""
     build: Optional[DataBuildInfo] = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
     preservation_dois: list[str] = Field(default_factory=list)
@@ -156,6 +193,69 @@ class DataReleaseManifest(BaseModel):
     consumed by certification)."""
     source_sha256: Optional[str] = Field(default=None, exclude=True)
     """Byte sha256 of the fetched manifest before runtime URI rewrites."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_build_folder_identity(cls, data: Any) -> Any:
+        """Read a string ``build`` with its ``release`` as the build folder."""
+
+        if not isinstance(data, dict):
+            return data
+        release = data.get("release")
+        build = data.get("build")
+        if release is None and not isinstance(build, str):
+            return data
+        if release is None:
+            raise ValueError(
+                "A release manifest that names its build as a string must "
+                "name its release."
+            )
+        if not isinstance(build, str):
+            raise ValueError(
+                "A release manifest that names its release must name its "
+                "build as a string."
+            )
+        for label, name in (("release", release), ("build", build)):
+            if not isinstance(name, str) or not RELEASE_FOLDER_NAME.fullmatch(name):
+                raise ValueError(f"{label} must match {RELEASE_FOLDER_NAME.pattern}.")
+        return {**data, "build": {"build_id": build}}
+
+    @model_validator(mode="after")
+    def _require_revision_pins_outside_build_folders(self) -> "DataReleaseManifest":
+        if self.release is None:
+            unpinned = sorted(
+                name
+                for name, artifact in self.artifacts.items()
+                if artifact.revision is None
+            )
+            if unpinned:
+                raise ValueError(
+                    f"Artifacts {unpinned} have no revision; only a build in "
+                    "its own release folder may leave it to certification."
+                )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _write_build_folder_identity(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> Any:
+        data = handler(self)
+        if (
+            self.release is not None
+            and self.build is not None
+            and isinstance(data, dict)
+            and "build" in data
+        ):
+            data["build"] = self.build.build_id
+        return data
+
+    @property
+    def build_folder(self) -> Optional[str]:
+        """``releases/<release>/<build>`` for a build in its own folder."""
+
+        if self.release is None or self.build is None or self.build.build_id is None:
+            return None
+        return f"{RELEASES_FOLDER}/{self.release}/{self.build.build_id}"
 
 
 class DataCertification(BaseModel):
