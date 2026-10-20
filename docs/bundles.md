@@ -127,6 +127,11 @@ python scripts/bundle.py update-packages \
   --uk 2.91.0
 ```
 
+A data certificate that names its core (`certify-data --core-version`) binds
+the core pin: `--core` then fails `check --strict-tros` until that country is
+re-certified for the new core. See the data certification skill for the UK
+case.
+
 To certify a new data release from a data-producer manifest, run:
 
 ```bash

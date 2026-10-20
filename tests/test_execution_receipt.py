@@ -319,8 +319,8 @@ def test_a_core_the_certificate_names_decides_over_the_pin(dataset_file):
     # bundle.py check refuses a pin that differs from a named core
     # (scripts/generate_trace_tros.py), because receipts follow the certificate.
     bundle = _bundle_for(dataset_file.read_bytes())
-    assert (
-        "certified_for_core_version" in bundle["data_releases"]["uk"]["certification"]
+    bundle["data_releases"]["uk"]["certification"]["certified_for_core_version"] = (
+        INSTALLED_CORE
     )
     bundle["packages"]["policyengine-core"]["version"] = "0.0.1"
 
@@ -332,10 +332,12 @@ def test_a_core_the_certificate_names_decides_over_the_pin(dataset_file):
 
 @pytest.mark.parametrize("pin", [INSTALLED_CORE, "0.0.1"])
 def test_a_certificate_without_a_core_certifies_the_pinned_core(dataset_file, pin):
-    # Certificates from before --core-version, and receipts from
-    # policyengine 6.5.0-6.8.0, name no core: the pin is the certified core.
+    # Certificates from before --core-version, and those certified without
+    # it, name no core: the pin is the certified core.
     bundle = _bundle_for(dataset_file.read_bytes())
-    del bundle["data_releases"]["uk"]["certification"]["certified_for_core_version"]
+    bundle["data_releases"]["uk"]["certification"].pop(
+        "certified_for_core_version", None
+    )
     bundle["packages"]["policyengine-core"]["version"] = pin
 
     receipt = _build(dataset_file, bundle)

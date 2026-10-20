@@ -139,16 +139,18 @@ def _validate_runtime_model(bundle: dict, country: CountryReleaseManifest) -> No
     prefix = f"{country.country_id}: strict TRACE release"
     certification = country.certification
     core = bundle.get("packages", {}).get("policyengine-core", {})
-    if certification and certification.compatibility_basis == "qualified_exact_pair":
-        if (
-            not certification.qualification_pair_id
-            or not certification.certified_for_core_version
-            or core.get("version") != certification.certified_for_core_version
-        ):
-            raise ValueError(
-                f"{prefix}: runtime core differs from the qualified exact pair"
-            )
-    elif (
+    if (
+        certification
+        and certification.compatibility_basis == "qualified_exact_pair"
+        and not (
+            certification.qualification_pair_id
+            and certification.certified_for_core_version
+        )
+    ):
+        raise ValueError(
+            f"{prefix}: a qualified exact pair must name its pair and core"
+        )
+    if (
         certification
         and certification.certified_for_core_version
         and core.get("version") != certification.certified_for_core_version
@@ -158,7 +160,8 @@ def _validate_runtime_model(bundle: dict, country: CountryReleaseManifest) -> No
         raise ValueError(
             f"{prefix}: runtime core {core.get('version')} differs from the "
             f"certified core {certification.certified_for_core_version}; "
-            "re-certify the data release for the new core"
+            "re-certify the data release for the new core, or without "
+            "--core-version so that receipts certify the pin"
         )
     if (
         model.name != key

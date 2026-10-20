@@ -50,7 +50,8 @@ Microcosm national release with one of:
   python scripts/bundle.py certify-data --country uk --data-producer populace \
     --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
     --regional-manifest-uri "hf://dataset/policyengine/populace-uk-private@<local-cut-tag>/releases/<local-release-id>/release_manifest.json" \
-    --model-version "<policyengine-uk-version>"
+    --model-version "<policyengine-uk-version>" \
+    --core-version "<policyengine-core-version>"
   ```
 
   This records `regional_release_kind: local_area`, and the default UK region
@@ -65,7 +66,8 @@ Microcosm national release with one of:
     --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
     --regional-manifest-uri "hf://model/policyengine/policyengine-uk-data-private@<revision>/releases/<version>/release_manifest.json" \
     --regional-release-kind area_coded_national \
-    --model-version "<policyengine-uk-version>"
+    --model-version "<policyengine-uk-version>" \
+    --core-version "<policyengine-core-version>"
   ```
 
   Certification carries that release's national dataset
@@ -83,6 +85,14 @@ Either way, certification checks that the regional release serves the pinned
 model, and the pinned core when `--core-version` is given, by its own build or
 compatibility claims (a `--qualified-pair-id` names the primary release only),
 and HEAD-checks every artifact it carries.
+
+`--core-version` also names the core in the certificate, and receipts then
+certify that core, not the bundle's core pin. So `check --strict-tros` refuses
+a core pin that differs from it: a core bump, a US `--core-version` run
+included, needs the country re-certified for the new core first. Microcosm UK
+releases claim one exact core, so that needs Microcosm cuts that claim the new
+core. To move the core before they exist, re-certify UK without
+`--core-version`: its receipts then certify the pin, as before October 2026.
 
 ### Re-certifying a routed bundle
 
