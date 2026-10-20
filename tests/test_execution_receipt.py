@@ -410,6 +410,27 @@ def test_overlay_datasets_receive_uncertified_receipts(dataset_file):
     assert receipt.data.build_id is None
 
 
+def test_a_regional_release_dataset_keeps_its_own_identity(dataset_file):
+    """A local-area file is certified beside the national release, not in it."""
+
+    bundle = _bundle_for(dataset_file.read_bytes())
+    record = bundle["data_releases"]["uk"]
+    record["datasets"]["area_file"] = {
+        "path": "area_file.h5",
+        "repo_id": record["data_package"]["repo_id"],
+        "revision": "regional-release-cut",
+        "sha256": hashlib.sha256(dataset_file.read_bytes()).hexdigest(),
+    }
+
+    receipt = _build(dataset_file, bundle, dataset="area_file")
+
+    assert receipt.certification_status == "uncertified"
+    assert receipt.data.dataset_revision == "regional-release-cut"
+    assert receipt.data.release_version == "regional-release-cut"
+    assert receipt.data.build_id is None
+    assert receipt.data.release_manifest_revision is None
+
+
 def test_an_omitted_artifact_revision_is_the_release_manifest_revision(dataset_file):
     """Round-4 review M5: the receipt names what the materializer downloads."""
 
