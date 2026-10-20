@@ -1,3 +1,21 @@
+## [6.9.0] - 2026-10-20
+
+### Added
+
+- Ship the UK constituency (2024, 650 including Northern Ireland) and local-authority (April 2023, 361 including Ards and North Down) lists with the package, so area regions and geography output labels no longer depend on GCS. Certify a UK regional release with `certify-data --regional-manifest-uri`: a Microcosm local-area release, or, for a national-first switch, the enhanced FRS with its area weight matrices (`--regional-release-kind area_coded_national`). Constituency and local-authority regions load the routed dataset and join the default registry when it is a local-area release. Add the Universal Credit coverage floor check (`scripts/check_uk_uc_floor.py`) for UK default switches.
+
+### Fixed
+
+- Constituency and local-authority regions were empty when requested, because their GCS download helper no longer exists in policyengine-core. Certification now names a build by its cut tag when the release has one, refuses a regional release that does not serve the pinned model version (and core, with `--core-version`) by its own claims, and refuses a re-certification that would silently drop a bundle's regional routing (`--drop-regional-release` removes it on purpose, and cannot be combined with `--regional-manifest-uri`). Automated UK qualification no longer orders a candidate from another data line against main's certificate: with a Microcosm certificate on main, every uk-data pair compared as newer and would have been promoted back. Such a pair is now skipped (`other_line`) unless forced, and promotion never readies or closes it.
+
+
+## [6.8.0] - 2026-10-19
+
+### Added
+
+- Documented and tested policyengine-uk's capital gains realisation response, whose default from policyengine-uk 2.134.0 is a retention-rate elasticity of 1.0 (policyengine-uk#2396). Results don't change until policyengine.py pins 2.134.0 or later. From then on, a UK CGT reform with no elasticity set realises gains at that elasticity on every entry point, where it was costed statically, and gains qualifying for Business Asset Disposal Relief take the same 1.0. The default leaves results without a reform unchanged. Reforms that move marginal rates on gains, including some income tax reforms, include the response. The Budget reform contract (2.1.0) adds a case for gains partly qualifying for the relief, which waits on that pin like `cgt_default_response`. See the Reforms guide for the static settings, the sensitivities and the marginal tax rate convention.
+
+
 ## [6.7.6] - 2026-10-19
 
 ### Fixed

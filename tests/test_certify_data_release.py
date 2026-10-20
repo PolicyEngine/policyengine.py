@@ -20,6 +20,7 @@ from policyengine.provenance.certification import (
     merge_us_local_area_release_manifest,
     merge_us_regional_release_manifest,
     merge_us_state_release_manifest,
+    model_compatibility_basis,
     parse_manifest_uri,
     required_supplemental_release_files,
     should_validate_vendored_artifacts,
@@ -272,6 +273,40 @@ class TestParseManifestUri:
     def test__given_bare_path__then_raises(self):
         with pytest.raises(CertificationError, match="hf://dataset"):
             parse_manifest_uri("https://example.com/manifest.json")
+
+
+class TestModelBasisAgreement:
+    """The primary and regional checks share one model-basis decision."""
+
+    def test__given_claim_only__then_both_paths_give_the_same_warning(self):
+        manifest = _manifest()
+        manifest.build.built_with_model_package = None
+
+        basis, warnings = validate_release_manifest(
+            manifest, "policyengine-us", "1.723.0"
+        )
+        regional_basis, regional_warnings = model_compatibility_basis(
+            manifest, "policyengine-us", "1.723.0"
+        )
+
+        assert basis == regional_basis == "legacy_compatible_model_package"
+        assert regional_warnings == [
+            warning for warning in warnings if "compatibility claim" in warning
+        ]
+
+    def test__given_no_basis__then_both_refusals_state_the_same_reason(self):
+        manifest = _manifest()
+        manifest.build.built_with_model_package = None
+
+        with pytest.raises(CertificationError) as primary:
+            validate_release_manifest(manifest, "policyengine-us", "9.9.9")
+        with pytest.raises(CertificationError) as regional:
+            model_compatibility_basis(manifest, "policyengine-us", "9.9.9")
+
+        reason = str(regional.value).split(";")[0]
+        assert str(primary.value).startswith(reason + ";")
+        assert "automated qualification" in str(primary.value)
+        assert "automated qualification" not in str(regional.value)
 
 
 class TestValidateReleaseManifest:
@@ -1462,6 +1497,26 @@ class TestUKRegionalCertification:
         assert "regional_source_manifest_uri" not in release
         assert "regional_release_kind" not in release
         assert set(release["region_datasets"]) == {"national"}
+
+    def test__given_drop_and_a_regional_release__then_refuses_both(self, tmp_path):
+        # Dropping the routing and routing to a release are opposite requests;
+        # neither silently wins.
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                side_effect=AssertionError("no fetch"),
+            ),
+            pytest.raises(CertificationError, match="cannot be combined"),
+        ):
+            certify_data_release(
+                country="uk",
+                data_producer="populace",
+                manifest_uri=UK_NATIONAL_URI,
+                regional_manifest_uri=UK_DENSE_URI,
+                drop_regional_release=True,
+                model_version=UK_MODEL_VERSION,
+                bundle_path=_tmp_bundle(tmp_path),
+            )
 
     def test__given_bundle_wrapper_regional_kind__then_forwards_to_certifier(
         self, monkeypatch

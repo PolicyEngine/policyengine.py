@@ -211,17 +211,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     certify.add_argument(
         "--regional-release-kind",
-        choices=["local_area", "area_coded_national"],
         help=(
-            "How to read the regional release. Defaults to local_area; "
-            "area_coded_national (UK only) routes area regions to another "
-            "national release's area-coded dataset and weight matrices."
+            "How to read the regional release; forwarded to "
+            "scripts/certify_data_release.py, which lists and checks the kinds. "
+            "Defaults to local_area."
         ),
     )
     certify.add_argument(
         "--drop-regional-release",
         action="store_true",
-        help="Remove the bundle's current regional routing on re-certification.",
+        help=(
+            "Remove the bundle's current regional routing on re-certification. "
+            "Cannot be combined with --regional-manifest-uri."
+        ),
     )
     certify.add_argument(
         "--regional-artifact-prefix",

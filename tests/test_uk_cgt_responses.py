@@ -59,8 +59,8 @@ RATE_RISE = {
     "gov.hmrc.cgt.additional_rate": {FROM_2027: 0.45},
 }
 RATIO = (1 - 0.45) / (1 - 0.24)
-# 20% of 50% gains qualify for the relief at 18%: the share-weighted rate
-# rises from 0.4 x 18% + 0.6 x 24% to 0.4 x 18% + 0.6 x 45%.
+# £20,000 of the £50,000 of gains (40%) qualify for the relief at 18%: the
+# share-weighted rate rises from 0.4 x 18% + 0.6 x 24% to 0.4 x 18% + 0.6 x 45%.
 MIXED_RATIO = (1 - 0.342) / (1 - 0.216)
 GAINS_VARIABLES = {
     "person": [
@@ -264,9 +264,13 @@ def test_a_run_records_the_response_it_applied():
     assert record["request"]["settings"] == [
         [f"{RESPONSES}.elasticity", "2027-04-06", "2100-12-31", 1.0, "dynamic"]
     ]
-    if record["resolved"] is not None:
+    model_capital_gains = pytest.importorskip("policyengine_uk.utils.capital_gains")
+    if hasattr(model_capital_gains, "capital_gains_response_assumption"):
         assert record["resolved"]["convention"] == "retention"
         assert record["resolved"]["elasticity"] == 1.0
+    else:
+        # policyengine-uk before 2.134.0 has no helper to report it.
+        assert record["resolved"] is None
     assert sim.release_bundle[records.RECORD_KEY] == record
     assert json.loads(json.dumps(record)) == record
 

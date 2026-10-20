@@ -21,6 +21,7 @@ The long-term goal is that generated pages come from the country model and data 
 
 - [Model architecture](model-architecture.md)
 - [US health coverage and costs](us-health-costs.md)
+- [UK capital gains realisation response](uk-capital-gains-responses.md)
 
 ## Program pages
 
