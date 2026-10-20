@@ -79,7 +79,10 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--drop-regional-release",
         action="store_true",
-        help="Remove the bundle's current regional routing on re-certification.",
+        help=(
+            "Remove the bundle's current regional routing on re-certification. "
+            "Cannot be combined with --regional-manifest-uri."
+        ),
     )
     parser.add_argument(
         "--regional-artifact-prefix",

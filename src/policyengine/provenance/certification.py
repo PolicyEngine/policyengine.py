@@ -1329,6 +1329,11 @@ def certify_data_release(
     ``regional_manifest_uri`` is refused unless ``drop_regional_release``.
     """
     certified_country = _certified_country(country)
+    if drop_regional_release and regional_manifest_uri is not None:
+        raise CertificationError(
+            "--drop-regional-release removes the bundle's regional routing, so it "
+            "cannot be combined with --regional-manifest-uri."
+        )
     model_package = COUNTRY_MODEL_PACKAGES[certified_country]
     model_version = model_version or installed_model_version(model_package)
     strategy = certification_strategy(country, data_producer)

@@ -1498,6 +1498,26 @@ class TestUKRegionalCertification:
         assert "regional_release_kind" not in release
         assert set(release["region_datasets"]) == {"national"}
 
+    def test__given_drop_and_a_regional_release__then_refuses_both(self, tmp_path):
+        # Dropping the routing and routing to a release are opposite requests;
+        # neither silently wins.
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                side_effect=AssertionError("no fetch"),
+            ),
+            pytest.raises(CertificationError, match="cannot be combined"),
+        ):
+            certify_data_release(
+                country="uk",
+                data_producer="populace",
+                manifest_uri=UK_NATIONAL_URI,
+                regional_manifest_uri=UK_DENSE_URI,
+                drop_regional_release=True,
+                model_version=UK_MODEL_VERSION,
+                bundle_path=_tmp_bundle(tmp_path),
+            )
+
     def test__given_bundle_wrapper_regional_kind__then_forwards_to_certifier(
         self, monkeypatch
     ):

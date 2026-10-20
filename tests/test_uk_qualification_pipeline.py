@@ -233,6 +233,22 @@ def test_latest_data_release_ignores_non_version_tags():
     assert latest_data_release(["1.57.4", "1.58.0", "v1.11.1", "version_a"]) == "1.58.0"
 
 
+def test_resolution_names_the_data_build_by_its_cut_tag():
+    """A release that records a cut tag is named by it, as certification
+    names it, so the ledger's data build id matches the certificate's."""
+
+    cut = "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa"
+    manifest = {
+        **MANIFEST,
+        "build": {"build_id": "microcosm-uk-2024-25-national", "cut_tag": cut},
+    }
+    manifest_bytes = json.dumps(manifest).encode()
+
+    resolved, _ = _resolver(hf_file=lambda repo, rev, path: manifest_bytes)
+
+    assert resolved.pair.data.build_id == cut
+
+
 def test_resolution_refuses_unpublished_versions():
     with pytest.raises(ValueError):
         _resolver(model_version="9.9.9")

@@ -90,7 +90,7 @@ Certification rewrites `data_releases.<country>` from the manifests it is
 given. While the bundle routes regions (`regional_source_manifest_uri` is set),
 a run without `--regional-manifest-uri` is refused; pass the current regional
 release again (or its replacement), or `--drop-regional-release` to remove the
-routing on purpose.
+routing on purpose. The two flags cannot be combined.
 
 ### US
 

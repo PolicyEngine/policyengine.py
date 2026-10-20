@@ -220,7 +220,10 @@ def _parser() -> argparse.ArgumentParser:
     certify.add_argument(
         "--drop-regional-release",
         action="store_true",
-        help="Remove the bundle's current regional routing on re-certification.",
+        help=(
+            "Remove the bundle's current regional routing on re-certification. "
+            "Cannot be combined with --regional-manifest-uri."
+        ),
     )
     certify.add_argument(
         "--regional-artifact-prefix",
