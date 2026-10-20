@@ -1885,9 +1885,9 @@ requires-dist = [
     { name = "policyengine-core", marker = "extra == 'models'", specifier = "==3.33.0" },
     { name = "policyengine-core", marker = "extra == 'uk'", specifier = "==3.33.0" },
     { name = "policyengine-core", marker = "extra == 'us'", specifier = "==3.33.0" },
-    { name = "policyengine-uk", marker = "extra == 'dev'", specifier = "==2.130.1" },
-    { name = "policyengine-uk", marker = "extra == 'models'", specifier = "==2.130.1" },
-    { name = "policyengine-uk", marker = "extra == 'uk'", specifier = "==2.130.1" },
+    { name = "policyengine-uk", marker = "extra == 'dev'", specifier = "==2.139.4" },
+    { name = "policyengine-uk", marker = "extra == 'models'", specifier = "==2.139.4" },
+    { name = "policyengine-uk", marker = "extra == 'uk'", specifier = "==2.139.4" },
     { name = "policyengine-us", marker = "extra == 'dev'", specifier = "==2.2.1" },
     { name = "policyengine-us", marker = "extra == 'models'", specifier = "==2.2.1" },
     { name = "policyengine-us", marker = "extra == 'us'", specifier = "==2.2.1" },
@@ -1937,7 +1937,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-uk"
-version = "2.130.1"
+version = "2.139.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -1945,9 +1945,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "tables" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/17/27/82a97f5ec344d4be34db17bd26fe35077f1fe22f15c99818514d704262e9/policyengine_uk-2.130.1.tar.gz", hash = "sha256:1ce0a924a847b4e3e8ea8ba9702a84b267a0490c84a55ef94da6ed2efd965b34", size = 2496922, upload-time = "2026-10-14T01:58:47.232Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/3a/bbabed78bc677ec4fddc9faeb28bc76bf275452448e4d4882fc1185c93ff/policyengine_uk-2.139.4.tar.gz", hash = "sha256:75983abfc08f1d90b17fc12a89f7e56c5a6fa9d8fb78190db62656d91e5ed46e", size = 2898003, upload-time = "2026-10-20T03:21:18.263Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/21/88e8addba0eabd9a7d3a29fa5293e141feb405baf0432209387f9a1f467a/policyengine_uk-2.130.1-py3-none-any.whl", hash = "sha256:f8b1b8b917c9297ff66937811dbebd9a62d3b1796ce894c326e98051cac4c873", size = 3804651, upload-time = "2026-10-14T01:58:44.937Z" },
+    { url = "https://files.pythonhosted.org/packages/54/58/b64856ef5dbc55eff515d0517993daf57ef6bf093cf336f44cc56a6ef1f5/policyengine_uk-2.139.4-py3-none-any.whl", hash = "sha256:3e1cf5ffd5bd5478c5ea53b9263fcf8b9688654b818db5d2cfeee1830ba21884", size = 4297929, upload-time = "2026-10-20T03:21:16.065Z" },
 ]
 
 [[package]]
