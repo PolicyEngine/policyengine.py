@@ -19,9 +19,17 @@ Invariants:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
 from pydantic import ValidationError
 
+from policyengine.provenance.certification import (
+    CertificationError,
+    certify_data_release,
+)
 from policyengine.provenance.manifest import (
     DataReleaseManifest,
     release_build_id,
@@ -184,3 +192,272 @@ class TestBuildFolderManifest:
         )
         dumped = manifest.model_dump(mode="json", exclude_none=True)
         assert dumped["build"]["build_id"] == NATIONAL_RELEASE
+
+
+NATIONAL_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+DENSE_RELEASE = "microcosm-uk-2024-25-dense"
+DENSE_BUILD = "uk-frs-calibration-attempt-20261019T000432Z-4e5f6a7b"
+DENSE_COMMIT = "89abcdef0123456789abcdef0123456789abcdef"
+NATIONAL_FOLDER = f"releases/{NATIONAL_RELEASE}/{NATIONAL_BUILD}"
+DENSE_FOLDER = f"releases/{DENSE_RELEASE}/{DENSE_BUILD}"
+
+
+def manifest_uri(folder: str, revision: str) -> str:
+    return f"hf://dataset/{REPOSITORY}@{revision}/{folder}/release_manifest.json"
+
+
+NATIONAL_URI = manifest_uri(NATIONAL_FOLDER, NATIONAL_COMMIT)
+DENSE_URI = manifest_uri(DENSE_FOLDER, DENSE_COMMIT)
+
+
+def folder_layout_dense_payload() -> dict:
+    """A local-area release manifest in the side-by-side layout."""
+
+    return {
+        "schema_version": 1,
+        "release": DENSE_RELEASE,
+        "build": DENSE_BUILD,
+        "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+        "dataset_role": "non_default_local_area",
+        "is_default": False,
+        "default_datasets": {},
+        "compatible_model_packages": [
+            {"name": "policyengine-uk", "specifier": f"=={UK_MODEL_VERSION}"}
+        ],
+        "artifacts": {
+            "microcosm_uk_2024_25_dense": {
+                "kind": "microdata",
+                "role": "dataset",
+                "path": "microcosm_uk_2024_25_dense.h5",
+                "repo_id": REPOSITORY,
+                "sha256": "c" * 64,
+            },
+        },
+    }
+
+
+def manifest_response(payload: dict) -> MagicMock:
+    response = MagicMock()
+    response.status_code = 200
+    response.content = json.dumps(payload).encode()
+    response.text = response.content.decode()
+    response.raise_for_status.return_value = None
+    return response
+
+
+def empty_bundle(tmp_path: Path) -> Path:
+    bundle_path = tmp_path / "manifest.json"
+    bundle_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "bundle_version": "9.9.9",
+                "policyengine_version": "9.9.9",
+                "packages": {
+                    "policyengine": {"name": "policyengine", "version": "9.9.9"},
+                    "policyengine-uk": {"name": "policyengine-uk", "version": "2.0.0"},
+                },
+                "extras": {},
+                "countries": {"uk": {"model_package": "policyengine-uk"}},
+                "data_releases": {},
+            }
+        )
+        + "\n"
+    )
+    return bundle_path
+
+
+def certify_uk(
+    bundle_path: Path,
+    manifests: list[dict],
+    manifest_uri: str = NATIONAL_URI,
+    **options,
+):
+    """Certify with fetched manifests and reachability checks replaced."""
+
+    with (
+        patch(
+            "policyengine.provenance.certification.requests.get",
+            side_effect=[manifest_response(payload) for payload in manifests],
+        ),
+        patch(
+            "policyengine.provenance.certification.head_artifact",
+            return_value=True,
+        ) as head_artifact,
+        patch(
+            "policyengine.provenance.certification.head_artifact_reference",
+            return_value=True,
+        ),
+        patch(
+            "policyengine.provenance.certification.fetch_pypi_wheel_metadata",
+            return_value={"sha256": "d" * 64, "url": "https://example"},
+        ),
+        patch(
+            "policyengine.provenance.certification.policyengine_version",
+            return_value="9.9.9",
+        ),
+    ):
+        result = certify_data_release(
+            country="uk",
+            data_producer="populace",
+            manifest_uri=manifest_uri,
+            model_version=UK_MODEL_VERSION,
+            bundle_path=bundle_path,
+            **options,
+        )
+    release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+    return result, release, head_artifact
+
+
+class TestCertifyBuildFolder:
+    def test__given_folder_layout_release__then_datasets_are_pinned_in_its_folder(
+        self, tmp_path
+    ):
+        _, release, _ = certify_uk(
+            empty_bundle(tmp_path), [folder_layout_manifest_payload()]
+        )
+
+        assert release["datasets"]["microcosm_uk_2024_25"] == {
+            "path": f"{NATIONAL_FOLDER}/microcosm_uk_2024_25.h5",
+            "revision": NATIONAL_COMMIT,
+            "repo_id": REPOSITORY,
+            "sha256": "a" * 64,
+        }
+        assert release["datasets"]["calibration_diagnostics"]["path"] == (
+            f"{NATIONAL_FOLDER}/calibration_diagnostics.json"
+        )
+        assert release["region_datasets"]["national"] == {
+            "path_template": f"{NATIONAL_FOLDER}/microcosm_uk_2024_25.h5"
+        }
+        assert release["default_dataset_uri"] == (
+            f"hf://{REPOSITORY}/{NATIONAL_FOLDER}/microcosm_uk_2024_25.h5"
+            f"@{NATIONAL_COMMIT}"
+        )
+
+    def test__given_folder_layout_release__then_runtime_reads_its_folder_manifest(
+        self, tmp_path
+    ):
+        _, release, _ = certify_uk(
+            empty_bundle(tmp_path), [folder_layout_manifest_payload()]
+        )
+
+        assert release["data_package"]["release_manifest_path"] == (
+            f"{NATIONAL_FOLDER}/release_manifest.json"
+        )
+        assert release["data_package"]["release_manifest_revision"] == (NATIONAL_COMMIT)
+
+    def test__given_folder_layout_release__then_its_build_names_the_certificate(
+        self, tmp_path
+    ):
+        result, release, _ = certify_uk(
+            empty_bundle(tmp_path), [folder_layout_manifest_payload()]
+        )
+
+        assert release["version"] == NATIONAL_BUILD
+        assert release["certification"]["data_build_id"] == NATIONAL_BUILD
+        assert release["certified_data_artifact"]["build_id"] == NATIONAL_BUILD
+        assert result.build_id == NATIONAL_BUILD
+
+    def test__given_folder_layout_release__then_checks_the_dataset_in_its_folder(
+        self, tmp_path
+    ):
+        _, _, head_artifact = certify_uk(
+            empty_bundle(tmp_path), [folder_layout_manifest_payload()]
+        )
+
+        checked = head_artifact.call_args.args[0]
+        assert (checked.path, checked.revision) == (
+            f"{NATIONAL_FOLDER}/microcosm_uk_2024_25.h5",
+            NATIONAL_COMMIT,
+        )
+
+    def test__given_artifacts_without_revision__then_certified_revision_pins_them(
+        self, tmp_path
+    ):
+        payload = folder_layout_manifest_payload()
+        for artifact in payload["artifacts"].values():
+            del artifact["revision"]
+
+        _, release, _ = certify_uk(empty_bundle(tmp_path), [payload])
+
+        assert {dataset["revision"] for dataset in release["datasets"].values()} == {
+            NATIONAL_COMMIT
+        }
+
+    def test__given_manifest_read_from_another_build_folder__then_refuses(
+        self, tmp_path
+    ):
+        other_folder = f"releases/{NATIONAL_RELEASE}/{EARLIER_NATIONAL_BUILD}"
+
+        with pytest.raises(CertificationError, match=NATIONAL_BUILD):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [folder_layout_manifest_payload()],
+                manifest_uri=manifest_uri(other_folder, NATIONAL_COMMIT),
+            )
+
+    def test__given_artifact_outside_its_build_folder__then_refuses(self, tmp_path):
+        payload = folder_layout_manifest_payload()
+        payload["artifacts"]["microcosm_uk_2024_25"]["path"] = (
+            f"releases/{NATIONAL_RELEASE}/{EARLIER_NATIONAL_BUILD}/"
+            "microcosm_uk_2024_25.h5"
+        )
+
+        with pytest.raises(CertificationError, match="outside"):
+            certify_uk(empty_bundle(tmp_path), [payload])
+
+    def test__given_artifact_from_another_repository__then_keeps_its_own_pins(
+        self, tmp_path
+    ):
+        payload = folder_layout_manifest_payload()
+        payload["artifacts"]["frs_2024_25"] = {
+            "kind": "microdata",
+            "path": "frs_2024_25.h5",
+            "repo_id": "policyengine/policyengine-uk-data-private",
+            "revision": "1.58.0",
+            "sha256": "e" * 64,
+        }
+
+        _, release, _ = certify_uk(empty_bundle(tmp_path), [payload])
+
+        inherited = release["datasets"]["frs_2024_25"]
+        assert (inherited["path"], inherited["revision"]) == (
+            "frs_2024_25.h5",
+            "1.58.0",
+        )
+
+    def test__given_folder_layout_local_area_release__then_areas_use_its_folder(
+        self, tmp_path
+    ):
+        _, release, _ = certify_uk(
+            empty_bundle(tmp_path),
+            [folder_layout_manifest_payload(), folder_layout_dense_payload()],
+            regional_manifest_uri=DENSE_URI,
+        )
+
+        dense_path = f"{DENSE_FOLDER}/microcosm_uk_2024_25_dense.h5"
+        assert release["regional_release_kind"] == "local_area"
+        for region_type in ("constituency", "local_authority"):
+            assert release["region_datasets"][region_type] == {
+                "path_template": dense_path
+            }
+        dense = release["datasets"]["microcosm_uk_2024_25_dense"]
+        assert (dense["path"], dense["revision"]) == (dense_path, DENSE_COMMIT)
+
+    def test__given_tagged_release__then_paths_and_tag_are_as_before(self, tmp_path):
+        tag = f"{NATIONAL_RELEASE}-20261019T083323Z-6cba5d71"
+
+        result, release, _ = certify_uk(
+            empty_bundle(tmp_path),
+            [tagged_layout_manifest_payload()],
+            manifest_uri=manifest_uri(f"releases/{NATIONAL_RELEASE}", tag),
+        )
+
+        assert release["datasets"]["microcosm_uk_2024_25"]["path"] == (
+            "microcosm_uk_2024_25.h5"
+        )
+        assert release["datasets"]["microcosm_uk_2024_25"]["revision"] == tag
+        assert release["datasets"]["calibration_diagnostics"]["path"] == (
+            f"releases/{NATIONAL_RELEASE}/calibration_diagnostics.json"
+        )
+        assert result.build_id == tag

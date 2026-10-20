@@ -36,6 +36,15 @@ class DataReleaseManifestUnavailableError(ValueError):
     """Raised when a data release manifest cannot be fetched or is absent."""
 
 
+class ReleaseBuildFolderError(ValueError):
+    """A build in its own release folder that does not match that folder.
+
+    Its manifest names another release or build than the folder it was read
+    from, or one of its own files lies outside the folder. Unlike an
+    unavailable manifest, this is never covered by a bundled certificate.
+    """
+
+
 class PackageVersion(BaseModel):
     name: str
     version: str
@@ -145,7 +154,7 @@ class DataReleaseArtifact(BaseModel):
     revision: Optional[str] = None
     """Required unless the manifest is a build in its own release folder,
     whose own files are pinned at the revision its manifest is certified at
-    (``pin_build_folder_artifacts``)."""
+    (``read_build_folder``)."""
     repo_type: Optional[Literal["model", "dataset"]] = None
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
@@ -318,6 +327,57 @@ class CountryReleaseManifest(BaseModel):
         ):
             return self.certified_data_artifact.uri
         return resolve_dataset_reference(self.country_id, self.default_dataset)
+
+
+def read_build_folder(
+    manifest: DataReleaseManifest,
+    *,
+    repo_id: str,
+    manifest_path: str,
+    revision: str,
+) -> DataReleaseManifest:
+    """Pin a build published in its own release folder to that folder.
+
+    ``manifest_path`` and ``revision`` say where the manifest was read from in
+    ``repo_id``. The manifest must be the one in its own build folder,
+    ``releases/<release>/<build>/release_manifest.json``. Its own files (the
+    artifacts in ``repo_id``) are then pinned at
+    ``releases/<release>/<build>/<file>`` and at ``revision``: the publisher
+    writes a build's files and its manifest in one commit and never changes
+    them afterwards, so any revision holding the manifest holds the same
+    files, while an artifact's own ``revision`` field cannot name that commit.
+    Artifacts in other repositories keep their own paths and pins.
+
+    A manifest published before that layout is returned unchanged.
+
+    Raises:
+        ReleaseBuildFolderError: If the manifest was read from another folder,
+            or one of its own files lies outside the folder.
+    """
+
+    folder = manifest.build_folder
+    if folder is None:
+        return manifest
+    expected_path = f"{folder}/{RELEASE_MANIFEST_NAME}"
+    if manifest_path != expected_path:
+        raise ReleaseBuildFolderError(
+            f"The release manifest at {manifest_path} names release "
+            f"{manifest.release} and build {release_build_id(manifest.build)}, "
+            f"whose manifest is {expected_path}."
+        )
+    pinned = manifest.model_copy(deep=True)
+    for name, artifact in pinned.artifacts.items():
+        if artifact.repo_id != repo_id:
+            continue
+        if "/" not in artifact.path:
+            artifact.path = f"{folder}/{artifact.path}"
+        elif not artifact.path.startswith(f"{folder}/"):
+            raise ReleaseBuildFolderError(
+                f"Artifact {name!r} ({artifact.path}) is outside its build "
+                f"folder {folder}/."
+            )
+        artifact.revision = revision
+    return pinned
 
 
 def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:

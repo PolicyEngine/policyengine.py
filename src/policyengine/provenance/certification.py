@@ -29,6 +29,11 @@ exact pair.
 Pin the cut tag (``@<cut-tag>``), never a branch: a release line's directory
 (``releases/<release-id>/``) is rewritten by each cut.
 
+A build published in its own folder (``releases/<release>/<build>/``, named
+by its manifest's ``release`` and ``build`` strings) has no tag. Certify it
+from that folder at the commit that published it; its own files are pinned
+inside the folder at that revision, and its ``build`` names the certificate.
+
 ``scripts/bundle.py certify-data`` is the operator-facing wrapper. Network
 access is required (HF manifest fetch + PyPI wheel metadata). Countries whose
 data release predates release manifests need a dedicated data-producer strategy
@@ -56,8 +61,10 @@ from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
     DataReleaseManifest,
     RegionalReleaseKind,
+    ReleaseBuildFolderError,
     _specifier_matches,
     fetch_pypi_wheel_metadata,
+    read_build_folder,
     release_build_id,
 )
 
@@ -245,7 +252,11 @@ def fetch_release_manifest(
     token: Optional[str] = None,
 ) -> tuple[DataReleaseManifest, str, dict]:
     """Fetch and parse the data release manifest; returns
-    (manifest, sha256 of the fetched bytes, parsed URI parts)."""
+    (manifest, sha256 of the fetched bytes, parsed URI parts).
+
+    A build published in its own release folder must be read from that
+    folder, and its own files are pinned inside it at the URI's revision
+    (``read_build_folder``)."""
     parts = parse_manifest_uri(manifest_uri)
     url = https_manifest_url(parts)
     headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -258,6 +269,15 @@ def fetch_release_manifest(
     sha256 = hashlib.sha256(response.content).hexdigest()
     payload = json.loads(response.content)
     manifest = DataReleaseManifest.model_validate(payload)
+    try:
+        manifest = read_build_folder(
+            manifest,
+            repo_id=parts["repo_id"],
+            manifest_path=parts["path"],
+            revision=parts["revision"],
+        )
+    except ReleaseBuildFolderError as exc:
+        raise CertificationError(str(exc)) from exc
     return manifest, sha256, parts
 
 
