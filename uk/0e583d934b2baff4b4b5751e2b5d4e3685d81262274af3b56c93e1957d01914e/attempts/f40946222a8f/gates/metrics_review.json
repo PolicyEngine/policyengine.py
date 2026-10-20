@@ -1,0 +1,2430 @@
+{
+  "data_only": {
+    "candidate_report_sha256": "7e3f3699f15619b8d4f674bb502d6301b6468c31624e5a941868ede5e61c1e2e",
+    "hard_check_failures": [],
+    "hard_checks_not_run": [],
+    "lined_up_totals": [],
+    "lost_checks": [],
+    "metrics_version": "policyengine-uk-aggregate-impact/1+2e07ec2dcecd5de3+bb5198a0d8e7c046",
+    "metrics_without_baseline": [],
+    "moves_beyond_bounds": [
+      {
+        "candidate": 1080679.7641469538,
+        "change": 63526.77255064249,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 1017152.9915963113,
+        "threshold": 50000.0,
+        "year": 2025
+      },
+      {
+        "candidate": 1086552.9550888538,
+        "change": 58751.33254146576,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 1027801.6225473881,
+        "threshold": 50000.0,
+        "year": 2026
+      },
+      {
+        "candidate": 1087474.6412611008,
+        "change": 59569.09319652617,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 1027905.5480645746,
+        "threshold": 50000.0,
+        "year": 2027
+      },
+      {
+        "candidate": 1093222.0057727993,
+        "change": 60633.364680469036,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 1032588.6410923302,
+        "threshold": 50000.0,
+        "year": 2028
+      },
+      {
+        "candidate": 1097250.817772001,
+        "change": 63605.88133108616,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 1033644.9364409149,
+        "threshold": 50000.0,
+        "year": 2029
+      },
+      {
+        "candidate": 1097707.787755102,
+        "change": 59830.59443448484,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 1037877.1933206171,
+        "threshold": 50000.0,
+        "year": 2030
+      },
+      {
+        "candidate": 1088090.0283623934,
+        "change": 64932.26322993636,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 1023157.765132457,
+        "threshold": 50000.0,
+        "year": 2031
+      },
+      {
+        "candidate": 17783.58615070699,
+        "change": 76.88662133353137,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 17706.699529373458,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 18121.02634367666,
+        "change": 124.23567895455199,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 17996.79066472211,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 18097.43544703235,
+        "change": 156.02161576514118,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 17941.413831267208,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 18219.30510009099,
+        "change": 201.75247798483178,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 18017.55262210616,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 18501.479588644463,
+        "change": 175.59701915394908,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 18325.882569490514,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 18714.53353152376,
+        "change": 192.1073367208919,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 18522.42619480287,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 18860.303139127296,
+        "change": 174.81429645747266,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 18685.488842669823,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 120255.23475086738,
+        "change": 2589.0426981194323,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 117666.19205274795,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 123591.68970234966,
+        "change": 3058.7254924591252,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 120532.96420989053,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 128631.61669690866,
+        "change": 6184.0054771296855,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 122447.61121977898,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 127476.19612612296,
+        "change": 2867.284493540239,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 124608.91163258272,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 129487.14575815875,
+        "change": 2519.277693628377,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 126967.86806453037,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 133011.43063932547,
+        "change": 3332.242883778832,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 129679.18775554663,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 135381.54641803133,
+        "change": 2504.426920103142,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 132877.1194979282,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 28585.26656180492,
+        "change": 220.42527819257884,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 28364.841283612343,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 29354.02879964728,
+        "change": 313.09794896919266,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 29040.930850678087,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 28732.630590084733,
+        "change": 52.076902392735064,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 28680.553687691998,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 29071.151525196234,
+        "change": 70.47164507559137,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 29000.679880120642,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 29345.77944224818,
+        "change": -35.228221546847635,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 29381.007663795026,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 29762.890927226763,
+        "change": -19.16837945986117,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 29782.059306686624,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 30308.583022965184,
+        "change": -24.20083973128203,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 30332.783862696466,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 34793.96275325509,
+        "change": 186.82232539695542,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 34607.14042785813,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 35936.00523399293,
+        "change": 38.38581199916371,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 35897.61942199377,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 36711.39994560284,
+        "change": 212.07674107218918,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 36499.32320453065,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 37145.33832327186,
+        "change": 143.24255377119698,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 37002.095769500665,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 37629.63145118086,
+        "change": 354.75623444811936,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 37274.87521673274,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 38276.760870212056,
+        "change": 321.8687710414597,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 37954.892099170596,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 39100.48460681799,
+        "change": 438.94616117123223,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 38661.53844564676,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 39231.5720322795,
+        "change": -94.25227324596926,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 39325.82430552547,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 40820.3577729309,
+        "change": -84.24058217660058,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 40904.598355107504,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 42033.70171249999,
+        "change": 101.30640733925975,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 41932.39530516073,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 42754.82870432601,
+        "change": -69.00479382064805,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 42823.83349814666,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 43169.1706124647,
+        "change": -7.214621982318931,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 43176.38523444702,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 43811.19661897812,
+        "change": -24.424873167321493,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 43835.621492145445,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 44623.3466565198,
+        "change": -312.5169958689148,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 44935.86365238872,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 43621.13092558722,
+        "change": -1252.7896547462078,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 44873.920580333426,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 44775.255871803114,
+        "change": -1378.1723816868398,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 46153.428253489954,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 45234.421313890605,
+        "change": -1696.1284337758698,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 46930.549747666475,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 45716.89400232828,
+        "change": -1730.3437479899949,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 47447.23775031827,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 46619.26690478366,
+        "change": -1761.8343234080821,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 48381.10122819174,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 47756.89295434272,
+        "change": -1497.8061598655331,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 49254.699114208255,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 48974.978090702185,
+        "change": -1101.232221417864,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 50076.21031212005,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 47467.41506625024,
+        "change": -463.38828848909907,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 47930.80335473934,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 49034.75547530032,
+        "change": -289.6893843370999,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 49324.44485963742,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 50104.119109504434,
+        "change": -167.97400796935108,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 50272.093117473785,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 51074.92286226975,
+        "change": 24.43814129167731,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 51050.48472097807,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 52070.77080492585,
+        "change": -89.61829484056216,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 52160.38909976641,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 52675.57565317661,
+        "change": -252.95678702452278,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 52928.53244020113,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 53631.67603930345,
+        "change": -612.8269564551592,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 54244.50299575861,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 56651.58007063708,
+        "change": 329.95451141145895,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 56321.62555922562,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 58058.16314825369,
+        "change": 479.14325832655595,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 57579.019889927134,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 59006.722599974506,
+        "change": 534.6343340601597,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 58472.088265914346,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 60006.96097613326,
+        "change": 557.9740520306805,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 59448.98692410258,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 60757.69098429896,
+        "change": 591.8063994977638,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 60165.8845848012,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 62019.33546325622,
+        "change": 387.62133592705504,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 61631.71412732916,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 63575.1336469683,
+        "change": 692.0148437285461,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 62883.118803239755,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 69585.98024885524,
+        "change": 333.9939418854192,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 69251.98630696982,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 70617.52508168056,
+        "change": 253.52344707478187,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 70364.00163460578,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 71766.51359554847,
+        "change": 127.010565617049,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 71639.50302993142,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 72902.32133621453,
+        "change": 28.315743769082474,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 72874.00559244545,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 74253.4236367895,
+        "change": -83.69129516053363,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 74337.11493195004,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 75650.64500801114,
+        "change": -53.022413464583224,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 75703.66742147572,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 77755.69559682999,
+        "change": 181.44389443179534,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 77574.25170239819,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 79829.27827532642,
+        "change": 154.935599948687,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 79674.34267537773,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 81472.48440767241,
+        "change": -536.0824393492367,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 82008.56684702165,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 81481.16877015875,
+        "change": -1765.8673904102325,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 83247.03616056898,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 84470.12938077416,
+        "change": 21.196114687030786,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 84448.93326608713,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 85892.67453735453,
+        "change": -244.43665710368077,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 86137.11119445821,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 87474.68232510162,
+        "change": -274.23607278270356,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 87748.91839788432,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 89766.6640009481,
+        "change": -191.26225647602405,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 89957.92625742413,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 3130000186.8040895,
+        "change": 690.4959945678711,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3129999496.308095,
+        "threshold": 1.0,
+        "year": 2025
+      },
+      {
+        "candidate": 3129999971.99533,
+        "change": 260.99209928512573,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3129999711.0032306,
+        "threshold": 1.0,
+        "year": 2026
+      },
+      {
+        "candidate": 3129999631.1044636,
+        "change": 111.60599946975708,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3129999519.498464,
+        "threshold": 1.0,
+        "year": 2027
+      },
+      {
+        "candidate": 3129999740.4218974,
+        "change": -509.8525457382202,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3130000250.274443,
+        "threshold": 1.0,
+        "year": 2028
+      },
+      {
+        "candidate": 3129999738.05803,
+        "change": -391.0358057022095,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3130000129.093836,
+        "threshold": 1.0,
+        "year": 2029
+      },
+      {
+        "candidate": 3130000007.6632347,
+        "change": 112.65583801269531,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3129999895.0073967,
+        "threshold": 1.0,
+        "year": 2030
+      },
+      {
+        "candidate": 3130000082.916593,
+        "change": -223.14581155776978,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3130000306.0624046,
+        "threshold": 1.0,
+        "year": 2031
+      },
+      {
+        "candidate": 0.1335039070707536,
+        "change": 0.008026061528265183,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_ahc.pensioners",
+        "previous": 0.12547784554248842,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 0.12767413722182067,
+        "change": 0.0053712156521118215,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_ahc.pensioners",
+        "previous": 0.12230292156970884,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 0.23082277302171383,
+        "change": -0.006458031502390715,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_bhc.children",
+        "previous": 0.23728080452410455,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 0.21043584694716616,
+        "change": -0.005288123650543458,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_bhc.children",
+        "previous": 0.21572397059770962,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 0.2093328070459869,
+        "change": -0.00502415204944473,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_bhc.children",
+        "previous": 0.21435695909543162,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 0.30533210156622415,
+        "change": -0.00897113007577277,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_ahc.children",
+        "previous": 0.3143032316419969,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 0.3119884896963923,
+        "change": -0.006063943620276402,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_ahc.children",
+        "previous": 0.3180524333166687,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 0.13933127392079048,
+        "change": 0.006097282984609875,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_ahc.pensioners",
+        "previous": 0.1332339909361806,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 0.13464717654102842,
+        "change": 0.007204439938545859,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_ahc.pensioners",
+        "previous": 0.12744273660248256,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 0.22973184730500504,
+        "change": -0.005206684402260658,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_bhc.children",
+        "previous": 0.2349385317072657,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 0.22681043777606127,
+        "change": -0.0054945664242773695,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_bhc.children",
+        "previous": 0.23230500420033864,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 0.22665949658590914,
+        "change": -0.0059517207784269,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_bhc.children",
+        "previous": 0.23261121736433604,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 0.22653072367605653,
+        "change": -0.007417626738997429,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_bhc.children",
+        "previous": 0.23394835041505396,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 1595707.3895641267,
+        "change": 100082.19701650739,
+        "kind": "poverty_count",
+        "metric_id": "poverty_count.absolute_ahc.pensioners",
+        "previous": 1495625.1925476193,
+        "threshold": 100000.0,
+        "year": 2025
+      },
+      {
+        "candidate": 10770263326.732622,
+        "change": 713405132.1321106,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 10056858194.600512,
+        "threshold": 500000000.0,
+        "year": 2025
+      },
+      {
+        "candidate": 11267406910.165956,
+        "change": 712304094.6693363,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 10555102815.49662,
+        "threshold": 500000000.0,
+        "year": 2026
+      },
+      {
+        "candidate": 11728861960.397303,
+        "change": 746237099.8961849,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 10982624860.501118,
+        "threshold": 500000000.0,
+        "year": 2027
+      },
+      {
+        "candidate": 12174742264.091955,
+        "change": 779147140.9255543,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 11395595123.1664,
+        "threshold": 500000000.0,
+        "year": 2028
+      },
+      {
+        "candidate": 12623430069.641527,
+        "change": 812356831.733427,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 11811073237.9081,
+        "threshold": 500000000.0,
+        "year": 2029
+      },
+      {
+        "candidate": 13064755064.069801,
+        "change": 839454077.5737419,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 12225300986.49606,
+        "threshold": 500000000.0,
+        "year": 2030
+      },
+      {
+        "candidate": 13512143667.064703,
+        "change": 872279979.5311317,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 12639863687.533571,
+        "threshold": 500000000.0,
+        "year": 2031
+      }
+    ],
+    "new_warnings": [],
+    "newly_skipped_checks": [],
+    "partition_version": "0d0426ee9e389078e03d0f6a6e75ade68c52e9118f3b883c28fa50122c72c5c5",
+    "preexisting_check_failures": [
+      "sign:vat"
+    ],
+    "previous_partition_version": "0d0426ee9e389078e03d0f6a6e75ade68c52e9118f3b883c28fa50122c72c5c5",
+    "previous_report_sha256": "511f9273e00eb0fbfb87f04386737b14d0a4685df074a54a637c6f4dd1775157",
+    "regressed_checks": [],
+    "skipped_checks": [
+      "sign:disabled_students_allowance"
+    ],
+    "suppressed_metrics": [
+      "caseloads.disabled_students_allowance 2025",
+      "caseloads.disabled_students_allowance 2026",
+      "caseloads.disabled_students_allowance 2027",
+      "caseloads.disabled_students_allowance 2028",
+      "caseloads.disabled_students_allowance 2029",
+      "caseloads.disabled_students_allowance 2030",
+      "caseloads.disabled_students_allowance 2031",
+      "spending.disabled_students_allowance 2025",
+      "spending.disabled_students_allowance 2026",
+      "spending.disabled_students_allowance 2027",
+      "spending.disabled_students_allowance 2028",
+      "spending.disabled_students_allowance 2029",
+      "spending.disabled_students_allowance 2030",
+      "spending.disabled_students_allowance 2031"
+    ],
+    "suppressed_on_both_sides": 14,
+    "unknown_status_checks": [],
+    "values_withheld": false,
+    "warn_identities": [
+      "inert:alcohol_duty",
+      "inert:tobacco_duty",
+      "inert:vehicle_excise_duty",
+      "inert:high_value_council_tax_surcharge",
+      "inert:jsa_income",
+      "inert:income_support",
+      "inert:working_tax_credit",
+      "inert:child_tax_credit",
+      "inert:incapacity_benefit",
+      "inert:scottish_carer_supplement",
+      "inert:war_widows_pension",
+      "inert:maternity_allowance",
+      "inert:statutory_paternity_pay",
+      "inert:care_to_learn",
+      "inert:childcare_grant",
+      "inert:travel_grant",
+      "inert:bursary_fund_16_to_19"
+    ],
+    "withheld_changes": []
+  },
+  "model_only": {
+    "candidate_report_sha256": "511f9273e00eb0fbfb87f04386737b14d0a4685df074a54a637c6f4dd1775157",
+    "hard_check_failures": [],
+    "hard_checks_not_run": [],
+    "lined_up_totals": [],
+    "lost_checks": [],
+    "metrics_version": "policyengine-uk-aggregate-impact/1+2e07ec2dcecd5de3+bb5198a0d8e7c046",
+    "metrics_without_baseline": [
+      "caseloads.war_widows_pension 2025",
+      "caseloads.war_widows_pension 2026",
+      "caseloads.war_widows_pension 2027",
+      "caseloads.war_widows_pension 2028",
+      "caseloads.war_widows_pension 2029",
+      "caseloads.war_widows_pension 2030",
+      "caseloads.war_widows_pension 2031",
+      "spending.war_widows_pension 2025",
+      "spending.war_widows_pension 2026",
+      "spending.war_widows_pension 2027",
+      "spending.war_widows_pension 2028",
+      "spending.war_widows_pension 2029",
+      "spending.war_widows_pension 2030",
+      "spending.war_widows_pension 2031"
+    ],
+    "moves_beyond_bounds": [
+      {
+        "candidate": 362805805663.7392,
+        "change": -66927477219.07355,
+        "kind": "balance",
+        "metric_id": "balance.balance",
+        "previous": 429733282882.81274,
+        "threshold": 8594665657.656256,
+        "year": 2025
+      },
+      {
+        "candidate": 388283069924.76953,
+        "change": -69354735155.55164,
+        "kind": "balance",
+        "metric_id": "balance.balance",
+        "previous": 457637805080.32117,
+        "threshold": 9152756101.606424,
+        "year": 2026
+      },
+      {
+        "candidate": 418900765185.38745,
+        "change": -71389505520.16162,
+        "kind": "balance",
+        "metric_id": "balance.balance",
+        "previous": 490290270705.5491,
+        "threshold": 9805805414.110981,
+        "year": 2027
+      },
+      {
+        "candidate": 444981937175.4225,
+        "change": -73434565122.09778,
+        "kind": "balance",
+        "metric_id": "balance.balance",
+        "previous": 518416502297.52026,
+        "threshold": 10368330045.950405,
+        "year": 2028
+      },
+      {
+        "candidate": 471998374916.74774,
+        "change": -76772087124.86871,
+        "kind": "balance",
+        "metric_id": "balance.balance",
+        "previous": 548770462041.61646,
+        "threshold": 10975409240.832329,
+        "year": 2029
+      },
+      {
+        "candidate": 499519498374.1393,
+        "change": -83781820601.76038,
+        "kind": "balance",
+        "metric_id": "balance.balance",
+        "previous": 583301318975.8997,
+        "threshold": 11666026379.517994,
+        "year": 2030
+      },
+      {
+        "candidate": 531196803198.20996,
+        "change": -86546321728.6499,
+        "kind": "balance",
+        "metric_id": "balance.balance",
+        "previous": 617743124926.8599,
+        "threshold": 12354862498.537197,
+        "year": 2031
+      },
+      {
+        "candidate": 899389105907.8698,
+        "change": -67226671220.971436,
+        "kind": "balance",
+        "metric_id": "balance.receipts",
+        "previous": 966615777128.8412,
+        "threshold": 19332315542.576824,
+        "year": 2025
+      },
+      {
+        "candidate": 939214890548.8618,
+        "change": -69440057647.74426,
+        "kind": "balance",
+        "metric_id": "balance.receipts",
+        "previous": 1008654948196.6061,
+        "threshold": 20173098963.93212,
+        "year": 2026
+      },
+      {
+        "candidate": 976165250594.341,
+        "change": -71315215760.69702,
+        "kind": "balance",
+        "metric_id": "balance.receipts",
+        "previous": 1047480466355.038,
+        "threshold": 20949609327.10076,
+        "year": 2027
+      },
+      {
+        "candidate": 1009314390832.2336,
+        "change": -73169644066.1405,
+        "kind": "balance",
+        "metric_id": "balance.receipts",
+        "previous": 1082484034898.3741,
+        "threshold": 21649680697.967484,
+        "year": 2028
+      },
+      {
+        "candidate": 1044889723595.586,
+        "change": -76245397375.52014,
+        "kind": "balance",
+        "metric_id": "balance.receipts",
+        "previous": 1121135120971.1062,
+        "threshold": 22422702419.422123,
+        "year": 2029
+      },
+      {
+        "candidate": 1081664019471.0178,
+        "change": -78659480291.09619,
+        "kind": "balance",
+        "metric_id": "balance.receipts",
+        "previous": 1160323499762.114,
+        "threshold": 23206469995.24228,
+        "year": 2030
+      },
+      {
+        "candidate": 1122504157278.5747,
+        "change": -81348715138.11865,
+        "kind": "balance",
+        "metric_id": "balance.receipts",
+        "previous": 1203852872416.6934,
+        "threshold": 24077057448.333866,
+        "year": 2031
+      },
+      {
+        "candidate": 1033644.9364409149,
+        "change": 60851.711124897,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 972793.2253160179,
+        "threshold": 50000.0,
+        "year": 2029
+      },
+      {
+        "candidate": 1037877.1933206171,
+        "change": 57129.1904976964,
+        "kind": "caseload",
+        "metric_id": "caseloads.tax_free_childcare",
+        "previous": 980748.0028229207,
+        "threshold": 50000.0,
+        "year": 2030
+      },
+      {
+        "candidate": 17706.699529373458,
+        "change": -620.9722437230266,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 18327.671773096485,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 17996.79066472211,
+        "change": -640.0671184035455,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 18636.857783125655,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 17941.413831267208,
+        "change": -629.5435211337208,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 18570.95735240093,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 18017.55262210616,
+        "change": -633.348023653256,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 18650.900645759415,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 18325.882569490514,
+        "change": -677.0727633234528,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 19002.955332813966,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 18522.42619480287,
+        "change": -567.7363660015726,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 19090.16256080444,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 18685.488842669823,
+        "change": -625.2584928966862,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.1",
+        "previous": 19310.74733556651,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 117666.19205274795,
+        "change": -363.84912961781083,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 118030.04118236576,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 120532.96420989053,
+        "change": -293.067170955459,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 120826.03138084599,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 122447.61121977898,
+        "change": -144.90115326874366,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 122592.51237304772,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 124608.91163258272,
+        "change": 269.3037453534198,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 124339.6078872293,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 126967.86806453037,
+        "change": 748.5759312477312,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 126219.29213328264,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 129679.18775554663,
+        "change": 1192.5187019701843,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 128486.66905357645,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 132877.1194979282,
+        "change": 1245.7904668228002,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.10",
+        "previous": 131631.3290311054,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 28364.841283612343,
+        "change": 185.78548017410867,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 28179.055803438234,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 29040.930850678087,
+        "change": 203.88551949894827,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 28837.04533117914,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 28680.553687691998,
+        "change": 255.98913284543232,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 28424.564554846565,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 29000.679880120642,
+        "change": 117.22421276290333,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 28883.45566735774,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 29381.007663795026,
+        "change": 319.0511276002471,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 29061.95653619478,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 29782.059306686624,
+        "change": 22.576105299562187,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 29759.483201387062,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 30332.783862696466,
+        "change": 111.19637286709622,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.2",
+        "previous": 30221.58748982937,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 34607.14042785813,
+        "change": 76.52199665234366,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 34530.61843120579,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 35897.61942199377,
+        "change": 123.307360146071,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 35774.3120618477,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 36499.32320453065,
+        "change": 74.51827094596229,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 36424.80493358469,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 37002.095769500665,
+        "change": 229.5600461118156,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 36772.53572338885,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 37274.87521673274,
+        "change": 118.31148074744124,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 37156.5637359853,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 37954.892099170596,
+        "change": 1269.1032937487835,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 36685.78880542181,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 38661.53844564676,
+        "change": 1284.4168566077278,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.3",
+        "previous": 37377.12158903903,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 39325.82430552547,
+        "change": 391.7330950636897,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 38934.09121046178,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 40904.598355107504,
+        "change": 365.1581802985165,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 40539.44017480899,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 41932.39530516073,
+        "change": 464.19960817718675,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 41468.195696983545,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 42823.83349814666,
+        "change": 449.9049960658813,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 42373.92850208078,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 43176.38523444702,
+        "change": 334.8573002518533,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 42841.52793419517,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 43835.621492145445,
+        "change": 499.12438831524196,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 43336.4971038302,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 44935.86365238872,
+        "change": 650.1068733332504,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.4",
+        "previous": 44285.75677905547,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 44873.920580333426,
+        "change": 220.56679696962237,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 44653.353783363804,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 46153.428253489954,
+        "change": 21.815046118259488,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 46131.613207371694,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 46930.549747666475,
+        "change": -142.9531314131891,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 47073.502879079664,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 47447.23775031827,
+        "change": 74.28719081528106,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 47372.95055950299,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 48381.10122819174,
+        "change": 295.553466364865,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 48085.54776182688,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 49254.699114208255,
+        "change": 1143.8009258203238,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 48110.89818838793,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 50076.21031212005,
+        "change": 1218.7788338223472,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.5",
+        "previous": 48857.4314782977,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 47930.80335473934,
+        "change": -353.02495775082207,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 48283.828312490165,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 49324.44485963742,
+        "change": -81.27866606663883,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 49405.72352570406,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 50272.093117473785,
+        "change": 109.12001389337092,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 50162.973103580414,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 51050.48472097807,
+        "change": -42.75543912125431,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 51093.240160099325,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 52160.38909976641,
+        "change": -215.33478346041375,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 52375.72388322683,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 52928.53244020113,
+        "change": -977.992607564076,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 53906.52504776521,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 54244.50299575861,
+        "change": -1082.2559863025162,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.6",
+        "previous": 55326.758982061125,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 56321.62555922562,
+        "change": 1761.9062975291963,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 54559.719261696424,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 57579.019889927134,
+        "change": 1840.3168788556359,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 55738.7030110715,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 58472.088265914346,
+        "change": 1702.3457986153444,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 56769.742467299,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 59448.98692410258,
+        "change": 1896.0035441703221,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 57552.98337993226,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 60165.8845848012,
+        "change": 2147.327325163249,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 58018.55725963795,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 61631.71412732916,
+        "change": 2483.842026228682,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 59147.87210110048,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 62883.118803239755,
+        "change": 2245.511830630596,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.7",
+        "previous": 60637.60697260916,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 69251.98630696982,
+        "change": 15.566637584270211,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 69236.41966938555,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 70364.00163460578,
+        "change": 131.6234968679346,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 70232.37813773785,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 71639.50302993142,
+        "change": 108.17199869925389,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 71531.33103123217,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 72874.00559244545,
+        "change": 82.98278257148922,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 72791.02280987396,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 74337.11493195004,
+        "change": 230.51250652493036,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 74106.60242542511,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 75703.66742147572,
+        "change": 75.34885957543156,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 75628.31856190029,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 77574.25170239819,
+        "change": -37.45917927235132,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.8",
+        "previous": 77611.71088167054,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 79674.34267537773,
+        "change": 398.0763433311804,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 79276.26633204655,
+        "threshold": 0.005,
+        "year": 2025
+      },
+      {
+        "candidate": 82008.56684702165,
+        "change": 426.6590199025959,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 81581.90782711905,
+        "threshold": 0.005,
+        "year": 2026
+      },
+      {
+        "candidate": 83247.03616056898,
+        "change": 140.16577734713792,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 83106.87038322185,
+        "threshold": 0.005,
+        "year": 2027
+      },
+      {
+        "candidate": 84448.93326608713,
+        "change": -126.56513550209638,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 84575.49840158923,
+        "threshold": 0.005,
+        "year": 2028
+      },
+      {
+        "candidate": 86137.11119445821,
+        "change": 272.1522311339795,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 85864.95896332423,
+        "threshold": 0.005,
+        "year": 2029
+      },
+      {
+        "candidate": 87748.91839788432,
+        "change": 99.22271888886462,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 87649.69567899546,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 89957.92625742413,
+        "change": -696.1570731712854,
+        "kind": "decile",
+        "metric_id": "deciles.mean_income.9",
+        "previous": 90654.08333059541,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 3129999496.308095,
+        "change": -663.6043691635132,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3130000159.912464,
+        "threshold": 1.0,
+        "year": 2025
+      },
+      {
+        "candidate": 3129999711.0032306,
+        "change": -312.60314178466797,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3130000023.6063724,
+        "threshold": 1.0,
+        "year": 2026
+      },
+      {
+        "candidate": 3129999519.498464,
+        "change": -317.41072177886963,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3129999836.909186,
+        "threshold": 1.0,
+        "year": 2027
+      },
+      {
+        "candidate": 3130000250.274443,
+        "change": 287.6901001930237,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3129999962.584343,
+        "threshold": 1.0,
+        "year": 2028
+      },
+      {
+        "candidate": 3130000129.093836,
+        "change": 585.0372934341431,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3129999544.0565424,
+        "threshold": 1.0,
+        "year": 2029
+      },
+      {
+        "candidate": 3130000306.0624046,
+        "change": 821.1847105026245,
+        "kind": "double_count",
+        "metric_id": "double_counts.corporate_sdlt",
+        "previous": 3129999484.877694,
+        "threshold": 1.0,
+        "year": 2031
+      },
+      {
+        "candidate": 365935805160.04724,
+        "change": -66927477882.67792,
+        "kind": "model_total",
+        "metric_id": "model.gov_balance",
+        "previous": 432863283042.72516,
+        "threshold": 8657265660.854504,
+        "year": 2025
+      },
+      {
+        "candidate": 391413069635.7727,
+        "change": -69354735468.1549,
+        "kind": "model_total",
+        "metric_id": "model.gov_balance",
+        "previous": 460767805103.9276,
+        "threshold": 9215356102.078552,
+        "year": 2026
+      },
+      {
+        "candidate": 422030764704.886,
+        "change": -71389505837.57233,
+        "kind": "model_total",
+        "metric_id": "model.gov_balance",
+        "previous": 493420270542.4583,
+        "threshold": 9868405410.849167,
+        "year": 2027
+      },
+      {
+        "candidate": 448111937425.69684,
+        "change": -73434564834.40778,
+        "kind": "model_total",
+        "metric_id": "model.gov_balance",
+        "previous": 521546502260.1046,
+        "threshold": 10430930045.202093,
+        "year": 2028
+      },
+      {
+        "candidate": 475128375045.8415,
+        "change": -76772086539.83136,
+        "kind": "model_total",
+        "metric_id": "model.gov_balance",
+        "previous": 551900461585.6729,
+        "threshold": 11038009231.713457,
+        "year": 2029
+      },
+      {
+        "candidate": 502649498269.1467,
+        "change": -83781820601.76025,
+        "kind": "model_total",
+        "metric_id": "model.gov_balance",
+        "previous": 586431318870.907,
+        "threshold": 11728626377.41814,
+        "year": 2030
+      },
+      {
+        "candidate": 534326803504.2722,
+        "change": -86546320907.46533,
+        "kind": "model_total",
+        "metric_id": "model.gov_balance",
+        "previous": 620873124411.7375,
+        "threshold": 12417462488.23475,
+        "year": 2031
+      },
+      {
+        "candidate": 902519104441.779,
+        "change": -67226671686.39087,
+        "kind": "model_total",
+        "metric_id": "model.gov_tax",
+        "previous": 969745776128.1699,
+        "threshold": 19394915522.5634,
+        "year": 2025
+      },
+      {
+        "candidate": 942344890723.3772,
+        "change": -69440057989.3789,
+        "kind": "model_total",
+        "metric_id": "model.gov_tax",
+        "previous": 1011784948712.7561,
+        "threshold": 20235698974.255123,
+        "year": 2026
+      },
+      {
+        "candidate": 979295250758.8607,
+        "change": -71315214535.3606,
+        "kind": "model_total",
+        "metric_id": "model.gov_tax",
+        "previous": 1050610465294.2213,
+        "threshold": 21012209305.884426,
+        "year": 2027
+      },
+      {
+        "candidate": 1012444389021.9181,
+        "change": -73169645725.24707,
+        "kind": "model_total",
+        "metric_id": "model.gov_tax",
+        "previous": 1085614034747.1652,
+        "threshold": 21712280694.943302,
+        "year": 2028
+      },
+      {
+        "candidate": 1048019722503.8468,
+        "change": -76245399505.81482,
+        "kind": "model_total",
+        "metric_id": "model.gov_tax",
+        "previous": 1124265122009.6616,
+        "threshold": 22485302440.193233,
+        "year": 2029
+      },
+      {
+        "candidate": 1084794019910.7411,
+        "change": -78659478715.87805,
+        "kind": "model_total",
+        "metric_id": "model.gov_tax",
+        "previous": 1163453498626.6191,
+        "threshold": 23269069972.532383,
+        "year": 2030
+      },
+      {
+        "candidate": 1125634157080.5327,
+        "change": -81348712502.16968,
+        "kind": "model_total",
+        "metric_id": "model.gov_tax",
+        "previous": 1206982869582.7024,
+        "threshold": 24139657391.65405,
+        "year": 2031
+      },
+      {
+        "candidate": 0.2169146684869608,
+        "change": -0.005756047661235636,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_ahc.all",
+        "previous": 0.22267071614819645,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 0.31580150967422116,
+        "change": -0.013148527539473709,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_ahc.children",
+        "previous": 0.32895003721369487,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 0.3184036990221675,
+        "change": -0.010809451744675513,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_ahc.children",
+        "previous": 0.329213150766843,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 0.2071294889732224,
+        "change": -0.005146212075962553,
+        "kind": "poverty",
+        "metric_id": "poverty.absolute_ahc.working_age_adults",
+        "previous": 0.21227570104918494,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 0.21539588823408415,
+        "change": -0.005126615511941102,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_ahc.all",
+        "previous": 0.22052250374602525,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 0.31341776167193103,
+        "change": -0.01169715129625104,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_ahc.children",
+        "previous": 0.32511491296818207,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 0.3180524333166687,
+        "change": -0.010035031703967634,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_ahc.children",
+        "previous": 0.32808746502063635,
+        "threshold": 0.005,
+        "year": 2031
+      },
+      {
+        "candidate": 0.20560309898599988,
+        "change": -0.005269091501147072,
+        "kind": "poverty",
+        "metric_id": "poverty.relative_ahc.working_age_adults",
+        "previous": 0.21087219048714695,
+        "threshold": 0.005,
+        "year": 2030
+      },
+      {
+        "candidate": 4835276.778591946,
+        "change": -201318.76490989327,
+        "kind": "poverty_count",
+        "metric_id": "poverty_count.absolute_ahc.children",
+        "previous": 5036595.543501839,
+        "threshold": 151097.86630505515,
+        "year": 2030
+      },
+      {
+        "candidate": 4896082.231459841,
+        "change": -166216.550817281,
+        "kind": "poverty_count",
+        "metric_id": "poverty_count.absolute_ahc.children",
+        "previous": 5062298.782277122,
+        "threshold": 151868.96346831365,
+        "year": 2031
+      },
+      {
+        "candidate": 4798778.912025765,
+        "change": -179096.5600410998,
+        "kind": "poverty_count",
+        "metric_id": "poverty_count.relative_ahc.children",
+        "previous": 4977875.472066864,
+        "threshold": 149336.26416200591,
+        "year": 2030
+      },
+      {
+        "candidate": 4890680.831336364,
+        "change": -154308.32169607282,
+        "kind": "poverty_count",
+        "metric_id": "poverty_count.relative_ahc.children",
+        "previous": 5044989.153032437,
+        "threshold": 151349.6745909731,
+        "year": 2031
+      },
+      {
+        "candidate": 10056858194.600512,
+        "change": -9016901520.056734,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 19073759714.657246,
+        "threshold": 500000000.0,
+        "year": 2025
+      },
+      {
+        "candidate": 10555102815.49662,
+        "change": -9522101417.052727,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 20077204232.549347,
+        "threshold": 500000000.0,
+        "year": 2026
+      },
+      {
+        "candidate": 10982624860.501118,
+        "change": -10053246913.940014,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 21035871774.44113,
+        "threshold": 500000000.0,
+        "year": 2027
+      },
+      {
+        "candidate": 11395595123.1664,
+        "change": -10603436140.230331,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 21999031263.396732,
+        "threshold": 500000000.0,
+        "year": 2028
+      },
+      {
+        "candidate": 11811073237.9081,
+        "change": -11174545866.846226,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 22985619104.754326,
+        "threshold": 500000000.0,
+        "year": 2029
+      },
+      {
+        "candidate": 12225300986.49606,
+        "change": -11838061282.053776,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 24063362268.549835,
+        "threshold": 500000000.0,
+        "year": 2030
+      },
+      {
+        "candidate": 12639863687.533571,
+        "change": -12579122341.426523,
+        "kind": "receipt",
+        "metric_id": "receipts.sdlt_household",
+        "previous": 25218986028.960094,
+        "threshold": 504379720.5792019,
+        "year": 2031
+      },
+      {
+        "candidate": 253706635855.94574,
+        "change": -59420776150.579834,
+        "kind": "receipt",
+        "metric_id": "receipts.vat",
+        "previous": 313127412006.5256,
+        "threshold": 6262548240.130511,
+        "year": 2025
+      },
+      {
+        "candidate": 260528156254.42618,
+        "change": -61018448940.81656,
+        "kind": "receipt",
+        "metric_id": "receipts.vat",
+        "previous": 321546605195.24274,
+        "threshold": 6430932103.904855,
+        "year": 2026
+      },
+      {
+        "candidate": 266721959474.7349,
+        "change": -62469101835.7955,
+        "kind": "receipt",
+        "metric_id": "receipts.vat",
+        "previous": 329191061310.5304,
+        "threshold": 6583821226.2106085,
+        "year": 2027
+      },
+      {
+        "candidate": 273144607712.17023,
+        "change": -63973355321.99524,
+        "kind": "receipt",
+        "metric_id": "receipts.vat",
+        "previous": 337117963034.16547,
+        "threshold": 6742359260.68331,
+        "year": 2028
+      },
+      {
+        "candidate": 279833377233.73706,
+        "change": -65539935302.7865,
+        "kind": "receipt",
+        "metric_id": "receipts.vat",
+        "previous": 345373312536.52356,
+        "threshold": 6907466250.730472,
+        "year": 2029
+      },
+      {
+        "candidate": 286714489326.82513,
+        "change": -67151565942.809875,
+        "kind": "receipt",
+        "metric_id": "receipts.vat",
+        "previous": 353866055269.635,
+        "threshold": 7077321105.3927,
+        "year": 2030
+      },
+      {
+        "candidate": 293706307937.9133,
+        "change": -68789122606.1883,
+        "kind": "receipt",
+        "metric_id": "receipts.vat",
+        "previous": 362495430544.1016,
+        "threshold": 7249908610.882032,
+        "year": 2031
+      },
+      {
+        "candidate": 25006282297.483948,
+        "change": -5856736278.67688,
+        "kind": "reform_target",
+        "metric_id": "reform_targets.vat_standard_plus_2pp",
+        "previous": 30863018576.160828,
+        "threshold": 1543150928.8080416,
+        "year": 2025
+      },
+      {
+        "candidate": 25678638988.476715,
+        "change": -6014208116.594269,
+        "kind": "reform_target",
+        "metric_id": "reform_targets.vat_standard_plus_2pp",
+        "previous": 31692847105.070984,
+        "threshold": 1584642355.2535493,
+        "year": 2026
+      },
+      {
+        "candidate": 26289121029.350067,
+        "change": -6157191223.427887,
+        "kind": "reform_target",
+        "metric_id": "reform_targets.vat_standard_plus_2pp",
+        "previous": 32446312252.777954,
+        "threshold": 1622315612.638898,
+        "year": 2027
+      },
+      {
+        "candidate": 26922161955.996033,
+        "change": -6305454080.7178955,
+        "kind": "reform_target",
+        "metric_id": "reform_targets.vat_standard_plus_2pp",
+        "previous": 33227616036.71393,
+        "threshold": 1661380801.8356965,
+        "year": 2028
+      },
+      {
+        "candidate": 27581433518.87567,
+        "change": -6459864012.044983,
+        "kind": "reform_target",
+        "metric_id": "reform_targets.vat_standard_plus_2pp",
+        "previous": 34041297530.920654,
+        "threshold": 1702064876.546033,
+        "year": 2029
+      },
+      {
+        "candidate": 28259662425.41333,
+        "change": -6618710135.259399,
+        "kind": "reform_target",
+        "metric_id": "reform_targets.vat_standard_plus_2pp",
+        "previous": 34878372560.67273,
+        "threshold": 1743918628.0336366,
+        "year": 2030
+      },
+      {
+        "candidate": 28948801666.38452,
+        "change": -6780116739.303345,
+        "kind": "reform_target",
+        "metric_id": "reform_targets.vat_standard_plus_2pp",
+        "previous": 35728918405.68787,
+        "threshold": 1786445920.2843933,
+        "year": 2031
+      },
+      {
+        "candidate": 25006281265.619263,
+        "change": -5856740330.606689,
+        "kind": "reform",
+        "metric_id": "reforms.vat_standard_plus_2pp",
+        "previous": 30863021596.225952,
+        "threshold": 1543151079.8112977,
+        "year": 2025
+      },
+      {
+        "candidate": 25678636668.722717,
+        "change": -6014207559.543579,
+        "kind": "reform",
+        "metric_id": "reforms.vat_standard_plus_2pp",
+        "previous": 31692844228.266296,
+        "threshold": 1584642211.4133148,
+        "year": 2026
+      },
+      {
+        "candidate": 26289120505.552307,
+        "change": -6157191021.756836,
+        "kind": "reform",
+        "metric_id": "reforms.vat_standard_plus_2pp",
+        "previous": 32446311527.309143,
+        "threshold": 1622315576.3654573,
+        "year": 2027
+      },
+      {
+        "candidate": 26922162755.016907,
+        "change": -6305454281.853577,
+        "kind": "reform",
+        "metric_id": "reforms.vat_standard_plus_2pp",
+        "previous": 33227617036.870483,
+        "threshold": 1661380851.8435242,
+        "year": 2028
+      },
+      {
+        "candidate": 27581434773.70392,
+        "change": -6459858290.930481,
+        "kind": "reform",
+        "metric_id": "reforms.vat_standard_plus_2pp",
+        "previous": 34041293064.6344,
+        "threshold": 1702064653.23172,
+        "year": 2029
+      },
+      {
+        "candidate": 28259663477.674194,
+        "change": -6618710973.507324,
+        "kind": "reform",
+        "metric_id": "reforms.vat_standard_plus_2pp",
+        "previous": 34878374451.18152,
+        "threshold": 1743918722.559076,
+        "year": 2030
+      },
+      {
+        "candidate": 28948804876.37097,
+        "change": -6780116511.03894,
+        "kind": "reform",
+        "metric_id": "reforms.vat_standard_plus_2pp",
+        "previous": 35728921387.40991,
+        "threshold": 1786446069.3704958,
+        "year": 2031
+      },
+      {
+        "candidate": 88996941228.73492,
+        "change": 4782913353.204926,
+        "kind": "spending",
+        "metric_id": "spending.universal_credit",
+        "previous": 84214027875.53,
+        "threshold": 1684280557.5106,
+        "year": 2030
+      },
+      {
+        "candidate": 90333127755.68689,
+        "change": 4875491100.091629,
+        "kind": "spending",
+        "metric_id": "spending.universal_credit",
+        "previous": 85457636655.59526,
+        "threshold": 1709152733.1119053,
+        "year": 2031
+      }
+    ],
+    "new_warnings": [
+      "inert:war_widows_pension"
+    ],
+    "newly_skipped_checks": [],
+    "partition_version": "0d0426ee9e389078e03d0f6a6e75ade68c52e9118f3b883c28fa50122c72c5c5",
+    "preexisting_check_failures": [
+      "sign:vat"
+    ],
+    "previous_partition_version": "e8ea8a0198736e7cd9b0725148fdda717911033ee768eba044b58a8d46e9b0ef",
+    "previous_report_sha256": "e89508af8008081dd63e770cf5ddfefe094c8815328e1f1ba19aad7bc8bb25fe",
+    "regressed_checks": [],
+    "skipped_checks": [
+      "sign:disabled_students_allowance"
+    ],
+    "suppressed_metrics": [
+      "caseloads.disabled_students_allowance 2025",
+      "caseloads.disabled_students_allowance 2026",
+      "caseloads.disabled_students_allowance 2027",
+      "caseloads.disabled_students_allowance 2028",
+      "caseloads.disabled_students_allowance 2029",
+      "caseloads.disabled_students_allowance 2030",
+      "caseloads.disabled_students_allowance 2031",
+      "spending.disabled_students_allowance 2025",
+      "spending.disabled_students_allowance 2026",
+      "spending.disabled_students_allowance 2027",
+      "spending.disabled_students_allowance 2028",
+      "spending.disabled_students_allowance 2029",
+      "spending.disabled_students_allowance 2030",
+      "spending.disabled_students_allowance 2031"
+    ],
+    "suppressed_on_both_sides": 14,
+    "unknown_status_checks": [],
+    "values_withheld": false,
+    "warn_identities": [
+      "inert:alcohol_duty",
+      "inert:tobacco_duty",
+      "inert:vehicle_excise_duty",
+      "inert:high_value_council_tax_surcharge",
+      "inert:jsa_income",
+      "inert:income_support",
+      "inert:working_tax_credit",
+      "inert:child_tax_credit",
+      "inert:incapacity_benefit",
+      "inert:scottish_carer_supplement",
+      "inert:war_widows_pension",
+      "inert:maternity_allowance",
+      "inert:statutory_paternity_pay",
+      "inert:care_to_learn",
+      "inert:childcare_grant",
+      "inert:travel_grant",
+      "inert:bursary_fund_16_to_19"
+    ],
+    "withheld_changes": []
+  },
+  "partition_sources": {
+    "candidate": "installed policyengine_uk",
+    "previous": "vendored tool commit"
+  },
+  "tool": {
+    "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions: the approved head of draft policyengine-uk#2335. It suppresses figures from fewer than 10 records and gives each total's excluded figures with their signs (exclude_signs), which the metrics review requires. #2335 merges after cos d1601; move the pin to the merged commit when it lands, and never to a commit without suppression.",
+    "commit": "1191ac5a473419f48e0c0643f83d31719da788e1",
+    "path": "policyengine_uk/utils/aggregate_impact",
+    "repository": "PolicyEngine/policyengine-uk"
+  }
+}

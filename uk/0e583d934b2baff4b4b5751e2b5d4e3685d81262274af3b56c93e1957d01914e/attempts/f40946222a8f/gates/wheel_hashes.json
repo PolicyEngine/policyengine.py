@@ -1,0 +1,26 @@
+{
+  "policyengine-core": {
+    "archive_members_verified": 199,
+    "bytecode_verified": 0,
+    "files_verified": 199,
+    "generated_launchers": [
+      "../../../bin/policyengine-core"
+    ],
+    "inert_bytecode": [],
+    "problems": [],
+    "unexpected_installed_files": [],
+    "wheel": "policyengine_core-3.33.0-py3-none-any.whl",
+    "wheel_sha256": "2e32d02a8910ab683a2b7600987904b351d058fc2bd5910a8ea6641438bcd789"
+  },
+  "policyengine-uk": {
+    "archive_members_verified": 2899,
+    "bytecode_verified": 0,
+    "files_verified": 2899,
+    "generated_launchers": [],
+    "inert_bytecode": [],
+    "problems": [],
+    "unexpected_installed_files": [],
+    "wheel": "policyengine_uk-2.141.0-py3-none-any.whl",
+    "wheel_sha256": "2261f0878a0bd1a4983725e52fe9eea14c78ba0ed7bebaa7a4f71a8887349367"
+  }
+}
