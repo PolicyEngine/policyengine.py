@@ -51,12 +51,13 @@ from policyengine.provenance.uk_qualification import (
 from tests.qualification_fixtures import (
     HARNESS,
     ISSUED,
-    UK_DATA_LINE_BUNDLE_PATH,
+    UK_DATA_LINE_BUNDLE,
     VENDORED_SCHEMAS,
     gates,
     golden,
     graphql_base_changes_output,
     jq,
+    load_candidate_cli,
     make_pair,
     make_receipt,
     rest_pulls_output,
@@ -70,7 +71,7 @@ PACKAGED_BUNDLE = json.loads(
 )
 #: The candidates these tests build are on the policyengine-uk-data line, so
 #: they are qualified against the last bundle certified on that line.
-BUNDLE = json.loads(UK_DATA_LINE_BUNDLE_PATH.read_text())
+BUNDLE = UK_DATA_LINE_BUNDLE
 
 
 def _wheel(name, version, digest):
@@ -157,15 +158,7 @@ def test_resolve_refuses_a_pair_other_than_the_one_requested(
     resolve to another (a moved data tag, another core), the run fails and
     nothing else is qualified."""
 
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_pair_pin",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_candidate_pair_pin")
     pair = make_pair(model="2.200.0")
     resolved = cli.ResolvedCandidate(
         pair,
@@ -479,15 +472,8 @@ def test_requalify_names_the_target_only_while_its_baseline_is_stale(
     monkeypatch, tmp_path, capsys
 ):
     import argparse
-    import importlib.util
 
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_requalify",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_candidate_requalify")
     current = _promotion_receipt(pair=_promotable_pair_and_branch())
     stale = current.model_copy(
         update={
@@ -1425,7 +1411,6 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     moves main to it with a push leased on that parent."""
 
     import argparse
-    import importlib.util
 
     checks, runs, at_commit, main, push_code, automatic, promotes, readiness = (
         PROMOTION_CASES[case]
@@ -1434,13 +1419,7 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     branch = candidate_branch(qualified.pair)
     commit = qualified.harness.git_commit
     parent = "p" * 40
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_for_test",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_candidate_for_test")
     calls = []
 
     target = {
@@ -1557,8 +1536,6 @@ def _sweep_cli(
     ``shared_fails`` fails the REST listing of a branch's pull requests
     ("listing") or the base-change query ("history")."""
 
-    import importlib.util
-
     qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
     branch = candidate_branch(qualified.pair)
     commit = qualified.harness.git_commit
@@ -1566,13 +1543,7 @@ def _sweep_cli(
     if superseded:
         receipts.append(_promotion_receipt(pair=SUPERSEDED_PAIR))
     stale = "candidate/uk/stale-pair"
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_for_test",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_candidate_for_test")
     calls = []
     listing = [
         {
@@ -1716,15 +1687,7 @@ def test_a_candidate_listing_at_its_limit_is_refused(monkeypatch, listed, refuse
     listing that reaches it may have missed the target; promotion refuses to
     go on rather than act on part of the list."""
 
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_for_test",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_candidate_for_test")
     listing = [
         {
             "number": number,
@@ -1942,15 +1905,7 @@ def test_only_pull_requests_to_main_are_candidates(monkeypatch):
     branch cannot collapse into one entry that sends readiness changes to
     the wrong one."""
 
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_for_test",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_candidate_for_test")
     calls = []
     listing = [
         {
@@ -2752,8 +2707,6 @@ def _publish_as_attempt(ledger, pair, receipt, key):
 def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
     tmp_path, verdict, main_advanced, staged_base, monkeypatch, capsys
 ):
-    import importlib.util
-
     from policyengine.provenance.qualification_ledger import attempt_directory
     from policyengine.provenance.uk_qualification import stage_attempt
 
@@ -2777,12 +2730,7 @@ def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
         candidate_action(pair, BUNDLE, tmp_path, base_commit=base, now=now)[0]
         == "qualify"
     )
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_bound_recovery_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_bound_recovery_for_test")
     monkeypatch.setattr(cli, "utc_now", lambda: now)
     assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
     assert json.loads(capsys.readouterr().out) == payload
@@ -2852,18 +2800,10 @@ def test_forced_recovery_preserves_newer_work_on_another_base(tmp_path, protecte
 def test_resolution_preserves_authorization_to_recover_forced_work(
     tmp_path, monkeypatch, verdict, main_advanced, abandonment
 ):
-    import importlib.util
-
     from policyengine.provenance.qualification_ledger import attempt_directory
     from policyengine.provenance.uk_qualification import stage_attempt
 
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_resolve_recovery_for_test",
-        REPO_ROOT / "scripts/check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_resolve_recovery_for_test")
     pair = make_pair(model="2.200.0")
     terminal = make_receipt(
         pair=pair,
@@ -2982,14 +2922,7 @@ def test_cross_base_recovery_allocates_new_keys_without_overwriting_evidence(tmp
 def test_recovery_requires_a_confirmed_failed_owner(
     monkeypatch, status, conclusion, expected
 ):
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_owner_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    cli = load_candidate_cli("check_uk_owner_for_test")
     calls = []
 
     def run(argv, **kwargs):
@@ -3010,20 +2943,75 @@ def test_recovery_requires_a_confirmed_failed_owner(
     assert not cli.owner_run_failed("42")
 
 
-def test_catchup_finds_abandoned_stages_without_replay_requests(
-    tmp_path, monkeypatch, capsys
-):
-    import importlib.util
+PACKAGED_BUNDLE_PATH = REPO_ROOT / "src/policyengine/data/bundle/manifest.json"
 
+
+@pytest.mark.parametrize("force", [False, True])
+def test_recovery_skips_unforced_pairs_from_another_data_line(
+    tmp_path, monkeypatch, capsys, force
+):
     from policyengine.provenance.qualification_ledger import attempt_directory
     from policyengine.provenance.uk_qualification import stage_attempt
 
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_recovery_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
+    # Main is the packaged bundle; make_pair builds a uk-data pair.
+    cli = load_candidate_cli("check_uk_recovery_line", PACKAGED_BUNDLE_PATH)
+    pair = make_pair()
+    attempt = attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12)
+    payload = {"pair": pair.canonical_payload(), "force": force}
+    stage_attempt(attempt, payload, HARNESS)
+    write_json(
+        attempt / "staging.json",
+        {"sequence": 1, "owner_run_id": "42", "expires_at": "2026-10-14T14:00:00Z"},
     )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
+    monkeypatch.setattr(cli, "utc_now", lambda: "2026-10-14T11:00:00Z")
+    monkeypatch.setattr(cli, "owner_run_failed", lambda run_id: run_id == "42")
+
+    assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
+
+    out = capsys.readouterr()
+    if force:
+        assert json.loads(out.out) == payload
+    else:
+        assert out.out == ""
+        assert "not on main's data line" in out.err
+
+
+def test_check_refresh_skips_pairs_from_another_data_line(tmp_path, monkeypatch):
+    import argparse
+
+    cli = load_candidate_cli("check_uk_refresh_line", PACKAGED_BUNDLE_PATH)
+    receipt = _promotion_receipt(pair=make_pair(model="2.200.0"))
+    assert receipt.promotable
+    branch = candidate_branch(receipt.pair)
+    monkeypatch.setattr(cli, "latest_receipts", lambda ledger: [receipt])
+    monkeypatch.setattr(
+        cli,
+        "_candidate_pull_requests",
+        lambda: [
+            {
+                "number": 1,
+                "headRefName": branch,
+                "headRefOid": receipt.harness.git_commit,
+            }
+        ],
+    )
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError("a pair from another data line was refreshed")
+
+    monkeypatch.setattr(cli, "_shared_branch_pull_requests", unexpected)
+    monkeypatch.setattr(cli, "_candidate_runs", unexpected)
+
+    assert cli.cmd_refresh_pr_checks(argparse.Namespace(ledger=str(tmp_path))) == 0
+
+
+def test_catchup_finds_abandoned_stages_without_replay_requests(
+    tmp_path, monkeypatch, capsys
+):
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    cli = load_candidate_cli("check_uk_recovery_for_test")
     pair = make_pair()
     attempt = attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12)
     payload = {"pair": pair.canonical_payload()}

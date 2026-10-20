@@ -75,6 +75,8 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
     candidate_action,
     candidate_branch,
     candidate_pr_body,
+    certified_data_line,
+    data_line,
     expected_release_bundle,
     finalize_attempt,
     load_attempt_budget_inputs,
@@ -528,6 +530,7 @@ def owner_run_failed(run_id: str) -> bool:
 
 def cmd_recoverable(args: argparse.Namespace) -> int:
     now = utc_now()
+    line = certified_data_line(json.loads(BUNDLE_PATH.read_text()))
     for pair_dir in sorted((Path(args.ledger) / "uk").glob("*")):
         receipt = pair_dir / "qualification_receipt.json"
         stages = list((pair_dir / "attempts").glob("*/staging.json"))
@@ -544,8 +547,20 @@ def cmd_recoverable(args: argparse.Namespace) -> int:
                 attempt, terminal
             ):
                 continue
+        candidate = read_json(attempt / "candidate.json")
+        # An unforced run of a pair from another data line resolves as
+        # other_line before any recovery, so dispatching it clears nothing.
+        if not candidate.get("force") and (
+            data_line(CandidatePair.model_validate(candidate["pair"])) != line
+        ):
+            print(
+                f"::notice::not recovering {pair_dir.name}: its pair is not on "
+                "main's data line",
+                file=sys.stderr,
+            )
+            continue
         if attempt_is_recoverable(attempt, now=now, owner_is_failed=owner_run_failed):
-            print(json.dumps(read_json(attempt / "candidate.json")))
+            print(json.dumps(candidate))
     return 0
 
 
@@ -856,7 +871,12 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
 
     pull_requests = {pr["headRefName"]: pr for pr in _candidate_pull_requests()}
     now = _now()
+    line = certified_data_line(json.loads(BUNDLE_PATH.read_text()))
     for receipt in latest_receipts(Path(args.ledger)):
+        if data_line(receipt.pair) != line:
+            # Promotion never takes a pair from another line, so its runs
+            # are not worth re-running.
+            continue
         branch = candidate_branch(receipt.pair)
         head = receipt.harness.git_commit
         pull_request = pull_requests.get(branch)
