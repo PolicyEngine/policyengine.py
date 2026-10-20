@@ -752,6 +752,33 @@ def _run(
     )
 
 
+def regional_certification_arguments(
+    bundle: Mapping[str, Any], pair: CandidatePair
+) -> list[str]:
+    """``certify-data``'s regional flags for certifying ``pair`` onto ``bundle``.
+
+    Certification refuses to drop a bundle's regional routing silently. A
+    pair on main's data line keeps main's regional release, which must then
+    serve the pair's model and core by its own claims. A pair from another
+    line (a forced qualification, never promoted automatically) replaces the
+    line the routing belongs to, so the routing is dropped and the pair's
+    national dataset serves every region type.
+    """
+
+    record = bundle["data_releases"]["uk"]
+    regional_uri = record.get("regional_source_manifest_uri")
+    if regional_uri is None:
+        return []
+    if data_line(pair) != certified_data_line(bundle):
+        return ["--drop-regional-release"]
+    return [
+        "--regional-manifest-uri",
+        regional_uri,
+        "--regional-release-kind",
+        record.get("regional_release_kind") or "local_area",
+    ]
+
+
 def prepare_candidate_commit(
     repo_root: Path,
     resolved: ResolvedCandidate,
@@ -770,7 +797,9 @@ def prepare_candidate_commit(
     bundle_path = (
         repo_root / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
     )
-    old_record = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+    old_bundle = json.loads(bundle_path.read_text())
+    old_record = old_bundle["data_releases"]["uk"]
+    same_line = data_line(pair) == certified_data_line(old_bundle)
     run(
         [
             python,
@@ -789,6 +818,7 @@ def prepare_candidate_commit(
             "--qualified-pair-id",
             pair.pair_id,
             "--no-changelog",
+            *regional_certification_arguments(old_bundle, pair),
         ],
         cwd=repo_root,
     )
@@ -818,8 +848,16 @@ def prepare_candidate_commit(
         [python, "scripts/bundle.py", "generate", "--include-tros"],
         cwd=repo_root,
     )
-    constants = rewrite_certified_constants(
-        repo_root, certified_constant_replacements(old_record, new_record)
+    # The constant files pin main's line. Rewriting them by value from
+    # another line's certificate would write that line's values into
+    # unrelated constants, so a cross-line candidate leaves them, and its
+    # tests show the change of line.
+    constants = (
+        rewrite_certified_constants(
+            repo_root, certified_constant_replacements(old_record, new_record)
+        )
+        if same_line
+        else []
     )
     basis = new_record["certification"]["compatibility_basis"]
     basis_note = {

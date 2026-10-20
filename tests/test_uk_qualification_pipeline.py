@@ -573,11 +573,18 @@ def test_constant_rewrite_leaves_no_old_values(tmp_path):
     assert rewrite_certified_constants(tmp_path, replacements) == []
 
 
+@pytest.mark.parametrize(
+    "routed", [False, True], ids=["uk-data main", "main routed to Microcosm"]
+)
 @pytest.mark.parametrize("qualification_only", [False, True])
 def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
-    tmp_path, monkeypatch, qualification_only
+    tmp_path, monkeypatch, qualification_only, routed
 ):
-    """Run preparation, certification and real TRO generation without a network."""
+    """Run preparation, certification and real TRO generation without a network.
+
+    On a main routed to another line's local-area release, the uk-data
+    candidate (a forced qualification) drops the routing it cannot keep.
+    """
 
     from policyengine.provenance import certification, manifest
     from policyengine.provenance.uk_qualification import prepare_candidate_commit
@@ -604,7 +611,7 @@ def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
     pair = resolved.pair
     bundle_dir = tmp_path / "src/policyengine/data/bundle"
     bundle_dir.mkdir(parents=True)
-    source = json.loads(json.dumps(BUNDLE))
+    source = json.loads(json.dumps(PACKAGED_BUNDLE if routed else BUNDLE))
     source["data_releases"].pop("us")
     source["packages"].pop("policyengine-us")
     for packages in source["extras"].values():
@@ -701,12 +708,49 @@ def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
     assert (tmp_path / prepared["changelog_fragment"]).is_file()
     assert maintenance.main(["check", "--include-tros", "--strict-tros"]) == 0
     assert calls[-1][2:] == ["check", "--include-tros", "--strict-tros"]
+    certify = next(command for command in calls if "certify-data" in command)
+    record = json.loads(bundle_path.read_bytes())["data_releases"]["uk"]
+    assert ("--drop-regional-release" in certify) == routed
+    assert "regional_source_manifest_uri" not in record
+    if routed:
+        # The constant files pin main's line, not the candidate's.
+        assert prepared["constant_files"] == []
     if qualification_only:
         changed = json.loads(bundle_path.read_bytes())
         changed["packages"]["policyengine-core"]["version"] = "99.0.0"
         write_json(bundle_path, changed)
         with pytest.raises(ValueError, match="runtime core.*qualified exact pair"):
             tros.generated_tros(strict=True)
+
+
+def test_regional_flags_keep_routing_on_its_line_and_drop_it_across_lines():
+    from policyengine.provenance.uk_qualification import (
+        regional_certification_arguments,
+    )
+
+    uk_data_pair = make_pair()
+    record = PACKAGED_BUNDLE["data_releases"]["uk"]
+    microcosm_pair = uk_data_pair.model_copy(
+        update={
+            "data": uk_data_pair.data.model_copy(
+                update={
+                    "data_package": record["data_package"]["name"],
+                    "repo_id": record["data_package"]["repo_id"],
+                }
+            )
+        }
+    )
+
+    assert regional_certification_arguments(BUNDLE, uk_data_pair) == []
+    assert regional_certification_arguments(PACKAGED_BUNDLE, uk_data_pair) == [
+        "--drop-regional-release"
+    ]
+    assert regional_certification_arguments(PACKAGED_BUNDLE, microcosm_pair) == [
+        "--regional-manifest-uri",
+        record["regional_source_manifest_uri"],
+        "--regional-release-kind",
+        record["regional_release_kind"],
+    ]
 
 
 def test_replay_request_is_valid_for_the_scorecard():

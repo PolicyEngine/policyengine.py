@@ -118,3 +118,17 @@ write here, such as renaming another branch into main to make a run against
 another base look like the candidate's: main is not protected, so they
 could push it directly. Treat any such change as an incident, not as
 something the gate will catch.
+
+## A pair from another data line
+
+Promotion compares only pairs on main's data line (its UK certificate's data
+package and repository). While Microcosm UK is the default, the
+policyengine-uk-data candidates the workflow resolves are `other_line`: they
+are recorded and never promoted, and recovery and check refreshes skip them.
+
+`force` still qualifies such a pair, for evidence. Its candidate commit drops
+main's area routing (`--drop-regional-release`), because the routing belongs
+to the line the pair would replace, and leaves the test constants that pin
+main's certificate as they are, so the candidate's own tests fail. Changing
+the data line is a reviewed certification pull request (see
+`docs/engineering/skills/data-certification.md`), not a promotion.
