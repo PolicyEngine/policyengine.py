@@ -42,12 +42,12 @@ graph = [
 models = [
     "policyengine-core==3.33.0",
     "policyengine-us==2.2.1",
-    "policyengine-uk==2.130.1",
+    "policyengine-uk==2.141.5",
     "spm-calculator==1.0.0",
 ]
 uk = [
     "policyengine-core==3.33.0",
-    "policyengine-uk==2.130.1",
+    "policyengine-uk==2.141.5",
 ]
 us = [
     "policyengine-core==3.33.0",
@@ -72,7 +72,7 @@ dev = [
     "rfc8785>=0.1.4",
     "policyengine-core==3.33.0",
     "policyengine-us==2.2.1",
-    "policyengine-uk==2.130.1",
+    "policyengine-uk==2.141.5",
     "spm-calculator==1.0.0",
 ]
 
