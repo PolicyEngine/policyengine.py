@@ -52,15 +52,22 @@ python scripts/bundle.py certify-data --country uk --data-producer populace \
 
 - The URI must be the build's own folder: a manifest that names another
   release or build than the folder it was read from is refused.
+- The repository's `releases.json` at `main` must list the build and must not
+  mark it withdrawn, or certification refuses it. A local-area release passed
+  with `--regional-manifest-uri` is checked the same way. Which build is
+  `current` doesn't matter: a certificate pins one build.
 - The build's own files are pinned at `releases/<release>/<build>/<file>` and
-  at the URI's revision, whatever revision their manifest entries name.
-  Artifacts from other repositories keep their own pins.
+  at the URI's revision, whatever revision their manifest entries name. Each
+  one's `path` must be a bare file name, alone or after the folder, as the
+  release writer publishes it; a nested path, a `.` or `..` segment or a
+  backslash is refused. Artifacts from other repositories keep their own pins.
 - The certificate names the build by `build`
   (`data_releases.<country>.version`, the certification's `data_build_id` and
   the changelog fragment name), so two builds of one release never match.
 - At import, a remote manifest that names another release or build than the
   bundle's pinned folder is refused, even when the bundle carries a
-  certificate.
+  certificate. Import doesn't read `releases.json`: a build withdrawn after it
+  was certified keeps loading until the bundle is certified again.
 
 Manifests published before this layout, whose `build` is an object, are
 certified as described above.

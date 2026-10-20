@@ -33,6 +33,8 @@ A build published in its own folder (``releases/<release>/<build>/``, named
 by its manifest's ``release`` and ``build`` strings) has no tag. Certify it
 from that folder at the commit that published it; its own files are pinned
 inside the folder at that revision, and its ``build`` names the certificate.
+The repository's ``releases.json`` at ``main`` must list the build and not
+have withdrawn it.
 
 ``scripts/bundle.py certify-data`` is the operator-facing wrapper. Network
 access is required (HF manifest fetch + PyPI wheel metadata). Countries whose
