@@ -3382,15 +3382,16 @@ def test_released_bundle_request_is_valid_for_the_scorecard(bundle, manifest_siz
         "default_datasets": {"national": dataset},
         "artifacts": {dataset: artifact},
     }
-    repo_type = record["data_package"]["repo_type"]
+    data_package = record["data_package"]
+    repo_type = data_package["repo_type"]
     fetched = []
 
-    def hf_file(repo, rev, path, kind):
-        fetched.append(("file", repo, kind))
+    def hf_file(*request):
+        fetched.append(("file", *request))
         return json.dumps(manifest).encode()
 
-    def hf_size(repo, rev, path, kind):
-        fetched.append(("size", repo, kind))
+    def hf_size(*request):
+        fetched.append(("size", *request))
         return 321798995
 
     core = bundle["packages"]["policyengine-core"]["version"]
@@ -3427,9 +3428,24 @@ def test_released_bundle_request_is_valid_for_the_scorecard(bundle, manifest_siz
     assert data["size_bytes"] == manifest_size or (
         manifest_size is None and data["size_bytes"] == 321798995
     )
-    assert fetched[0] == ("file", record["data_package"]["repo_id"], repo_type)
-    assert [item[0] for item in fetched] == (
-        ["file"] if manifest_size is not None else ["file", "size"]
+    manifest_request = (
+        "file",
+        data_package["repo_id"],
+        data_package["release_manifest_revision"],
+        data_package["release_manifest_path"],
+        repo_type,
+    )
+    size_request = (
+        "size",
+        reference.get("repo_id") or data_package["repo_id"],
+        reference["revision"],
+        reference["path"],
+        reference.get("repo_type") or repo_type,
+    )
+    assert fetched == (
+        [manifest_request]
+        if manifest_size is not None
+        else [manifest_request, size_request]
     )
 
 
@@ -3468,27 +3484,66 @@ def test_released_bundle_request_needs_a_size_source():
 
 def test_release_consumers_address_dataset_repositories(monkeypatch):
     monkeypatch.setenv("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+    for name in ("HUGGING_FACE_TOKEN", "HF_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    # The shared helper reads every token variable the script lists.
+    monkeypatch.setenv("HUGGINGFACE_HUB_TOKEN", "hub-token")
     spec = importlib.util.spec_from_file_location(
         "release_consumers_for_test", REPO_ROOT / "scripts" / "release_consumers.py"
     )
     consumers = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(consumers)
+    url = "https://huggingface.co/datasets/org/data/resolve/v1/releases/a%20b.h5"
+    authorized = {"Authorization": "Bearer hub-token"}
+    calls = []
 
-    assert consumers._hf_url("org/data", "v1", "a.h5", "dataset") == (
-        "https://huggingface.co/datasets/org/data/resolve/v1/a.h5"
-    )
-    assert consumers._hf_url("org/model", "v1", "a.h5", "model") == (
-        "https://huggingface.co/org/model/resolve/v1/a.h5"
-    )
+    def response(status, headers, content=b""):
+        answer = MagicMock(status_code=status, headers=headers, content=content)
+        answer.raise_for_status = lambda: None
+        return answer
 
-    def head(url, **kwargs):
-        assert kwargs["allow_redirects"] is False
-        response = MagicMock(status_code=302, headers={"X-Linked-Size": "321"})
-        response.raise_for_status = lambda: None
-        return response
+    def get(target, **kwargs):
+        calls.append(("get", target, kwargs["headers"]))
+        return response(200, {}, b"manifest")
 
+    answers = []
+
+    def head(target, **kwargs):
+        calls.append(("head", target, kwargs["headers"], kwargs["allow_redirects"]))
+        return answers.pop(0)
+
+    monkeypatch.setattr(consumers.requests, "get", get)
     monkeypatch.setattr(consumers.requests, "head", head)
-    assert consumers._hf_size("org/data", "v1", "a.h5", "dataset") == 321
+
+    assert consumers._hf_file("org/data", "v1", "releases/a b.h5", "dataset") == (
+        b"manifest"
+    )
+    assert calls.pop() == ("get", url, authorized)
+
+    # A large file's redirect carries its size.
+    answers.append(response(302, {"X-Linked-Size": "321", "Content-Length": "1152"}))
+    assert consumers._hf_size("org/data", "v1", "releases/a b.h5", "dataset") == 321
+    assert calls == [("head", url, authorized, False)]
+    calls.clear()
+
+    # A small file answers with its own length, or with a redirect to it.
+    answers.append(response(200, {"Content-Length": "4288"}))
+    assert consumers._hf_size("org/data", "v1", "releases/a b.h5", "dataset") == 4288
+    answers.extend(
+        [
+            response(307, {"Content-Length": "0"}),
+            response(200, {"Content-Length": "77"}),
+        ]
+    )
+    assert consumers._hf_size("org/data", "v1", "releases/a b.h5", "dataset") == 77
+    assert calls[-2:] == [
+        ("head", url, authorized, False),
+        ("head", url, authorized, True),
+    ]
+
+    model_url = "https://huggingface.co/org/model/resolve/v1/a.h5"
+    consumers._hf_file("org/model", "v1", "a.h5", "model")
+    assert calls.pop() == ("get", model_url, authorized)
 
 
 def test_expected_release_bundle_uses_the_scorecard_certification_environment(
