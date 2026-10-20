@@ -1,0 +1,7 @@
+{
+  "details": {},
+  "evidence_sha256": "748b5fad99ed06272a1fa72e40f38c0c98ebadaa5b8c49172af611f040189f66",
+  "gate_id": "installed_versions",
+  "status": "pass",
+  "summary": "policyengine 6.9.0, policyengine-uk 2.141.4 and policyengine-core 3.33.0 are installed and their requirements hold."
+}
