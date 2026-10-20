@@ -49,6 +49,7 @@ from policyengine.provenance.uk_qualification import (
 from tests.qualification_fixtures import (
     HARNESS,
     ISSUED,
+    UK_DATA_LINE_BUNDLE_PATH,
     VENDORED_SCHEMAS,
     gates,
     golden,
@@ -61,9 +62,13 @@ from tests.qualification_fixtures import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BUNDLE = json.loads(
+#: The bundle this checkout packages.
+PACKAGED_BUNDLE = json.loads(
     (REPO_ROOT / "src/policyengine/data/bundle/manifest.json").read_text()
 )
+#: The candidates these tests build are on the policyengine-uk-data line, so
+#: they are qualified against the last bundle certified on that line.
+BUNDLE = json.loads(UK_DATA_LINE_BUNDLE_PATH.read_text())
 
 
 def _wheel(name, version, digest):
@@ -158,6 +163,7 @@ def test_resolve_refuses_a_pair_other_than_the_one_requested(
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     pair = make_pair(model="2.200.0")
     resolved = cli.ResolvedCandidate(
         pair,
@@ -479,6 +485,7 @@ def test_requalify_names_the_target_only_while_its_baseline_is_stale(
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     current = _promotion_receipt(pair=_promotable_pair_and_branch())
     stale = current.model_copy(
         update={
@@ -522,13 +529,16 @@ def test_incomplete_pairs_requalify_on_a_new_base_only(tmp_path):
     )
 
 
-def _new_record(old):
+SUCCESSOR_CUT = "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa"
+
+
+def _successor_record(old):
+    """The next certificate on the packaged bundle's own data line."""
     new = json.loads(json.dumps(old))
-    new["model_package"]["version"] = "2.126.8"
-    new["certification"]["built_with_model_version"] = "2.126.0"
-    new["certification"]["data_build_id"] = "policyengine-uk-data-1.59.0"
-    new["data_package"]["version"] = "1.59.0"
-    new["data_package"]["release_manifest_revision"] = "1" * 40
+    new["model_package"]["version"] = "2.140.0"
+    new["certification"]["built_with_model_version"] = "2.140.0"
+    new["certification"]["data_build_id"] = SUCCESSOR_CUT
+    new["data_package"]["release_manifest_revision"] = SUCCESSOR_CUT
     return new
 
 
@@ -540,8 +550,10 @@ def test_constant_rewrite_leaves_no_old_values(tmp_path):
     ):
         (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(REPO_ROOT / relative, tmp_path / relative)
-    old = BUNDLE["data_releases"]["uk"]
-    new = _new_record(old)
+    # The constant files pin the packaged certificate, so promotion rewrites
+    # them from it.
+    old = PACKAGED_BUNDLE["data_releases"]["uk"]
+    new = _successor_record(old)
     replacements = certified_constant_replacements(old, new)
     changed = rewrite_certified_constants(tmp_path, replacements)
     assert set(changed) == {
@@ -554,9 +566,8 @@ def test_constant_rewrite_leaves_no_old_values(tmp_path):
         for before, after in replacements:
             assert f'"{before}"' not in text and f'@{before}"' not in text
     manifests = (tmp_path / "tests/test_release_manifests.py").read_text()
-    assert 'UK_MODEL_VERSION = "2.126.8"' in manifests
-    assert 'UK_DATA_RELEASE_PATH = "releases/1.59.0/release_manifest.json"' in manifests
-    assert 'UK_DATA_RELEASE_REVISION = "' + "1" * 40 + '"' in manifests
+    assert 'UK_MODEL_VERSION = "2.140.0"' in manifests
+    assert f'UK_DATA_RELEASE_REVISION = "{SUCCESSOR_CUT}"' in manifests
     assert rewrite_certified_constants(tmp_path, replacements) == []
 
 
@@ -762,7 +773,7 @@ def test_the_real_cli_generates_replay_requests_despite_country_import_suppressi
     candidate = request["candidate"]
     assert candidate["policyengine"]["source"]["git"]["commit"] == HARNESS.git_commit
     bundle = candidate["expected_release_bundle"]
-    record = BUNDLE["data_releases"]["uk"]
+    record = PACKAGED_BUNDLE["data_releases"]["uk"]
     assert bundle["model_version"] == record["model_package"]["version"]
     assert bundle["data_version"] == record["data_package"]["version"]
     assert bundle["default_dataset"] == record["default_dataset"]
@@ -1383,6 +1394,7 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     calls = []
 
     target = {
@@ -1514,6 +1526,7 @@ def _sweep_cli(
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     calls = []
     listing = [
         {
@@ -1665,6 +1678,7 @@ def test_a_candidate_listing_at_its_limit_is_refused(monkeypatch, listed, refuse
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     listing = [
         {
             "number": number,
@@ -1890,6 +1904,7 @@ def test_only_pull_requests_to_main_are_candidates(monkeypatch):
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     calls = []
     listing = [
         {
@@ -2721,6 +2736,7 @@ def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     monkeypatch.setattr(cli, "utc_now", lambda: now)
     assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
     assert json.loads(capsys.readouterr().out) == payload
@@ -2801,6 +2817,7 @@ def test_resolution_preserves_authorization_to_recover_forced_work(
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     pair = make_pair(model="2.200.0")
     terminal = make_receipt(
         pair=pair,
@@ -2926,6 +2943,7 @@ def test_recovery_requires_a_confirmed_failed_owner(
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     calls = []
 
     def run(argv, **kwargs):
@@ -2959,6 +2977,7 @@ def test_catchup_finds_abandoned_stages_without_replay_requests(
     )
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
+    cli.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     pair = make_pair()
     attempt = attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12)
     payload = {"pair": pair.canonical_payload()}

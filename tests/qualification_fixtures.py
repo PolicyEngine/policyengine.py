@@ -20,6 +20,12 @@ from policyengine.provenance.qualification import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "uk_replay"
+#: The last packaged bundle certified on the policyengine-uk-data line (main at
+#: 2591af3e, before Microcosm UK became the default). ``make_pair`` builds
+#: candidates on that line, so qualification tests run against this bundle.
+UK_DATA_LINE_BUNDLE_PATH = (
+    Path(__file__).parent / "fixtures" / "uk_qualification" / "uk_data_line_bundle.json"
+)
 VENDORED_SCHEMAS = (
     Path(__file__).resolve().parents[1]
     / "src"

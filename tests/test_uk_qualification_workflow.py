@@ -21,6 +21,7 @@ from policyengine.provenance.uk_qualification import (
 )
 from tests.qualification_fixtures import (
     HARNESS,
+    UK_DATA_LINE_BUNDLE_PATH,
     gates,
     graphql_base_changes_output,
     make_pair,
@@ -40,6 +41,8 @@ def _cli():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # These tests build candidates on the policyengine-uk-data line.
+    module.BUNDLE_PATH = UK_DATA_LINE_BUNDLE_PATH
     return module
 
 
