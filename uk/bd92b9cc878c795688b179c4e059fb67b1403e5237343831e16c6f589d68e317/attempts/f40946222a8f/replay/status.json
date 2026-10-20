@@ -9,9 +9,16 @@
       "at": "2026-10-20T08:18:24Z",
       "run_url": "https://github.com/PolicyEngine/policyengine-scorecard/actions/runs/39385270190",
       "status": "running"
+    },
+    {
+      "at": "2026-10-20T10:04:17Z",
+      "run_url": "https://github.com/PolicyEngine/policyengine-scorecard/actions/runs/39385270190",
+      "status": "failed"
     }
   ],
+  "receipt_commit": "dec41a7236c5467229b6d80dc762dc87b692f397",
+  "receipt_sha256": "e755c44640197c767d80dde89a72efac5ab914a072aa1b5294f1eb6a96bb4e46",
   "request_id": "629de1fa57931370921ef915ff0d4029cdd7f3b75b5cf9634c549465d7b14a13",
   "schema": "policyengine.uk-replay-status/v1",
-  "status": "running"
+  "status": "failed"
 }

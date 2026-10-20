@@ -4,9 +4,14 @@
       "at": "2026-10-20T05:48:58Z",
       "run_url": "https://github.com/PolicyEngine/policyengine-scorecard/actions/runs/39372705750",
       "status": "queued"
+    },
+    {
+      "at": "2026-10-20T10:31:42Z",
+      "run_url": "https://github.com/PolicyEngine/policyengine-scorecard/actions/runs/39405285002",
+      "status": "running"
     }
   ],
   "request_id": "6278d02d5ffdc0487d9db55b508407bafad1e8d2c78fce695590e1c0a70d842b",
   "schema": "policyengine.uk-replay-status/v1",
-  "status": "queued"
+  "status": "running"
 }

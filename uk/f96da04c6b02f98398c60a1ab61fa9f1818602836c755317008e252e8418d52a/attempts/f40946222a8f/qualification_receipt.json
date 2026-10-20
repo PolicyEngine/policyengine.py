@@ -1,5 +1,5 @@
 {
-  "completed_at": "2026-10-20T08:50:18Z",
+  "completed_at": "2026-10-20T10:39:04Z",
   "gates": [
     {
       "details": {},
@@ -450,8 +450,8 @@
   "issued_by": {
     "repository": "PolicyEngine/policyengine.py",
     "run_attempt": 1,
-    "run_url": "https://github.com/PolicyEngine/policyengine.py/actions/runs/39395108046",
-    "workflow_run_id": 39395108046
+    "run_url": "https://github.com/PolicyEngine/policyengine.py/actions/runs/39408673935",
+    "workflow_run_id": 39408673935
   },
   "pair": {
     "core": {
