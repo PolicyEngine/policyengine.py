@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal, Optional
 
 import requests
@@ -93,7 +93,16 @@ def _bundle_destination(data_dir: Path, path: str) -> Path:
     """
 
     relative = PurePosixPath(path)
-    if relative.is_absolute() or ".." in relative.parts:
+    # Repository paths use forward slashes. A backslash, drive or root would
+    # make the platform path leave data_dir on Windows.
+    windows = PureWindowsPath(path)
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or "\\" in path
+        or windows.drive
+        or windows.root
+    ):
         raise DatasetMaterializationError(
             f"Bundle artifact path {path!r} must be relative to its repository."
         )

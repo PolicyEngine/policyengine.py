@@ -268,6 +268,15 @@ def test_same_named_artifacts_of_two_releases_never_share_a_cache_path(tmp_path)
     # A top-level file keeps its cache path.
     default = _resolve_bundle_dataset("uk", data_dir=tmp_path)
     assert default.destination == tmp_path / default.path
-    for path in ("/etc/passwd", "../outside.h5", "releases/../../outside.h5"):
+    for path in (
+        "/etc/passwd",
+        "../outside.h5",
+        "releases/../../outside.h5",
+        "..\\..\\outside.h5",
+        "C:\\outside.h5",
+        "C:outside.h5",
+        "\\outside.h5",
+        "\\\\server\\share\\outside.h5",
+    ):
         with pytest.raises(DatasetMaterializationError, match="must be relative"):
             _bundle_destination(tmp_path, path)
