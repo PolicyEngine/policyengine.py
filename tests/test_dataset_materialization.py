@@ -252,3 +252,22 @@ def test_authentication_failure_does_not_retry_repository_type(tmp_path, status_
         )
 
     assert len(session.calls) == 1
+
+
+def test_same_named_artifacts_of_two_releases_never_share_a_cache_path(tmp_path):
+    from policyengine.provenance.dataset_materialization import (
+        DatasetMaterializationError,
+        _bundle_destination,
+        _resolve_bundle_dataset,
+    )
+
+    uk = _resolve_bundle_dataset("uk", "calibration_diagnostics", data_dir=tmp_path)
+    us = _resolve_bundle_dataset("us", "calibration_diagnostics", data_dir=tmp_path)
+    assert uk.destination.name == us.destination.name == "calibration_diagnostics.json"
+    assert uk.destination != us.destination
+    # A top-level file keeps its cache path.
+    default = _resolve_bundle_dataset("uk", data_dir=tmp_path)
+    assert default.destination == tmp_path / default.path
+    for path in ("/etc/passwd", "../outside.h5", "releases/../../outside.h5"):
+        with pytest.raises(DatasetMaterializationError, match="must be relative"):
+            _bundle_destination(tmp_path, path)
