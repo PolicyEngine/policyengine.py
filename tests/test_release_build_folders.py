@@ -478,6 +478,30 @@ class TestCertifyBuildFolder:
         with pytest.raises(CertificationError, match="outside"):
             certify_uk(empty_bundle(tmp_path), [payload])
 
+    @pytest.mark.parametrize(
+        "artifact_path",
+        [
+            # Starts with the folder, then leaves it: HTTP clients remove the
+            # dot segments, so this would fetch the earlier build's file.
+            f"{NATIONAL_FOLDER}/../{EARLIER_NATIONAL_BUILD}/microcosm_uk_2024_25.h5",
+            f"{NATIONAL_FOLDER}/nested/microcosm_uk_2024_25.h5",
+            f"{NATIONAL_FOLDER}/..",
+            "..",
+            ".",
+            "microcosm_uk_2024_25\\..\\other.h5",
+        ],
+    )
+    def test__given_artifact_path_not_directly_inside_its_folder__then_refuses(
+        self, tmp_path, artifact_path
+    ):
+        # The release writer publishes only bare file names, directly inside
+        # the build folder.
+        payload = folder_layout_manifest_payload()
+        payload["artifacts"]["microcosm_uk_2024_25"]["path"] = artifact_path
+
+        with pytest.raises(CertificationError, match="directly inside"):
+            certify_uk(empty_bundle(tmp_path), [payload])
+
     def test__given_artifact_from_another_repository__then_keeps_its_own_pins(
         self, tmp_path
     ):
@@ -686,6 +710,19 @@ class TestImportCheckBuildFolder:
             bundle_patch,
             request_patch,
             pytest.raises(ReleaseBuildFolderError, match=EARLIER_NATIONAL_BUILD),
+        ):
+            get_data_release_manifest("uk")
+
+    def test__given_remote_artifact_leaving_its_folder__then_refuses(self):
+        remote = folder_layout_manifest_payload()
+        remote["artifacts"]["microcosm_uk_2024_25"]["path"] = (
+            f"{NATIONAL_FOLDER}/../{EARLIER_NATIONAL_BUILD}/microcosm_uk_2024_25.h5"
+        )
+        bundle_patch, request_patch = self._patched(remote)
+        with (
+            bundle_patch,
+            request_patch,
+            pytest.raises(ReleaseBuildFolderError, match="directly inside"),
         ):
             get_data_release_manifest("uk")
 
