@@ -56,6 +56,13 @@ python scripts/bundle.py certify-data --country uk --data-producer populace \
   mark it withdrawn, or certification refuses it. A local-area release passed
   with `--regional-manifest-uri` is checked the same way. Which build is
   `current` doesn't matter: a certificate pins one build.
+- The whole record must also be one the release writer's parser
+  (microcosm-emitter's `ReleasesRecord.parse`) accepts, or certification
+  refuses it. .py repeats the writer's rules: exactly the keys the writer
+  writes, at every level; `schema_version` 1; safe release and build names and
+  valid roles; a non-empty `published_at` and a boolean `withdrawn` on every
+  build; a `default` that is null or a listed release; a `current` that is null
+  or a listed build that isn't withdrawn; and at most 4 MiB.
 - The build's own files are pinned at `releases/<release>/<build>/<file>` and
   at the URI's revision, whatever revision their manifest entries name. Each
   one's `path` must be a bare file name, alone or after the folder, as the
@@ -67,7 +74,8 @@ python scripts/bundle.py certify-data --country uk --data-producer populace \
 - At import, a remote manifest that names another release or build than the
   bundle's pinned folder is refused, even when the bundle carries a
   certificate. Import doesn't read `releases.json`: a build withdrawn after it
-  was certified keeps loading until the bundle is certified again.
+  was certified keeps loading in every installed .py release whose bundle pins
+  it. Certifying again changes only the .py releases published afterwards.
 
 Manifests published before this layout, whose `build` is an object, are
 certified as described above.

@@ -34,7 +34,7 @@ by its manifest's ``release`` and ``build`` strings) has no tag. Certify it
 from that folder at the commit that published it; its own files are pinned
 inside the folder at that revision, and its ``build`` names the certificate.
 The repository's ``releases.json`` at ``main`` must list the build and not
-have withdrawn it.
+have withdrawn it, and must be a record the release writer accepts.
 
 ``scripts/bundle.py certify-data`` is the operator-facing wrapper. Network
 access is required (HF manifest fetch + PyPI wheel metadata). Countries whose
@@ -296,7 +296,8 @@ def fetch_release_manifest(
     A build published in its own release folder must be read from that
     folder, and its own files are pinned inside it at the URI's revision
     (``read_build_folder``). The repository's ``releases.json`` at ``main``
-    must list the build and not have withdrawn it."""
+    must list the build and not have withdrawn it, and must be a record the
+    release writer accepts (``check_build_listed``)."""
     parts = parse_manifest_uri(manifest_uri)
     url = https_manifest_url(parts)
     headers = {"Authorization": f"Bearer {token}"} if token else {}

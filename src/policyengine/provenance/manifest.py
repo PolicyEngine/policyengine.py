@@ -32,10 +32,19 @@ RELEASE_MANIFEST_NAME = "release_manifest.json"
 RELEASES_RECORD_NAME = "releases.json"
 RELEASES_RECORD_REVISION = "main"
 RELEASES_RECORD_SCHEMA_VERSION = 1
+#: The largest ``releases.json`` the release writer reads
+#: (``microcosm_emitter_interface.releases.MAX_RECORD_BYTES``).
+RELEASES_RECORD_MAX_BYTES = 4 * 1024 * 1024
 #: The publisher refuses any other release or build name
 #: (``microcosm_emitter_interface.identifiers.SAFE_IDENTIFIER``), and both
 #: are interpolated into repository paths.
 RELEASE_FOLDER_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+#: The publisher refuses any other release role
+#: (``microcosm_emitter_interface.identifiers.ROLE_IDENTIFIER``).
+RELEASE_ROLE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_RELEASES_RECORD_KEYS = frozenset({"schema_version", "default", "releases"})
+_RELEASE_ENTRY_KEYS = frozenset({"role", "current", "builds"})
+_BUILD_ENTRY_KEYS = frozenset({"published_at", "withdrawn"})
 
 
 class DataReleaseManifestUnavailableError(ValueError):
@@ -417,48 +426,124 @@ def check_build_listed(record_bytes: bytes, *, release: str, build: str) -> None
                 "published_at": ..., "withdrawn": <bool>}}}}}
 
     Which build is current does not matter here: a certificate pins one
-    build, current or not.
+    build, current or not. The whole record must still be one the release
+    writer accepts (``_read_releases_record``).
 
     Raises:
-        ReleaseBuildFolderError: If the record is unreadable, has another
-            schema version, does not list the build, or marks it withdrawn.
+        ReleaseBuildFolderError: If the release writer would refuse the
+            record, or the record does not list the build, or marks it
+            withdrawn.
     """
 
+    record = _read_releases_record(record_bytes)
+    release_entry = record["releases"].get(release)
+    if release_entry is None or build not in release_entry["builds"]:
+        raise ReleaseBuildFolderError(
+            f"{RELEASES_RECORD_NAME} does not list build {build} of release {release}."
+        )
+    if release_entry["builds"][build]["withdrawn"]:
+        raise ReleaseBuildFolderError(
+            f"Build {build} of release {release} is withdrawn in "
+            f"{RELEASES_RECORD_NAME}."
+        )
+
+
+def _read_releases_record(record_bytes: bytes) -> dict[str, Any]:
+    """Parse ``releases.json``, refusing any record the release writer refuses.
+
+    These rules repeat those of the release writer's parser, microcosm-emitter's
+    ``microcosm_emitter_interface.releases.ReleasesRecord.parse`` and its
+    ``check_record``, so that .py certifies only from a record the writer and
+    its other readers accept. .py does not depend on that package; when the
+    writer's rules change, change these with them.
+
+    Raises:
+        ReleaseBuildFolderError: If the record is larger than
+            ``RELEASES_RECORD_MAX_BYTES`` or not a JSON document, has other
+            keys or another schema version, has a malformed release or build
+            entry or an unsafe release or build name, or names as ``default``
+            a release it does not list or as ``current`` a build it does not
+            list or has withdrawn.
+    """
+
+    def refuse(problem: str) -> ReleaseBuildFolderError:
+        return ReleaseBuildFolderError(f"{RELEASES_RECORD_NAME} {problem}")
+
+    if len(record_bytes) > RELEASES_RECORD_MAX_BYTES:
+        raise refuse(f"is larger than {RELEASES_RECORD_MAX_BYTES} bytes.")
     try:
         record = json.loads(record_bytes)
     except (ValueError, UnicodeDecodeError, RecursionError):
-        raise ReleaseBuildFolderError(
-            f"{RELEASES_RECORD_NAME} is not a readable JSON document."
-        ) from None
-    schema_version = record.get("schema_version") if isinstance(record, dict) else None
+        raise refuse("is not a readable JSON document.") from None
+    if not isinstance(record, dict) or set(record) != _RELEASES_RECORD_KEYS:
+        raise refuse(f"must have exactly the keys {sorted(_RELEASES_RECORD_KEYS)}.")
+    schema_version = record["schema_version"]
     # ``True`` and ``1.0`` equal 1 in Python; only the integer is the version.
     if (
         type(schema_version) is not int
         or schema_version != RELEASES_RECORD_SCHEMA_VERSION
     ):
-        raise ReleaseBuildFolderError(
-            f"{RELEASES_RECORD_NAME} must have schema_version "
-            f"{RELEASES_RECORD_SCHEMA_VERSION}."
-        )
-    releases = record.get("releases")
-    release_entry = releases.get(release) if isinstance(releases, dict) else None
-    builds = release_entry.get("builds") if isinstance(release_entry, dict) else None
-    build_entry = builds.get(build) if isinstance(builds, dict) else None
-    if not isinstance(build_entry, dict):
-        raise ReleaseBuildFolderError(
-            f"{RELEASES_RECORD_NAME} does not list build {build} of release {release}."
-        )
-    withdrawn = build_entry.get("withdrawn")
-    if not isinstance(withdrawn, bool):
-        raise ReleaseBuildFolderError(
-            f"{RELEASES_RECORD_NAME} gives build {build} of release {release} "
-            "no withdrawn flag."
-        )
-    if withdrawn:
-        raise ReleaseBuildFolderError(
-            f"Build {build} of release {release} is withdrawn in "
-            f"{RELEASES_RECORD_NAME}."
-        )
+        raise refuse(f"must have schema_version {RELEASES_RECORD_SCHEMA_VERSION}.")
+    releases = record["releases"]
+    if not isinstance(releases, dict):
+        raise refuse("must have an object as releases.")
+    for release_name, release_entry in releases.items():
+        if not RELEASE_FOLDER_NAME.fullmatch(release_name):
+            raise refuse("names a release that is not a safe identifier.")
+        if (
+            not isinstance(release_entry, dict)
+            or set(release_entry) != _RELEASE_ENTRY_KEYS
+        ):
+            raise refuse(
+                f"must give release {release_name} exactly the keys "
+                f"{sorted(_RELEASE_ENTRY_KEYS)}."
+            )
+        role = release_entry["role"]
+        if not isinstance(role, str) or not RELEASE_ROLE_NAME.fullmatch(role):
+            raise refuse(f"gives release {release_name} an invalid role.")
+        current = release_entry["current"]
+        if current is not None and not isinstance(current, str):
+            raise refuse(
+                f"must give release {release_name} a build or null as current."
+            )
+        builds = release_entry["builds"]
+        if not isinstance(builds, dict):
+            raise refuse(f"must give release {release_name} an object as builds.")
+        for build_name, build_entry in builds.items():
+            if not RELEASE_FOLDER_NAME.fullmatch(build_name):
+                raise refuse(
+                    f"names a build of release {release_name} that is not a "
+                    "safe identifier."
+                )
+            if (
+                not isinstance(build_entry, dict)
+                or set(build_entry) != _BUILD_ENTRY_KEYS
+                or not isinstance(build_entry["published_at"], str)
+                or not build_entry["published_at"]
+                or not isinstance(build_entry["withdrawn"], bool)
+            ):
+                raise refuse(
+                    f"must give build {build_name} of release {release_name} "
+                    "a non-empty published_at string and a boolean withdrawn, "
+                    "and nothing else."
+                )
+        if current is not None:
+            if current not in builds:
+                raise refuse(
+                    f"names unlisted build {current} as the current build of "
+                    f"release {release_name}."
+                )
+            if builds[current]["withdrawn"]:
+                raise refuse(
+                    f"names withdrawn build {current} as the current build of "
+                    f"release {release_name}."
+                )
+    default = record["default"]
+    if default is not None and not isinstance(default, str):
+        raise refuse("must have a release name or null as default.")
+    if default is not None and default not in releases:
+        raise refuse(f"names unlisted release {default} as default.")
+    return record
 
 
 def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
