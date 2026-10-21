@@ -1,0 +1,14 @@
+{
+  "anonymous_dataset_status": 401,
+  "artifacts": {
+    "enhanced_frs_2024_25": 200,
+    "enhanced_frs_2024_25_tiny": 200,
+    "frs_2024_25": 200,
+    "frs_2024_25_tiny": 200,
+    "local_authority_weights": 200,
+    "local_geography_weights": 200,
+    "parliamentary_constituency_weights": 200
+  },
+  "manifest_sha256": "45d4811523b36d661821f518b3fcceb3c6b57e54dfc01062728cc921350c25f1",
+  "manifest_status": 200
+}
