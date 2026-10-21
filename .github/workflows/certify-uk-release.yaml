@@ -7,7 +7,8 @@
 # mandatory gates on that exact commit, replayed by policyengine-scorecard,
 # and recorded in the uk-qualification-ledger branch. Promotion is
 # serialized: it readies the newest promotable candidate PR that advances
-# main, closes superseded ones, and (cos d1344) fast-forwards main to its
+# main, closes superseded ones and those of pairs from another data line
+# (which are never promoted), and (cos d1344) fast-forwards main to its
 # qualified commit once every check on it has passed, which succeeds only
 # while main is still the commit it was built on; otherwise the catch-up
 # requalifies it on current main.

@@ -34,6 +34,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
@@ -466,14 +467,14 @@ def cmd_finalize(args: argparse.Namespace) -> int:
         attempt, Path(args.ledger), issued_by=issued_by(), completed_at=utc_now()
     )
     payload = read_json(attempt / "candidate.json")
-    line = certified_data_line(json.loads(BUNDLE_PATH.read_text()))
-    body = candidate_pr_body(
-        receipt,
-        receipt.pair,
-        ledger_url=ledger_url(receipt.pair_id),
-        on_main_line=data_line(receipt.pair) == line,
-    )
     if args.pr_body:
+        line = certified_data_line(json.loads(BUNDLE_PATH.read_text()))
+        body = candidate_pr_body(
+            receipt,
+            receipt.pair,
+            ledger_url=ledger_url(receipt.pair_id),
+            on_main_line=data_line(receipt.pair) == line,
+        )
         Path(args.pr_body).write_text(body)
     print(f"verdict {receipt.verdict}; receipt {receipt.receipt_sha256}")
     set_output(
@@ -935,6 +936,35 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
     return 0
 
 
+def _close_pull_requests(closes: Sequence[tuple[str, str]]) -> set[str]:
+    """Close each ``(number, comment)``; return the numbers GitHub closed.
+
+    A failed close is reported, and the pull request stays open for the next
+    run to close.
+    """
+
+    closed = set()
+    for number, comment in closes:
+        result = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "close",
+                number,
+                "--repo",
+                LEDGER_REPOSITORY,
+                "--comment",
+                comment,
+            ],
+            check=False,
+        )
+        if result.returncode == 0:
+            closed.add(number)
+        else:
+            print(f"::warning::could not close pull request {number}")
+    return closed
+
+
 def cmd_promote(args: argparse.Namespace) -> int:
     bundle = json.loads(BUNDLE_PATH.read_text())
     problems: list[str] = []
@@ -960,42 +990,33 @@ def cmd_promote(args: argparse.Namespace) -> int:
         print(f"off main's data line {branch}")
     if not args.apply:
         return 0
-    for branch in plan.close_branches:
-        subprocess.run(
-            [
-                "gh",
-                "pr",
-                "close",
-                numbers.get(branch, branch),
-                "--repo",
-                LEDGER_REPOSITORY,
-                "--comment",
-                f"Superseded: {plan.reason}. The ledger keeps this candidate's evidence.",
-            ],
-            check=False,
-        )
-    for branch in plan.close_off_line:
-        subprocess.run(
-            [
-                "gh",
-                "pr",
-                "close",
-                numbers.get(branch, branch),
-                "--repo",
-                LEDGER_REPOSITORY,
-                "--comment",
+    closed = _close_pull_requests(
+        [
+            (
+                numbers[branch],
+                f"Superseded: {plan.reason}. The ledger keeps this candidate's "
+                "evidence.",
+            )
+            for branch in plan.close_branches
+        ]
+        + [
+            (
+                numbers[branch],
                 "This pair is not on main's data line, so it is never promoted. "
                 "The ledger keeps this candidate's evidence.",
-            ],
-            check=False,
-        )
+            )
+            for branch in plan.close_off_line
+        ]
+    )
     # Only the plan's target may be ready, and only while _promote finds it
     # on current main: any other ready candidate (left by a run that could
     # not undo it, or by older code) goes back to draft.
     returned = [
         _set_ready(str(pr["number"]), False)
         for pr in sorted(pull_requests, key=lambda pr: pr["number"])
-        if not pr["isDraft"] and pr["headRefName"] != plan.ready_branch
+        if not pr["isDraft"]
+        and pr["headRefName"] != plan.ready_branch
+        and str(pr["number"]) not in closed
     ]
     safe = True
     if plan.ready_branch is not None and plan.ready_commit is not None:

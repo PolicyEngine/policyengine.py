@@ -735,24 +735,17 @@ def test_regional_flags_keep_routing_on_its_line_and_drop_it_across_lines():
 
     certified = (
         record["model_package"]["version"],
-        record["certification"]["certified_for_core_version"],
+        MICROCOSM_ROUTED_BUNDLE["packages"]["policyengine-core"]["version"],
     )
 
     assert regional_certification_arguments(BUNDLE, uk_data_pair) == []
     assert regional_certification_arguments(MICROCOSM_ROUTED_BUNDLE, uk_data_pair) == [
         "--drop-regional-release"
     ]
-    assert regional_certification_arguments(
-        MICROCOSM_ROUTED_BUNDLE, microcosm_pair(*certified)
-    ) == [
-        "--regional-manifest-uri",
-        record["regional_source_manifest_uri"],
-        "--regional-release-kind",
-        record["regional_release_kind"],
-    ]
-    # Main's local-area cut serves only main's model and core.
-    for model, core in (("2.140.0", certified[1]), (certified[0], "3.34.0")):
-        with pytest.raises(ValueError, match="needs a local-area cut"):
+    # A same-line pair needs a local-area cut for its versions, which no
+    # candidate carries, whatever those versions are.
+    for model, core in (certified, ("2.140.0", certified[1]), (certified[0], "3.34.0")):
+        with pytest.raises(ValueError, match="certify such a pair by hand"):
             regional_certification_arguments(
                 MICROCOSM_ROUTED_BUNDLE, microcosm_pair(model, core)
             )
@@ -1031,6 +1024,126 @@ def _promotable_pair_and_branch(core=None):
     current = BUNDLE["data_releases"]["uk"]["data_package"]["version"]
     core = core or BUNDLE["packages"]["policyengine-core"]["version"]
     return make_pair(model="2.200.0", data=current, core=core)
+
+
+def _other_line_pair(model="2.900.0"):
+    """A pair on the Microcosm line, which BUNDLE (a uk-data main) is not."""
+
+    pair = make_pair(model=model)
+    return pair.model_copy(
+        update={
+            "data": pair.data.model_copy(
+                update={
+                    "data_package": "microcosm-data",
+                    "repo_id": "policyengine/populace-uk-private",
+                }
+            )
+        }
+    )
+
+
+def test_promotion_closes_other_line_prs_only_at_their_qualified_commit():
+    target = _promotion_receipt(pair=_promotable_pair_and_branch())
+    other = _promotion_receipt(pair=_other_line_pair())
+    target_branch = candidate_branch(target.pair)
+    other_branch = candidate_branch(other.pair)
+
+    plan = plan_promotion(
+        [target, other],
+        BUNDLE,
+        {
+            target_branch: target.harness.git_commit,
+            other_branch: other.harness.git_commit,
+        },
+    )
+    assert plan.ready_branch == target_branch
+    assert plan.close_off_line == [other_branch]
+    assert other_branch not in plan.close_branches
+
+    # A newer head is a forced re-run still in flight: its own receipt decides.
+    in_flight = plan_promotion(
+        [target, other],
+        BUNDLE,
+        {target_branch: target.harness.git_commit, other_branch: "f" * 40},
+    )
+    assert in_flight.ready_branch == target_branch
+    assert in_flight.close_off_line == []
+
+
+def test_promote_closes_other_line_prs_and_never_drafts_a_closed_one(monkeypatch):
+    import argparse
+
+    cli = load_candidate_cli("check_uk_promote_line", MICROCOSM_ROUTED_BUNDLE_PATH)
+    receipt = _promotion_receipt(pair=make_pair(model="2.200.0"))
+    branch = candidate_branch(receipt.pair)
+    monkeypatch.setattr(cli, "latest_receipts", lambda ledger, problems=None: [receipt])
+    monkeypatch.setattr(
+        cli,
+        "_candidate_pull_requests",
+        lambda: [
+            {
+                "number": 7,
+                "headRefName": branch,
+                "headRefOid": receipt.harness.git_commit,
+                "isDraft": False,
+                "isCrossRepository": False,
+            }
+        ],
+    )
+    commands = []
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda command, **kwargs: commands.append(command)
+        or subprocess.CompletedProcess(command, 0),
+    )
+    drafted = []
+    monkeypatch.setattr(
+        cli, "_set_ready", lambda number, ready: drafted.append(number) or True
+    )
+
+    assert cli.cmd_promote(argparse.Namespace(ledger="ledger", apply=True)) == 0
+    assert commands == [
+        [
+            "gh",
+            "pr",
+            "close",
+            "7",
+            "--repo",
+            cli.LEDGER_REPOSITORY,
+            "--comment",
+            "This pair is not on main's data line, so it is never promoted. "
+            "The ledger keeps this candidate's evidence.",
+        ]
+    ]
+    # gh refuses to return a closed pull request to draft.
+    assert drafted == []
+
+
+def test_finalize_says_an_other_line_pair_is_never_promoted(monkeypatch, tmp_path):
+    import argparse
+
+    cli = load_candidate_cli("check_uk_finalize_line", MICROCOSM_ROUTED_BUNDLE_PATH)
+    receipt = _promotion_receipt(pair=make_pair(model="2.200.0"))
+    attempt = tmp_path / "attempt"
+    write_json(
+        attempt / "candidate.json",
+        {
+            "pair": receipt.pair.canonical_payload(),
+            "branch": candidate_branch(receipt.pair),
+        },
+    )
+    monkeypatch.setattr(cli, "finalize_attempt", lambda *args, **kwargs: receipt)
+    monkeypatch.setattr(cli, "issued_by", lambda: ISSUED)
+    monkeypatch.setattr(cli, "set_output", lambda **kwargs: None)
+    body = tmp_path / "body.md"
+
+    namespace = argparse.Namespace(
+        attempt=str(attempt), ledger=str(tmp_path / "ledger"), pr_body=str(body)
+    )
+    assert cli.cmd_finalize(namespace) == 0
+    text = body.read_text()
+    assert "never promoted" in text and "promotes the pair" not in text
 
 
 def test_pairs_that_share_versions_never_share_a_branch():

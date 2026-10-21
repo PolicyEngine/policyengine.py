@@ -17,8 +17,9 @@
     it), regenerate pins, ``uv.lock``, TROs and household snapshots
     together, and the certified-version test constants for a pair on main's
     data line, and commit that as the candidate commit on
-    ``candidate/uk/<model>-<data>``. A routed bundle keeps its regional
-    release for a pair on its line and drops it for a pair from another.
+    ``candidate/uk/<model>-<data>``. On a main routed to a local-area release,
+    a pair from another line drops the routing, and a pair on main's own line
+    is refused: it needs a local-area cut certified by hand.
 ``gates``
     Run the mandatory local gates on the candidate commit
     (:mod:`policyengine.provenance.uk_candidate`).
@@ -29,7 +30,8 @@
     Record the qualification receipt in the ledger.
 ``promote``
     Pick the newest promotable pair that advances ``main`` and mark its
-    candidate PR ready, closing superseded candidates.
+    candidate PR ready, closing superseded candidates, and closing the PRs
+    of pairs from another data line at the commit their receipt qualified.
 
 Network, git and GitHub access are injected so every decision can be tested
 offline.
@@ -354,11 +356,22 @@ def data_line(pair: CandidatePair) -> tuple[str, str]:
     return (pair.data.data_package, pair.data.repo_id)
 
 
+def split_by_data_line(
+    receipts: Iterable[QualificationReceipt], bundle: Mapping[str, Any]
+) -> tuple[list[QualificationReceipt], list[QualificationReceipt]]:
+    """``(on main's data line, from another line)``."""
+
+    line = certified_data_line(bundle)
+    same, other = [], []
+    for receipt in receipts:
+        (same if data_line(receipt.pair) == line else other).append(receipt)
+    return same, other
+
+
 def _same_line_receipts(
     receipts: Iterable[QualificationReceipt], bundle: Mapping[str, Any]
 ) -> list[QualificationReceipt]:
-    line = certified_data_line(bundle)
-    return [receipt for receipt in receipts if data_line(receipt.pair) == line]
+    return split_by_data_line(receipts, bundle)[0]
 
 
 def certified_order_key(bundle: Mapping[str, Any]) -> tuple[str, str, str]:
@@ -759,12 +772,13 @@ def regional_certification_arguments(
 ) -> list[str]:
     """``certify-data``'s regional flags for certifying ``pair`` onto ``bundle``.
 
-    Certification refuses to drop a bundle's regional routing silently. A
-    pair on main's data line keeps main's regional release, which must then
-    serve the pair's model and core by its own claims. A pair from another
-    line (a forced qualification, never promoted automatically) replaces the
-    line the routing belongs to, so the routing is dropped and the pair's
-    national dataset serves every region type.
+    Certification refuses to drop a bundle's regional routing silently. A pair
+    from another data line (a forced qualification, never promoted) replaces
+    the line the routing belongs to, so the routing is dropped and the pair's
+    national dataset serves every region type. A pair on a routed main's own
+    line is refused: the routing would need a local-area cut for the pair's
+    versions, which a candidate pair does not carry, and automated
+    qualification checks no local-area file.
     """
 
     record = bundle["data_releases"]["uk"]
@@ -773,29 +787,12 @@ def regional_certification_arguments(
         return []
     if data_line(pair) != certified_data_line(bundle):
         return ["--drop-regional-release"]
-    # Main's regional release was certified for main's model and core, and
-    # gets no qualified-pair escape. A pair on other versions needs its own
-    # local-area cut, which a candidate pair does not carry.
-    certified_core = (record.get("certification") or {}).get(
-        "certified_for_core_version"
-    ) or bundle["packages"][CORE_PACKAGE]["version"]
-    if (pair.model.version, pair.core.version) != (
-        record["model_package"]["version"],
-        certified_core,
-    ):
-        raise ValueError(
-            f"Main routes UK area regions to {regional_uri}, certified for "
-            f"policyengine-uk {record['model_package']['version']} and "
-            f"policyengine-core {certified_core}. A candidate on "
-            f"{pair.model.version} and {pair.core.version} needs a local-area "
-            "cut for those versions; certify it by hand with that cut."
-        )
-    return [
-        "--regional-manifest-uri",
-        regional_uri,
-        "--regional-release-kind",
-        record.get("regional_release_kind") or "local_area",
-    ]
+    raise ValueError(
+        f"Main routes UK area regions to {regional_uri}. Automated "
+        "qualification cannot carry a local-area cut for a candidate on main's "
+        "own data line; certify such a pair by hand, with its local-area cut "
+        "(docs/engineering/skills/data-certification.md)."
+    )
 
 
 def prepare_candidate_commit(
@@ -1627,23 +1624,28 @@ def plan_promotion(
     """
 
     # Only pairs on main's data line are ordered against it. A pair from
-    # another line is never promoted, so its open pull request is closed; the
-    # ledger keeps its evidence.
-    receipts = list(receipts)
-    line = certified_data_line(bundle)
-    off_line = sorted(
+    # another line is never promoted, so its pull request is closed, but only
+    # at the commit its receipt qualified: a newer head is a forced re-run
+    # still in flight, which its own receipt decides. The ledger keeps the
+    # evidence.
+    same_line, off_line = split_by_data_line(receipts, bundle)
+    plan = _plan_same_line_promotion(same_line, bundle, open_candidate_branches)
+    plan.close_off_line = sorted(
         {
             candidate_branch(receipt.pair)
-            for receipt in receipts
-            if data_line(receipt.pair) != line
+            for receipt in off_line
+            if open_candidate_branches.get(candidate_branch(receipt.pair))
+            == receipt.harness.git_commit
         }
-        & set(open_candidate_branches)
     )
-    receipts = _same_line_receipts(receipts, bundle)
+    return plan
 
-    def plan(**fields: Any) -> PromotionPlan:
-        return PromotionPlan(**fields, close_off_line=off_line)
 
+def _plan_same_line_promotion(
+    receipts: Sequence[QualificationReceipt],
+    bundle: Mapping[str, Any],
+    open_candidate_branches: Mapping[str, str],
+) -> PromotionPlan:
     current = certified_order_key(bundle)
     target = select_promotion_target(receipts, current)
     baseline_matches = target is not None and (
@@ -1662,14 +1664,14 @@ def plan_promotion(
         elif baseline_matches and dominates(target.pair.order_key, key):
             close.append(branch)
     if target is None:
-        return plan(
+        return PromotionPlan(
             target=None,
             ready_branch=None,
             close_branches=sorted(close),
             reason=f"no promotable pair advances {current}",
         )
     if not baseline_matches:
-        return plan(
+        return PromotionPlan(
             target=target,
             ready_branch=None,
             close_branches=sorted(close),
@@ -1684,7 +1686,7 @@ def plan_promotion(
     qualified_commit = target.harness.git_commit
     head = open_candidate_branches.get(branch)
     if head is None:
-        return plan(
+        return PromotionPlan(
             target=target,
             ready_branch=None,
             close_branches=sorted(close),
@@ -1694,7 +1696,7 @@ def plan_promotion(
             ),
         )
     if head != qualified_commit:
-        return plan(
+        return PromotionPlan(
             target=target,
             ready_branch=None,
             close_branches=sorted(close),
@@ -1704,7 +1706,7 @@ def plan_promotion(
                 "nothing is promoted"
             ),
         )
-    return plan(
+    return PromotionPlan(
         target=target,
         ready_branch=branch,
         ready_commit=qualified_commit,
@@ -1718,8 +1720,8 @@ def candidate_pr_body(
     pair: CandidatePair,
     *,
     ledger_url: str,
+    on_main_line: bool,
     prepared: Optional[Mapping[str, Any]] = None,
-    on_main_line: bool = True,
 ) -> str:
     """Markdown body for a candidate PR: the pair, the gates and the verdict.
 
@@ -1749,8 +1751,7 @@ def candidate_pr_body(
     verdict = receipt.verdict if receipt else "pending"
     if on_main_line:
         outcome = (
-            "Merging this PR promotes the pair. Until cos d1344 is ruled, "
-            "promotion is a reviewed merge; the certification evidence test "
+            "Merging this PR promotes the pair; the certification evidence test "
             "refuses an exact-pair certificate without a promotable ledger receipt."
         )
     else:
