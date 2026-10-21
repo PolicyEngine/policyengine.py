@@ -316,6 +316,11 @@ jobs:
           VERSION: ${{ needs.Publish.outputs.version }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
         run: python scripts/release_consumers.py scorecard-request --version "$VERSION" > "$RUNNER_TEMP/scorecard-request.json"
+      - name: Warn that no released-bundle replay was requested
+        if: steps.released.outcome == 'failure' || steps.scorecard-request.outcome == 'failure'
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: echo "::warning title=No released-bundle replay::The scorecard's replay request for policyengine $VERSION could not be built; see the steps above."
       - name: Generate GitHub App token for the scorecard
         if: steps.scorecard-request.outcome == 'success'
         id: scorecard-token

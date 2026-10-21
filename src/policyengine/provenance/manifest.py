@@ -10,6 +10,11 @@ from urllib.parse import quote
 import requests
 from pydantic import BaseModel, Field
 
+from policyengine.provenance.bundle_validation import (
+    shadowed_dataset_overlays,
+    shadowing_overlays_message,
+)
+
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
 
@@ -167,6 +172,14 @@ class DataCertification(BaseModel):
     data_build_fingerprint: Optional[str] = None
     certified_by: Optional[str] = None
     certified_for_core_version: Optional[str] = None
+    #: How the certificate covers policyengine-core. ``certified``: it names
+    #: the core it was certified for (``certified_for_core_version``), and the
+    #: bundle's core pin must equal it. ``bundle_pin``: it certifies whatever
+    #: core the bundle pins, without holding the pin to the data release's
+    #: core claims; certification and the strict check warn when the pin is
+    #: outside them. Absent in certificates from before October 2026, which
+    #: follow the pin the same way.
+    core_binding: Optional[Literal["certified", "bundle_pin"]] = None
     qualification_pair_id: Optional[str] = None
     qualification_ledger_url: Optional[str] = None
 
@@ -315,33 +328,23 @@ def _apply_dataset_overlays(
     registry of *additional* named datasets that resolution should expose
     without ever certifying them as the default — for example a staged
     artifact published in its own immutable release (see
-    ``docs/release-bundles.md``). Because certification only rewrites
-    ``data_releases``, overlays survive re-certification untouched.
+    ``docs/release-bundles.md``). Certification keeps every overlay except
+    one whose name the new release certifies itself, which it removes and
+    reports; re-add such an overlay if a later release stops certifying it.
 
-    Overlays are strictly additive: an overlay may not shadow the certified
-    default dataset or any certified dataset entry, so it can never alter
-    default resolution.
+    Overlays are strictly additive (``shadowed_dataset_overlays``): an overlay
+    may not shadow the certified default dataset or any certified dataset
+    entry, so it can never alter default resolution.
     """
     overlays = (bundle.get(DATASET_OVERLAYS_KEY) or {}).get(country_id) or {}
     if not overlays:
         return release_payload
 
+    shadowed = shadowed_dataset_overlays(release_payload, overlays)
+    if shadowed:
+        raise ValueError(shadowing_overlays_message(country_id, shadowed))
     certified_datasets = dict(release_payload.get("datasets") or {})
-    default_dataset = release_payload.get("default_dataset")
-    for overlay_name, overlay_reference in overlays.items():
-        if overlay_name == default_dataset:
-            raise ValueError(
-                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
-                "shadows the certified default dataset. Overlays must never "
-                "change default resolution."
-            )
-        if overlay_name in certified_datasets:
-            raise ValueError(
-                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
-                "collides with a certified dataset entry. Overlays must be "
-                "additive, not overrides."
-            )
-        certified_datasets[overlay_name] = overlay_reference
+    certified_datasets.update(overlays)
 
     return {**release_payload, "datasets": certified_datasets}
 
@@ -704,6 +707,43 @@ def dataset_logical_name(dataset: str) -> str:
 def resolve_default_datasets(country_id: str) -> list[str]:
     manifest = get_release_manifest(country_id)
     return list(manifest.datasets.keys())
+
+
+def region_dataset_name(country_id: str, region_type: str) -> Optional[str]:
+    """The certified dataset that ``region_type`` regions are routed to, if any."""
+
+    manifest = get_release_manifest(country_id)
+    template = manifest.region_datasets.get(region_type)
+    if template is None:
+        return None
+    return next(
+        (
+            name
+            for name, reference in manifest.datasets.items()
+            if reference.path == template.path_template
+        ),
+        None,
+    )
+
+
+def uk_area_dataset_hint(region_type: str) -> str:
+    """A sentence naming the dataset whose households carry an area's codes.
+
+    The Microcosm national default has no constituency or local-authority
+    codes; the local-area release the bundle routes those regions to does.
+    """
+
+    try:
+        name = region_dataset_name("uk", region_type)
+    except ValueError:
+        return ""
+    if name is None:
+        return ""
+    return (
+        f"The certified bundle routes {region_type} regions to the dataset "
+        f"{name!r}, whose households carry these codes: run the simulations "
+        "on that dataset."
+    )
 
 
 def resolve_region_dataset_path(

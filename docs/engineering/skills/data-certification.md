@@ -80,9 +80,30 @@ Microcosm national release with one of:
   `dataset_overlays.uk` entry.
 
 Either way, certification checks that the regional release serves the pinned
-model, and the pinned core when `--core-version` is given, by its own build or
-compatibility claims (a `--qualified-pair-id` names the primary release only),
-and HEAD-checks every artifact it carries.
+model by its own build or compatibility claims (a `--qualified-pair-id` names
+the primary release only), checks its core claims as for the primary release
+(below), and HEAD-checks every artifact it carries.
+
+### The core
+
+The bundle has one core pin, `packages.policyengine-core`, shared by every
+country. A certificate says how it covers it:
+
+- **`core_binding: bundle_pin` (the default, no `--core-version`).** The
+  certificate names no core and certifies whatever core the bundle pins, so
+  the pin can move with another country without re-certifying this one.
+  Certification checks the pin against each release's build-time core and
+  core claims, and warns, without refusing, when the pin is outside them.
+  `bundle.py check --include-tros --strict-tros` warns the same way when the
+  pin later moves outside the claims. Receipts then certify the pin without
+  the release's claim; the warning, the certificate and its TRO say so.
+- **`core_binding: certified` (`--core-version`).** The certificate names the
+  core (`certified_for_core_version`). Certification refuses a core that a
+  release neither was built with nor claims, and the strict check refuses a
+  pin that differs from the named core, so moving the core needs a
+  re-certification first. A qualified exact pair always binds its core.
+
+Use the default unless a release must not run on any other core.
 
 ### Re-certifying a routed bundle
 
@@ -91,6 +112,19 @@ given. While the bundle routes regions (`regional_source_manifest_uri` is set),
 a run without `--regional-manifest-uri` is refused; pass the current regional
 release again (or its replacement), or `--drop-regional-release` to remove the
 routing on purpose. The two flags cannot be combined.
+
+An overlay may never shadow a certified dataset name, so certification removes
+any `dataset_overlays.<country>` entry whose name the new release certifies. A
+rollback to policyengine-uk-data with `--drop-regional-release`, for example,
+removes the enhanced FRS overlays. `bundle.py check` refuses a bundle with an
+overlay that shadows a certified name.
+
+Removed overlays do not come back by themselves. Certification warns about
+every dataset name that stops resolving. After a certification that stops
+certifying a name that must stay loadable (rolling forward after a rollback,
+or a ship-together run after a national-first one), re-add its overlay from
+the previous bundle, as #685 did for `enhanced_frs_2024_25`, `frs_2024_25` and
+their `_tiny` files.
 
 ### US
 
@@ -182,9 +216,34 @@ python scripts/check_uk_uc_floor.py --dataset <candidate .h5 or bundle dataset n
 
 The benchmarks and their sources are in
 `src/policyengine/data/qualification/uk_uc_floor.json`. The receipt holds
-weighted national totals only. Before quoting any other figure from UK data
-in a PR, apply the UKDS output rules: no unit-record values, no cells under
-10 unweighted cases, no differencing.
+weighted national totals only.
+
+Before quoting any other figure from UK data in a PR, apply the UKDS output
+rules: no unit-record values, no cells under 10 unweighted cases, no
+differencing.
+
+**Recorded exceptions (policyengine.py#685, October 2026).**
+
+- **UC floor.** The Microcosm UK national cut
+  `microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71` became the default
+  with benefit units at 0.897 of the floor's 6.7m benchmark; spend passed at
+  0.959. The floor's benchmarks are not the figures Microcosm calibrates to
+  (DWP Stat-Xplore's 6.2m households on Universal Credit in payment, and its own
+  OBR spend line). Their definitions are to be settled when the UK data checks
+  move to the data pipelines. Until then, a later Microcosm cut with the same
+  gap needs the same explicit acceptance in its pull request, recorded here.
+- **Comparison gates.** The metrics review and the scorecard replay measure a
+  candidate against the previous certified pair, and a change of data line
+  moves the totals by design, so they were not run for that switch; its pull
+  request compares the two lines' weighted totals instead. The other gates,
+  reform responsiveness included, were run on the national cut.
+- **Budget-critical inputs: needs review.** `incapacity_benefit_reported` is
+  missing from the Microcosm file but was a column of the enhanced FRS. The
+  enhanced FRS column carries no values (Incapacity Benefit is closed), so
+  both datasets give zero. Accepted by María Juaristi in #685.
+- **Reform responsiveness: needs review.** The metrics tool's small-cell rule
+  withholds a standard reform's figures, so the gate cannot recompute that
+  reform's verdict. Accepted by María Juaristi in #685.
 
 ## Release runbooks
 

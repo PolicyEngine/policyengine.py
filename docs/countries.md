@@ -33,7 +33,7 @@ Override in any output with `income_variable=`.
 | | Dataset |
 |---|---|
 | US | Populace US 2024 (`populace_us_2024.h5`) |
-| UK | Enhanced FRS 2024-25 (`enhanced_frs_2024_25.h5`, policyengine-uk-data) |
+| UK | Microcosm UK 2024-25 (`microcosm_uk_2024_25.h5`); constituency and local-authority regions use its local-area release (`microcosm_uk_2024_25_dense.h5`) |
 
 ## State / regional breakdown
 

@@ -22,6 +22,10 @@ impact.findings  # what blocks publication, if anything
 impact.public  # the rows that may be published, or None while blocked
 ```
 
+For constituency and local-authority levels, `baseline` and `reform` must run
+on a dataset whose households carry those codes: the local-area dataset
+`microcosm_uk_2024_25_dense`, not the Microcosm national default.
+
 The UK datasets derive from surveys under the UK Data Service End User
 Licence. The defaults below follow its disclosure rules. You can raise them
 for a study with stricter conditions; you cannot lower them.

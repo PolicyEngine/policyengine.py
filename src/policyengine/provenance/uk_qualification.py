@@ -14,9 +14,12 @@
 ``prepare``
     On a checkout of ``main``, certify the pair into the bundle manifest
     (exact ``==`` claim backed by the pair id when no publisher claim covers
-    it), regenerate pins, ``uv.lock``, TROs, the certified-version test
-    constants and household snapshots together, and commit that as the
-    candidate commit on ``candidate/uk/<model>-<data>``.
+    it), regenerate pins, ``uv.lock``, TROs and household snapshots
+    together, and the certified-version test constants for a pair on main's
+    data line, and commit that as the candidate commit on
+    ``candidate/uk/<model>-<data>``. On a main routed to a local-area release,
+    a pair from another line drops the routing, and a pair on main's own line
+    is refused: it needs a local-area cut certified by hand.
 ``gates``
     Run the mandatory local gates on the candidate commit
     (:mod:`policyengine.provenance.uk_candidate`).
@@ -27,7 +30,8 @@
     Record the qualification receipt in the ledger.
 ``promote``
     Pick the newest promotable pair that advances ``main`` and mark its
-    candidate PR ready, closing superseded candidates.
+    candidate PR ready, closing superseded candidates, and closing the PRs
+    of pairs from another data line at the commit their receipt qualified.
 
 Network, git and GitHub access are injected so every decision can be tested
 offline.
@@ -352,11 +356,22 @@ def data_line(pair: CandidatePair) -> tuple[str, str]:
     return (pair.data.data_package, pair.data.repo_id)
 
 
+def split_by_data_line(
+    receipts: Iterable[QualificationReceipt], bundle: Mapping[str, Any]
+) -> tuple[list[QualificationReceipt], list[QualificationReceipt]]:
+    """``(on main's data line, from another line)``."""
+
+    line = certified_data_line(bundle)
+    same, other = [], []
+    for receipt in receipts:
+        (same if data_line(receipt.pair) == line else other).append(receipt)
+    return same, other
+
+
 def _same_line_receipts(
     receipts: Iterable[QualificationReceipt], bundle: Mapping[str, Any]
 ) -> list[QualificationReceipt]:
-    line = certified_data_line(bundle)
-    return [receipt for receipt in receipts if data_line(receipt.pair) == line]
+    return split_by_data_line(receipts, bundle)[0]
 
 
 def certified_order_key(bundle: Mapping[str, Any]) -> tuple[str, str, str]:
@@ -752,6 +767,34 @@ def _run(
     )
 
 
+def regional_certification_arguments(
+    bundle: Mapping[str, Any], pair: CandidatePair
+) -> list[str]:
+    """``certify-data``'s regional flags for certifying ``pair`` onto ``bundle``.
+
+    Certification refuses to drop a bundle's regional routing silently. A pair
+    from another data line (a forced qualification, never promoted) replaces
+    the line the routing belongs to, so the routing is dropped and the pair's
+    national dataset serves every region type. A pair on a routed main's own
+    line is refused: the routing would need a local-area cut for the pair's
+    versions, which a candidate pair does not carry, and automated
+    qualification checks no local-area file.
+    """
+
+    record = bundle["data_releases"]["uk"]
+    regional_uri = record.get("regional_source_manifest_uri")
+    if regional_uri is None:
+        return []
+    if data_line(pair) != certified_data_line(bundle):
+        return ["--drop-regional-release"]
+    raise ValueError(
+        f"Main routes UK area regions to {regional_uri}. Automated "
+        "qualification cannot carry a local-area cut for a candidate on main's "
+        "own data line; certify such a pair by hand, with its local-area cut "
+        "(docs/engineering/skills/data-certification.md)."
+    )
+
+
 def prepare_candidate_commit(
     repo_root: Path,
     resolved: ResolvedCandidate,
@@ -770,7 +813,9 @@ def prepare_candidate_commit(
     bundle_path = (
         repo_root / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
     )
-    old_record = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+    old_bundle = json.loads(bundle_path.read_text())
+    old_record = old_bundle["data_releases"]["uk"]
+    same_line = data_line(pair) == certified_data_line(old_bundle)
     run(
         [
             python,
@@ -789,6 +834,7 @@ def prepare_candidate_commit(
             "--qualified-pair-id",
             pair.pair_id,
             "--no-changelog",
+            *regional_certification_arguments(old_bundle, pair),
         ],
         cwd=repo_root,
     )
@@ -818,8 +864,16 @@ def prepare_candidate_commit(
         [python, "scripts/bundle.py", "generate", "--include-tros"],
         cwd=repo_root,
     )
-    constants = rewrite_certified_constants(
-        repo_root, certified_constant_replacements(old_record, new_record)
+    # The constant files pin main's line. Rewriting them by value from
+    # another line's certificate would write that line's values into
+    # unrelated constants, so a cross-line candidate leaves them, and its
+    # tests show the change of line.
+    constants = (
+        rewrite_certified_constants(
+            repo_root, certified_constant_replacements(old_record, new_record)
+        )
+        if same_line
+        else []
     )
     basis = new_record["certification"]["compatibility_basis"]
     basis_note = {
@@ -1547,6 +1601,9 @@ class PromotionPlan:
     #: The target, when its qualification compared against an earlier
     #: certificate than main's: it needs requalifying before promotion.
     requalify: Optional[CandidatePair] = None
+    #: Open candidate branches whose pair is not on main's data line. They are
+    #: never promoted, so their pull requests are closed.
+    close_off_line: list[str] = field(default_factory=list)
 
 
 def plan_promotion(
@@ -1566,9 +1623,29 @@ def plan_promotion(
     A branch that moved since is left alone and reported.
     """
 
-    # Only pairs on main's data line are ordered against it; others are left
-    # alone (neither promoted nor closed).
-    receipts = _same_line_receipts(receipts, bundle)
+    # Only pairs on main's data line are ordered against it. A pair from
+    # another line is never promoted, so its pull request is closed, but only
+    # at the commit its receipt qualified: a newer head is a forced re-run
+    # still in flight, which its own receipt decides. The ledger keeps the
+    # evidence.
+    same_line, off_line = split_by_data_line(receipts, bundle)
+    plan = _plan_same_line_promotion(same_line, bundle, open_candidate_branches)
+    plan.close_off_line = sorted(
+        {
+            candidate_branch(receipt.pair)
+            for receipt in off_line
+            if open_candidate_branches.get(candidate_branch(receipt.pair))
+            == receipt.harness.git_commit
+        }
+    )
+    return plan
+
+
+def _plan_same_line_promotion(
+    receipts: Sequence[QualificationReceipt],
+    bundle: Mapping[str, Any],
+    open_candidate_branches: Mapping[str, str],
+) -> PromotionPlan:
     current = certified_order_key(bundle)
     target = select_promotion_target(receipts, current)
     baseline_matches = target is not None and (
@@ -1643,9 +1720,14 @@ def candidate_pr_body(
     pair: CandidatePair,
     *,
     ledger_url: str,
+    on_main_line: bool,
     prepared: Optional[Mapping[str, Any]] = None,
 ) -> str:
-    """Markdown body for a candidate PR: the pair, the gates and the verdict."""
+    """Markdown body for a candidate PR: the pair, the gates and the verdict.
+
+    ``on_main_line`` is false for a pair from another data line than main's
+    certificate (a forced qualification), which is never promoted.
+    """
 
     lines = [
         f"Automated certification candidate for **policyengine-uk {pair.model.version}**, "
@@ -1667,11 +1749,20 @@ def candidate_pr_body(
             summary = gate.summary.replace("|", "\\|").replace("\n", " ")
             lines.append(f"| `{gate_id}` | {gate.status} | {summary} |")
     verdict = receipt.verdict if receipt else "pending"
+    if on_main_line:
+        outcome = (
+            "Merging this PR promotes the pair; the certification evidence test "
+            "refuses an exact-pair certificate without a promotable ledger receipt."
+        )
+    else:
+        outcome = (
+            "This pair is not on main's data line, so it was qualified for "
+            "evidence only and is never promoted. Its tests fail by design, and "
+            "promotion closes this PR; the ledger keeps the evidence."
+        )
     lines += [
         "",
-        f"**Verdict: {verdict}.** Merging this PR promotes the pair. Until cos d1344 "
-        "is ruled, promotion is a reviewed merge; the certification evidence test "
-        "refuses an exact-pair certificate without a promotable ledger receipt.",
+        f"**Verdict: {verdict}.** {outcome}",
         "",
         "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
     ]
@@ -1757,18 +1848,26 @@ def released_bundle_request(
     wheel_sha256: str,
     packaged_manifest_sha256: str,
     release_bundle: Mapping[str, Optional[str]],
-    hf_file: Callable[[str, str, str], bytes],
+    hf_file: Callable[[str, str, str, str], bytes],
     pypi_project: Callable[[str], Mapping[str, Any]],
     requested_by: Mapping[str, Any],
+    hf_size: Optional[Callable[[str, str, str, str], int]] = None,
 ) -> ReplayQualificationRequest:
-    """``released_bundle`` replay request for a published policyengine release."""
+    """``released_bundle`` replay request for a published policyengine release.
+
+    ``hf_file`` and ``hf_size`` take a repository id, revision, path and
+    repository type. The dataset's size comes from the release manifest, or
+    from ``hf_size`` when the manifest records none, as Microcosm's do not.
+    """
 
     record = bundle["data_releases"]["uk"]
     data_package = record["data_package"]
+    repo_type = data_package.get("repo_type", "model")
     manifest_bytes = hf_file(
         data_package["repo_id"],
         data_package["release_manifest_revision"],
         data_package["release_manifest_path"],
+        repo_type,
     )
     manifest = DataReleaseManifest.model_validate_json(manifest_bytes)
     dataset = record["default_dataset"]
@@ -1777,6 +1876,18 @@ def released_bundle_request(
     if reference.get("sha256") != artifact.sha256:
         raise ValueError(
             "The release manifest's dataset hash differs from the bundle's."
+        )
+    data_repo_id = reference.get("repo_id") or data_package["repo_id"]
+    data_repo_type = reference.get("repo_type") or repo_type
+    size_bytes = artifact.size_bytes
+    if size_bytes is None:
+        if hf_size is None:
+            raise ValueError(
+                f"The release manifest records no size for {dataset!r}; pass "
+                "hf_size to read it from Hugging Face."
+            )
+        size_bytes = hf_size(
+            data_repo_id, reference["revision"], reference["path"], data_repo_type
         )
     core_version = bundle["packages"][CORE_PACKAGE]["version"]
     core_wheel = _wheel(
@@ -1805,13 +1916,12 @@ def released_bundle_request(
                     "build_id": record["certified_data_artifact"].get("build_id")
                     or record["build_id"],
                     "dataset": dataset,
-                    "repo_id": reference.get("repo_id") or data_package["repo_id"],
-                    "repo_type": reference.get("repo_type")
-                    or data_package.get("repo_type", "model"),
+                    "repo_id": data_repo_id,
+                    "repo_type": data_repo_type,
                     "revision": reference["revision"],
                     "path": reference["path"],
                     "sha256": reference["sha256"],
-                    "size_bytes": artifact.size_bytes,
+                    "size_bytes": size_bytes,
                     "release_manifest_sha256": hashlib.sha256(
                         manifest_bytes
                     ).hexdigest(),

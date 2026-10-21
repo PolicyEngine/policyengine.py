@@ -132,6 +132,8 @@ def _bundle_for(
     record["certified_data_artifact"]["sha256"] = digest
     record["datasets"][record["default_dataset"]]["sha256"] = digest
     record["certification"]["certified_for_model_version"] = model_version
+    if "certified_for_core_version" in record["certification"]:
+        record["certification"]["certified_for_core_version"] = core_version
     bundle["packages"]["policyengine-core"]["version"] = core_version
     bundle["policyengine_version"] = INSTALLED_WRAPPER
     record["policyengine_version"] = INSTALLED_WRAPPER
@@ -303,14 +305,48 @@ def test_any_uncovered_component_makes_the_receipt_uncertified(
     elif change == "dataset name":
         # Same bytes registered under another certified dataset name.
         record = bundle["data_releases"]["uk"]
-        record["datasets"]["frs_2024_25"]["sha256"] = record["certified_data_artifact"][
-            "sha256"
-        ]
-        kwargs["dataset"] = "frs_2024_25"
+        record["datasets"]["same_bytes_other_name"] = dict(
+            record["datasets"][record["default_dataset"]]
+        )
+        kwargs["dataset"] = "same_bytes_other_name"
     receipt = _build(path, bundle, **kwargs)
     assert receipt.certification_status == "uncertified"
     assert receipt.certificate is None
     assert receipt.model.version == INSTALLED_UK  # installed, never the manifest's
+
+
+def test_a_core_the_certificate_names_decides_over_the_pin(dataset_file):
+    # bundle.py check refuses a pin that differs from a named core
+    # (scripts/generate_trace_tros.py), because receipts follow the certificate.
+    bundle = _bundle_for(dataset_file.read_bytes())
+    bundle["data_releases"]["uk"]["certification"]["certified_for_core_version"] = (
+        INSTALLED_CORE
+    )
+    bundle["packages"]["policyengine-core"]["version"] = "0.0.1"
+
+    receipt = _build(dataset_file, bundle)
+
+    assert receipt.certification_status == "certified"
+    assert receipt.certificate.certified_for_core_version == INSTALLED_CORE
+
+
+@pytest.mark.parametrize("pin", [INSTALLED_CORE, "0.0.1"])
+def test_a_certificate_without_a_core_certifies_the_pinned_core(dataset_file, pin):
+    # Certificates from before --core-version, and those certified without
+    # it, name no core: the pin is the certified core.
+    bundle = _bundle_for(dataset_file.read_bytes())
+    bundle["data_releases"]["uk"]["certification"].pop(
+        "certified_for_core_version", None
+    )
+    bundle["packages"]["policyengine-core"]["version"] = pin
+
+    receipt = _build(dataset_file, bundle)
+
+    if pin == INSTALLED_CORE:
+        assert receipt.certification_status == "certified"
+        assert receipt.certificate.certified_for_core_version == INSTALLED_CORE
+    else:
+        assert receipt.certification_status == "uncertified"
 
 
 @pytest.mark.parametrize(
@@ -374,6 +410,27 @@ def test_overlay_datasets_receive_uncertified_receipts(dataset_file):
     assert receipt.certification_status == "uncertified"
     assert receipt.data.dataset == overlay_name
     assert receipt.data.build_id is None
+
+
+def test_a_regional_release_dataset_keeps_its_own_identity(dataset_file):
+    """A local-area file is certified beside the national release, not in it."""
+
+    bundle = _bundle_for(dataset_file.read_bytes())
+    record = bundle["data_releases"]["uk"]
+    record["datasets"]["area_file"] = {
+        "path": "area_file.h5",
+        "repo_id": record["data_package"]["repo_id"],
+        "revision": "regional-release-cut",
+        "sha256": hashlib.sha256(dataset_file.read_bytes()).hexdigest(),
+    }
+
+    receipt = _build(dataset_file, bundle, dataset="area_file")
+
+    assert receipt.certification_status == "uncertified"
+    assert receipt.data.dataset_revision == "regional-release-cut"
+    assert receipt.data.release_version == "regional-release-cut"
+    assert receipt.data.build_id is None
+    assert receipt.data.release_manifest_revision is None
 
 
 def test_an_omitted_artifact_revision_is_the_release_manifest_revision(dataset_file):
@@ -548,6 +605,16 @@ def test_a_forged_receipt_with_the_genuine_record_digest_does_not_verify(
     assert any("data.dataset_sha256" in p for p in problems)
 
 
+#: A valid compatibility basis other than the committed certificate's.
+_OTHER_BASIS = next(
+    basis
+    for basis in ("built_with_model_package", "legacy_compatible_model_package")
+    if basis
+    != json.loads(BUNDLE_PATH.read_text())["data_releases"]["uk"]["certification"][
+        "compatibility_basis"
+    ]
+)
+
 #: Consistent edits a forger could make, each of which the model accepts.
 FORGERIES = {
     "bundle version": {
@@ -567,7 +634,7 @@ FORGERIES = {
         "certificate__certified_dataset_sha256": "e" * 64,
     },
     "record digest": {"certificate__certificate_sha256": "e" * 64},
-    "basis": {"certificate__compatibility_basis": "built_with_model_package"},
+    "basis": {"certificate__compatibility_basis": _OTHER_BASIS},
     "certifier": {"certificate__certified_by": "someone else"},
     "dataset name": {"data__dataset": "frs_2024_25"},
     "data release": {"data__release_version": "9.9.9"},
@@ -621,6 +688,14 @@ def test_every_consistent_forgery_is_reported(tmp_path_factory, names):
     assert verify_certificate(_forge(genuine, **changes), bundle)
 
 
+def _certify_core(bundle: dict, version: str) -> None:
+    """Change the core version a bundle certifies, wherever it states it."""
+    certification = bundle["data_releases"]["uk"]["certification"]
+    if "certified_for_core_version" in certification:
+        certification["certified_for_core_version"] = version
+    bundle["packages"]["policyengine-core"].update(version=version)
+
+
 @pytest.mark.parametrize(
     "edit",
     [
@@ -633,7 +708,7 @@ def test_every_consistent_forgery_is_reported(tmp_path_factory, names):
         ),
         lambda b: b["data_releases"]["uk"].update(policyengine_version="0.0.0"),
         lambda b: b.update(policyengine_version="0.0.0"),
-        lambda b: b["packages"]["policyengine-core"].update(version="0.0.1"),
+        lambda b: _certify_core(b, "0.0.1"),
     ],
     ids=[
         "certifier",

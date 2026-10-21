@@ -3785,7 +3785,16 @@ def _data_identity(
             f"The file is not the bundle's {dataset_name!r}: it hashes to "
             f"{dataset_sha256}, but {spec.source_uri} is {spec.sha256}."
         )
-    release = dataset_name in (record.get("datasets") or {})
+    datasets = record.get("datasets") or {}
+    entry = datasets.get(dataset_name)
+    primary = datasets.get(record.get("default_dataset")) or {}
+    # A regional release's artifacts are certified beside the primary release
+    # but are not part of it, so only entries at the primary release's own
+    # revision take its build and manifest identity.
+    release = entry is not None and entry.get("revision") in (
+        None,
+        primary.get("revision"),
+    )
     data_package = record["data_package"]
     certified_artifact = record.get("certified_data_artifact") or {}
     certification = record.get("certification") or {}

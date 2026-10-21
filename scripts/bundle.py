@@ -90,11 +90,12 @@ def _check(args: argparse.Namespace) -> int:
         generate,
         load_bundle_manifest,
         validate_bundle_measurements,
+        validate_dataset_overlays,
     )
 
-    validate_bundle_measurements(
-        load_bundle_manifest(), require_published_spm=args.published_spm
-    )
+    bundle = load_bundle_manifest()
+    validate_bundle_measurements(bundle, require_published_spm=args.published_spm)
+    validate_dataset_overlays(bundle)
     result = generate(check=True)
     if not args.include_tros:
         return result
