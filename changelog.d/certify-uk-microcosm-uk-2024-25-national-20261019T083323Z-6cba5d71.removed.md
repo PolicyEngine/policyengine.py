@@ -1,1 +1,0 @@
-The Enhanced FRS weight matrices (`parliamentary_constituency_weights`, `local_authority_weights`, `local_geography_weights`) no longer resolve by name, now that the UK default is Microcosm UK and its area regions use the Microcosm local-area release.

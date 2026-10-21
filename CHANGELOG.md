@@ -1,3 +1,14 @@
+## [6.10.0] - 2026-10-21
+
+### Changed
+
+- Switch the UK default dataset from the Enhanced FRS 2024-25 (policyengine-uk-data 1.58.1) to Microcosm UK 2024-25 (`microcosm_uk_2024_25`, cut `microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71`), certified with policyengine-uk 2.132.6 and policyengine-core 3.33.3, the versions it was built with. Constituency and local-authority regions now load the Microcosm local-area release (`microcosm_uk_2024_25_dense`, cut `microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe`) and are in the default UK region registry. UK results change with the data. The national file has no constituency or local-authority codes, so constituency and local-authority outputs (`compute_uk_geography_disclosure` at those levels, `compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts`) need simulations on `microcosm_uk_2024_25_dense`, and receipts for those runs are uncertified: the certificate covers the national dataset only. The Enhanced FRS 2024-25 datasets stay loadable by name. Data certificates now say how they cover policyengine-core: by default one follows the bundle's core pin (`core_binding: bundle_pin`, as the UK certificate does; the Microcosm releases claim core 3.33.3), and certification and `bundle.py check --include-tros --strict-tros` warn when the pin is outside a release's core claims, as it is for the US release today; `--core-version` binds the core instead (`core_binding: certified`). With a Hugging Face token set, importing policyengine with any policyengine-uk other than 2.132.6 raises, as it did before for versions the Enhanced FRS release did not claim. The certified default is below the Universal Credit caseload floor (0.897 of the floor's 6.7m benchmark, policyengine-uk-data's derivation; Microcosm calibrates to DWP Stat-Xplore's 6.2m), an exception accepted and recorded in the data certification skill. UK candidate promotion now closes the pull requests of pairs from another data line than main's certificate, at the commit their receipt qualified, and recovery no longer re-dispatches attempts for such pairs.
+
+### Removed
+
+- The Enhanced FRS weight matrices (`parliamentary_constituency_weights`, `local_authority_weights`, `local_geography_weights`) no longer resolve by name, now that the UK default is Microcosm UK and its area regions use the Microcosm local-area release.
+
+
 ## [6.9.0] - 2026-10-20
 
 ### Added
