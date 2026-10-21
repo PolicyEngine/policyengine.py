@@ -277,6 +277,9 @@ def test_same_named_artifacts_of_two_releases_never_share_a_cache_path(tmp_path)
         "C:outside.h5",
         "\\outside.h5",
         "\\\\server\\share\\outside.h5",
+        "releases/D:outside.h5",
+        "a/b/E:/outside.h5",
+        "",
     ):
         with pytest.raises(DatasetMaterializationError, match="must be relative"):
             _bundle_destination(tmp_path, path)

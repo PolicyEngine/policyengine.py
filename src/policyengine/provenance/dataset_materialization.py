@@ -93,20 +93,26 @@ def _bundle_destination(data_dir: Path, path: str) -> Path:
     """
 
     relative = PurePosixPath(path)
-    # Repository paths use forward slashes. A backslash, drive or root would
-    # make the platform path leave data_dir on Windows.
-    windows = PureWindowsPath(path)
+    # Repository paths use forward slashes. A backslash, or a drive or root in
+    # any segment, would make the platform path leave data_dir on Windows.
     if (
         relative.is_absolute()
         or ".." in relative.parts
         or "\\" in path
-        or windows.drive
-        or windows.root
+        or any(
+            PureWindowsPath(part).drive or PureWindowsPath(part).root
+            for part in relative.parts
+        )
     ):
         raise DatasetMaterializationError(
             f"Bundle artifact path {path!r} must be relative to its repository."
         )
-    return data_dir.joinpath(*relative.parts)
+    destination = data_dir.joinpath(*relative.parts)
+    if destination == data_dir or not destination.is_relative_to(data_dir):
+        raise DatasetMaterializationError(
+            f"Bundle artifact path {path!r} must be relative to its repository."
+        )
+    return destination
 
 
 def _resolve_bundle_dataset(

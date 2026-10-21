@@ -10,7 +10,10 @@ from urllib.parse import quote
 import requests
 from pydantic import BaseModel, Field
 
-from policyengine.provenance.bundle_validation import shadowed_dataset_overlays
+from policyengine.provenance.bundle_validation import (
+    shadowed_dataset_overlays,
+    shadowing_overlays_message,
+)
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
@@ -338,19 +341,8 @@ def _apply_dataset_overlays(
         return release_payload
 
     shadowed = shadowed_dataset_overlays(release_payload, overlays)
-    default_dataset = release_payload.get("default_dataset")
-    if default_dataset in shadowed:
-        raise ValueError(
-            f"Dataset overlay '{default_dataset}' for country '{country_id}' "
-            "shadows the certified default dataset. Overlays must never "
-            "change default resolution."
-        )
     if shadowed:
-        raise ValueError(
-            f"Dataset overlay '{shadowed[0]}' for country '{country_id}' "
-            "collides with a certified dataset entry. Overlays must be "
-            "additive, not overrides."
-        )
+        raise ValueError(shadowing_overlays_message(country_id, shadowed))
     certified_datasets = dict(release_payload.get("datasets") or {})
     certified_datasets.update(overlays)
 

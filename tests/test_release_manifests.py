@@ -1283,7 +1283,7 @@ class TestDatasetOverlays:
         try:
             _apply_dataset_overlays("us", payload, bundle)
         except ValueError as error:
-            assert "shadows the certified default" in str(error)
+            assert "shadows certified datasets: populace_us_2024" in str(error)
         else:
             raise AssertionError("Expected overlay shadowing the default to fail")
 
@@ -1302,6 +1302,6 @@ class TestDatasetOverlays:
         try:
             _apply_dataset_overlays("us", payload, bundle)
         except ValueError as error:
-            assert "collides with a certified dataset" in str(error)
+            assert "shadows certified datasets: demographics" in str(error)
         else:
             raise AssertionError("Expected overlay colliding with a dataset to fail")

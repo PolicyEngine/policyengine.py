@@ -40,6 +40,16 @@ def shadowed_dataset_overlays(
     return sorted(set(overlays or {}) & certified)
 
 
+def shadowing_overlays_message(country: str, shadowed: list[str]) -> str:
+    """The one refusal for overlays that shadow certified datasets."""
+
+    return (
+        f"dataset_overlays.{country} shadows certified datasets: "
+        f"{', '.join(shadowed)}. Overlays must be additive and never change "
+        "resolution: remove those overlays."
+    )
+
+
 def validate_dataset_overlays(bundle: Mapping[str, Any]) -> None:
     """Refuse an overlay that shadows a certified dataset name.
 
@@ -51,10 +61,7 @@ def validate_dataset_overlays(bundle: Mapping[str, Any]) -> None:
         release = (bundle.get("data_releases") or {}).get(country) or {}
         shadowed = shadowed_dataset_overlays(release, entries)
         if shadowed:
-            raise ValueError(
-                f"dataset_overlays.{country} shadows certified datasets: "
-                f"{', '.join(shadowed)}. Remove those overlays."
-            )
+            raise ValueError(shadowing_overlays_message(country, shadowed))
 
 
 def validate_spm_configuration(configuration: Any) -> None:

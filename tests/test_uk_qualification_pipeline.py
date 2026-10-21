@@ -3576,6 +3576,91 @@ def test_released_bundle_request_is_valid_for_the_scorecard(bundle, manifest_siz
     )
 
 
+def test_released_bundle_request_uses_the_datasets_own_location():
+    from policyengine.provenance.uk_qualification import released_bundle_request
+
+    bundle = json.loads(json.dumps(MICROCOSM_ROUTED_BUNDLE))
+    record = bundle["data_releases"]["uk"]
+    reference = record["datasets"]["microcosm_uk_2024_25"]
+    reference.update(
+        repo_id="policyengine/other-repo", revision="other-revision", repo_type="model"
+    )
+    manifest = {
+        "schema_version": 1,
+        "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+        "default_datasets": {"national": "microcosm_uk_2024_25"},
+        "artifacts": {
+            "microcosm_uk_2024_25": {
+                "kind": "microdata",
+                "path": "microcosm_uk_2024_25.h5",
+                "repo_id": "policyengine/other-repo",
+                "revision": "other-revision",
+                "sha256": reference["sha256"],
+            }
+        },
+    }
+    manifest_bytes = json.dumps(manifest).encode()
+    fetched = []
+
+    def hf_file(*request):
+        fetched.append(("file", *request))
+        return manifest_bytes
+
+    def hf_size(*request):
+        fetched.append(("size", *request))
+        return 1234
+
+    core = bundle["packages"]["policyengine-core"]["version"]
+    request = released_bundle_request(
+        bundle,
+        version=bundle["policyengine_version"],
+        wheel_sha256=sha("7"),
+        packaged_manifest_sha256=sha("8"),
+        release_bundle=golden("qualification_request_golden")["candidate"][
+            "expected_release_bundle"
+        ],
+        hf_file=hf_file,
+        hf_size=hf_size,
+        pypi_project=lambda name: {
+            "releases": {core: [_wheel("policyengine-core", core, sha("6"))]}
+        },
+        requested_by={
+            "repository": "PolicyEngine/policyengine.py",
+            "workflow_run_id": 5,
+            "commit": "e" * 40,
+        },
+    )
+
+    cut = "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+    assert fetched == [
+        (
+            "file",
+            "policyengine/populace-uk-private",
+            cut,
+            "releases/microcosm-uk-2024-25-national/release_manifest.json",
+            "dataset",
+        ),
+        (
+            "size",
+            "policyengine/other-repo",
+            "other-revision",
+            "microcosm_uk_2024_25.h5",
+            "model",
+        ),
+    ]
+    assert request.document()["candidate"]["data"] == {
+        "build_id": cut,
+        "dataset": "microcosm_uk_2024_25",
+        "repo_id": "policyengine/other-repo",
+        "repo_type": "model",
+        "revision": "other-revision",
+        "path": "microcosm_uk_2024_25.h5",
+        "sha256": reference["sha256"],
+        "size_bytes": 1234,
+        "release_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+    }
+
+
 def test_released_bundle_request_needs_a_size_source():
     from policyengine.provenance.uk_qualification import released_bundle_request
 
@@ -3622,6 +3707,8 @@ def test_release_consumers_address_dataset_repositories(monkeypatch):
     spec.loader.exec_module(consumers)
     url = "https://huggingface.co/datasets/org/data/resolve/v1/releases/a%20b.h5"
     authorized = {"Authorization": "Bearer hub-token"}
+    # A compressed answer carries no Content-Length.
+    sized = {**authorized, "Accept-Encoding": "identity"}
     calls = []
 
     def response(status, headers, content=b""):
@@ -3650,7 +3737,7 @@ def test_release_consumers_address_dataset_repositories(monkeypatch):
     # A large file's redirect carries its size.
     answers.append(response(302, {"X-Linked-Size": "321", "Content-Length": "1152"}))
     assert consumers._hf_size("org/data", "v1", "releases/a b.h5", "dataset") == 321
-    assert calls == [("head", url, authorized, False)]
+    assert calls == [("head", url, sized, False)]
     calls.clear()
 
     # A small file answers with its own length, or with a redirect to it.
@@ -3664,8 +3751,8 @@ def test_release_consumers_address_dataset_repositories(monkeypatch):
     )
     assert consumers._hf_size("org/data", "v1", "releases/a b.h5", "dataset") == 77
     assert calls[-2:] == [
-        ("head", url, authorized, False),
-        ("head", url, authorized, True),
+        ("head", url, sized, False),
+        ("head", url, sized, True),
     ]
 
     model_url = "https://huggingface.co/org/model/resolve/v1/a.h5"

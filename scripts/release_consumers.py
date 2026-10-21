@@ -75,7 +75,9 @@ def _hf_size(repo_id: str, revision: str, path: str, repo_type: str = "model") -
     """
 
     url = https_dataset_uri(repo_id, path, revision, repo_type=repo_type)
-    headers = hugging_face_auth_headers()
+    # A compressed answer has no Content-Length, so ask for the bytes as they
+    # are, as huggingface_hub does.
+    headers = {**hugging_face_auth_headers(), "Accept-Encoding": "identity"}
     response = requests.head(
         url, headers=headers, timeout=TIMEOUT, allow_redirects=False
     )
