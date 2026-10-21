@@ -1,0 +1,220 @@
+{
+  "candidate_report_sha256": "0354b617525583105e5ae6dedbd1e0961a2b72b4bfe3b9680b004f355671a882",
+  "reforms": [
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "basic_rate_plus_1pp",
+      "minimum": 1200000000.0,
+      "name": "Raise basic rate by 1pp",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 6629156252.106079,
+        "2026": 6931463402.940857,
+        "2027": 7150135294.361023,
+        "2028": 7363562848.325623,
+        "2029": 7585253892.511414,
+        "2030": 7831749035.032654,
+        "2031": 8117949114.665527
+      },
+      "variable": "income_tax",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "higher_rate_plus_1pp",
+      "minimum": 710000000.0,
+      "name": "Raise higher rate by 1pp",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 3876540911.3273926,
+        "2026": 4179091497.6693726,
+        "2027": 4421080565.71521,
+        "2028": 4650796544.505066,
+        "2029": 4885365235.926819,
+        "2030": 5173603251.621033,
+        "2031": 5381827095.816528
+      },
+      "variable": "income_tax",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "down",
+      "id": "personal_allowance_13000",
+      "minimum": 350000000.0,
+      "name": "Raise personal allowance by ~800GBP/year",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": -4119220709.3310547,
+        "2026": -4247182135.9278564,
+        "2027": -4333697215.449707,
+        "2028": -4402311941.431274,
+        "2029": -4481071946.059326,
+        "2030": -4595911466.06427,
+        "2031": -1821609719.1121826
+      },
+      "variable": "income_tax",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "child_benefit_additional_25",
+      "minimum": 310000000.0,
+      "name": "Raise child benefit by 25GBP/week per additional child",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 2354279638.4738464,
+        "2026": 2163807159.187851,
+        "2027": 2032563685.8450089,
+        "2028": 1928567470.9704666,
+        "2029": 1821796694.6788673,
+        "2030": 1712010001.2369995,
+        "2031": 1598184113.2302513
+      },
+      "variable": "child_benefit",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "uc_taper_20pc",
+      "minimum": 4100000000.0,
+      "name": "Reduce Universal Credit taper rate to 20%",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 20806219668.80815,
+        "2026": 21501937181.52487,
+        "2027": 21854758448.345627,
+        "2028": 22292171564.70546,
+        "2029": 22442243606.757004,
+        "2030": 22833014743.79921,
+        "2031": 23321726288.654358
+      },
+      "variable": "universal_credit",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "employee_nics_main_10pc",
+      "minimum": 2200000000.0,
+      "name": "Raise Class 1 main employee NICs rate to 10%",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 11742078990.754326,
+        "2026": 12220703318.399399,
+        "2027": 12566448830.065765,
+        "2028": 12895188375.15252,
+        "2029": 13241925786.856583,
+        "2030": 13602144385.500465,
+        "2031": 14105538892.189735
+      },
+      "variable": "national_insurance",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "vat_standard_plus_2pp",
+      "minimum": 6100000000.0,
+      "name": "Raise VAT standard rate by 2pp",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 25342194671.07831,
+        "2026": 26023583296.43988,
+        "2027": 26642265787.713196,
+        "2028": 27283810283.719177,
+        "2029": 27951938285.52301,
+        "2030": 28639278400.662354,
+        "2031": 29337674987.674683
+      },
+      "variable": "vat",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "additional_rate_plus_3pp",
+      "minimum": 550000000.0,
+      "name": "Raise additional rate by 3pp",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 3150989918.3501587,
+        "2026": 3412621434.005066,
+        "2027": 3631191026.3060913,
+        "2028": 3840416001.548462,
+        "2029": 4060235870.899719,
+        "2030": 4320397297.454468,
+        "2031": 4669551138.432983
+      },
+      "variable": "income_tax",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "uc_standard_allowance_plus_10pc",
+      "minimum": 600000000.0,
+      "name": "Raise the Universal Credit standard allowance by 10%",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 3049946789.71669,
+        "2026": 3193259981.594681,
+        "2027": 3261982889.2597504,
+        "2028": 3340576314.2443085,
+        "2029": 3393917636.261566,
+        "2030": 3448914047.5186157,
+        "2031": 3488033424.984146
+      },
+      "variable": "universal_credit",
+      "withheld_years": []
+    },
+    {
+      "detail": "",
+      "direction": "up",
+      "id": "state_pension_plus_10pc",
+      "minimum": 2400000000.0,
+      "name": "Raise the State Pension by 10%",
+      "reform_runs": "pass",
+      "responsive": "pass",
+      "target_changes": {
+        "2025": 12416357952.521576,
+        "2026": 12880395578.67421,
+        "2027": 12964337962.235504,
+        "2028": 13158983909.594467,
+        "2029": 13547300392.69371,
+        "2030": 13948496956.020355,
+        "2031": 14358690043.891724
+      },
+      "variable": "state_pension",
+      "withheld_years": []
+    }
+  ],
+  "tool": {
+    "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions: the approved head of draft policyengine-uk#2335. It suppresses figures from fewer than 10 records and gives each total's excluded figures with their signs (exclude_signs), which the metrics review requires. #2335 merges after cos d1601; move the pin to the merged commit when it lands, and never to a commit without suppression.",
+    "commit": "1191ac5a473419f48e0c0643f83d31719da788e1",
+    "path": "policyengine_uk/utils/aggregate_impact",
+    "repository": "PolicyEngine/policyengine-uk"
+  },
+  "years": [
+    2025,
+    2026,
+    2027,
+    2028,
+    2029,
+    2030,
+    2031
+  ]
+}

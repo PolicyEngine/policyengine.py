@@ -1,0 +1,7 @@
+{
+  "details": {},
+  "evidence_sha256": "5f32340861ef26cad8377e78ab0d5176762e7c7640b846568cdac48cd1280dc3",
+  "gate_id": "dataset_bytes",
+  "status": "pass",
+  "summary": "enhanced_frs_2024_25 is the pinned 113,961,901 bytes with the UK single-year layout."
+}

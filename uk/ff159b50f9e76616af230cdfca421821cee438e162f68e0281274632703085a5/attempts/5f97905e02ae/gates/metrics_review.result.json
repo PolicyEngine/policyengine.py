@@ -1,0 +1,10 @@
+{
+  "details": {
+    "data_only": "needs_review",
+    "model_only": "needs_review"
+  },
+  "evidence_sha256": "79360b1f8bf1f978c02931320dce1dd9ac1974e42cf4178c4ea7b3d379006272",
+  "gate_id": "metrics_review",
+  "status": "needs_review",
+  "summary": "model_only: checks newly warn: inert:war_widows_pension; the model's fiscal partition changed; metrics have no baseline: caseloads.war_widows_pension 2025, caseloads.war_widows_pension 2026, caseloads.war_widows_pension 2027, caseloads.war_widows_pension 2028, caseloads.war_widows_pension 2029, caseloads.war_widows_pension 2030, caseloads.war_widows_pension 2031, spending.war_widows_pension 2025; 153 metric move(s) exceed their review bounds; data_only: checks the previous pair ran were not run: sign:sda, sign:dfe_education_spending; 150 metric move(s) exceed their review bounds; 329 metric change(s) are withheld because a figure from fewer than 10 records is suppressed on one side, or the two sides leave out different ones and cannot be lined up"
+}
