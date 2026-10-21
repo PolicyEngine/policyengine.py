@@ -1,0 +1,13 @@
+{
+  "details": {
+    "attempt_id": "81758e8c88b92bb3e423e4da2d6845d7400ed9a7e0647ea0a2401923105acbe5/5f97905e02ae",
+    "candidate_model_version": "2.142.0",
+    "exception_registry_sha256": "4ba8ff2961035eaa784b5cdfdf24b300c3e2031fdfc006db9fea2996815cbc55",
+    "failed_probes": 0,
+    "probe_count": 1
+  },
+  "evidence_sha256": "4a57746d104c6fa684cf26119ec48244de81895691d0581bd479ec5f9331b0b3",
+  "gate_id": "replay_probe",
+  "status": "pass",
+  "summary": "All 1 replay exception probes passed."
+}
