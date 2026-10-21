@@ -1,5 +1,5 @@
 {
-  "completed_at": "2026-10-20T23:01:04Z",
+  "completed_at": "2026-10-21T01:22:44Z",
   "gates": [
     {
       "details": {},
@@ -435,11 +435,11 @@
     },
     {
       "details": {
-        "status": "queued"
+        "status": "running"
       },
       "gate_id": "replay",
       "status": "unavailable",
-      "summary": "Replay is queued; the candidate stays incomplete until it finishes."
+      "summary": "Replay is running; the candidate stays incomplete until it finishes."
     }
   ],
   "harness": {
@@ -450,8 +450,8 @@
   "issued_by": {
     "repository": "PolicyEngine/policyengine.py",
     "run_attempt": 1,
-    "run_url": "https://github.com/PolicyEngine/policyengine.py/actions/runs/39508728797",
-    "workflow_run_id": 39508728797
+    "run_url": "https://github.com/PolicyEngine/policyengine.py/actions/runs/39524934353",
+    "workflow_run_id": 39524934353
   },
   "pair": {
     "core": {
