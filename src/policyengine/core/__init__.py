@@ -10,6 +10,7 @@ from .dataset import Dataset
 from .dataset import YearData as YearData
 from .dataset import map_to_entity as map_to_entity
 from .dynamic import Dynamic as Dynamic
+from .entity import Entity as Entity
 from .output import Output as Output
 from .output import OutputCollection as OutputCollection
 from .parameter import Parameter as Parameter

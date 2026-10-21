@@ -30,6 +30,7 @@ import h5py
 import pandas as pd
 
 from policyengine.core import (
+    Entity,
     Parameter,
     ParameterNode,
     StaleOutputError,
@@ -166,6 +167,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         self.id = f"{self.model.id}@{self.version}"
 
         system = self._load_system()
+        self._populate_entities(system)
         self._populate_variables(system)
         self._populate_parameters(system)
 
@@ -189,6 +191,18 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         raise NotImplementedError
 
     # --- Shared loading helpers ------------------------------------------
+    def _populate_entities(self, system) -> None:
+        """Copy the entities and basic inputs the country package declares."""
+        self.entities = [
+            Entity(
+                key=core_entity.key,
+                plural=core_entity.plural,
+                is_person=bool(core_entity.is_person),
+            )
+            for core_entity in system.entities
+        ]
+        self.basic_inputs = list(getattr(system, "basic_inputs", None) or [])
+
     def _populate_variables(self, system) -> None:
         from policyengine_core.enums import Enum
         from policyengine_core.parameters.operations.get_parameter import (
