@@ -1094,8 +1094,9 @@ def test_promote_closes_other_line_prs_and_never_drafts_a_closed_one(monkeypatch
     monkeypatch.setattr(
         cli.subprocess,
         "run",
-        lambda command, **kwargs: commands.append(command)
-        or subprocess.CompletedProcess(command, 0),
+        lambda command, **kwargs: (
+            commands.append(command) or subprocess.CompletedProcess(command, 0)
+        ),
     )
     drafted = []
     monkeypatch.setattr(
