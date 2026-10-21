@@ -6,6 +6,7 @@ from enum import Enum
 from types import SimpleNamespace
 
 import pytest
+from policyengine_core.parameters import ParameterNode as CoreParameterNode
 
 from policyengine.core import EnumValue, TaxBenefitModel, TaxBenefitModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
@@ -372,3 +373,133 @@ def test_us_filing_status_publishes_its_labels():
 
     assert EnumValue(value="SINGLE", label="Single") in filing_status.enum_values
     assert EnumValue(value="JOINT", label="Joint") in filing_status.enum_values
+
+
+def _components_parameter_tree() -> CoreParameterNode:
+    return CoreParameterNode(
+        "",
+        data={
+            "gov": {
+                "example": {
+                    "components": {
+                        "description": "Income components, which change in 2026",
+                        "values": {
+                            "2020-01-01": ["wages"],
+                            "2026-01-01": ["wages", "tips"],
+                        },
+                    },
+                    "deductions": {
+                        "description": "Deductions",
+                        "values": {"2020-01-01": ["pension_contributions"]},
+                    },
+                }
+            }
+        },
+    )
+
+
+def _summed_core_variable(name: str, adds, subtracts) -> SimpleNamespace:
+    return SimpleNamespace(
+        name=name,
+        label=name.replace("_", " ").capitalize(),
+        entity=SimpleNamespace(key="person"),
+        documentation=None,
+        value_type=float,
+        default_value=0.0,
+        possible_values=None,
+        adds=adds,
+        subtracts=subtracts,
+    )
+
+
+def test_populate_variables_records_parameter_paths_named_by_adds_and_subtracts():
+    model = _model_version()
+    parameter_named = _summed_core_variable(
+        "net_income", "gov.example.components", "gov.example.deductions"
+    )
+    variable_named = _summed_core_variable("gross_income", ["wages", "tips"], None)
+    system = SimpleNamespace(
+        variables={
+            parameter_named.name: parameter_named,
+            variable_named.name: variable_named,
+        },
+        parameters=_components_parameter_tree(),
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    net_income = model.get_variable("net_income")
+    assert net_income.adds_parameter_path == "gov.example.components"
+    assert net_income.subtracts_parameter_path == "gov.example.deductions"
+    # The lists resolved as of 2025-01-01 are unchanged for existing users.
+    assert net_income.adds == ["wages"]
+    assert net_income.subtracts == ["pension_contributions"]
+    assert json.loads(
+        net_income.model_dump_json(
+            include={"adds_parameter_path", "subtracts_parameter_path"}
+        )
+    ) == {
+        "adds_parameter_path": "gov.example.components",
+        "subtracts_parameter_path": "gov.example.deductions",
+    }
+    gross_income = model.get_variable("gross_income")
+    assert gross_income.adds == ["wages", "tips"]
+    assert gross_income.adds_parameter_path is None
+    assert gross_income.subtracts_parameter_path is None
+
+
+def test_parameter_path_is_published_when_the_parameter_cannot_be_resolved():
+    model = _model_version()
+    core_variable = _summed_core_variable("net_income", "gov.example.missing", None)
+    system = SimpleNamespace(
+        variables={core_variable.name: core_variable},
+        parameters=_components_parameter_tree(),
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    variable = model.get_variable("net_income")
+    assert variable.adds is None
+    assert variable.adds_parameter_path == "gov.example.missing"
+
+
+@pytest.mark.parametrize(
+    ("model", "country_system_module"),
+    [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
+    ids=["uk", "us"],
+)
+def test_country_models_publish_every_parameter_named_by_adds_or_subtracts(
+    model, country_system_module
+):
+    country_system = pytest.importorskip(country_system_module).system
+
+    for name, core_variable in country_system.variables.items():
+        variable = model.get_variable(name)
+        for attribute in ("adds", "subtracts"):
+            declared = getattr(core_variable, attribute, None)
+            published_path = getattr(variable, f"{attribute}_parameter_path")
+            if isinstance(declared, str):
+                assert published_path == declared, (name, attribute)
+                assert published_path in model.parameters_by_name, (name, attribute)
+            else:
+                assert published_path is None, (name, attribute)
+
+
+def test_us_model_publishes_parameter_named_parts():
+    adds_paths = [
+        variable for variable in us_latest.variables if variable.adds_parameter_path
+    ]
+    subtracts_paths = [
+        variable
+        for variable in us_latest.variables
+        if variable.subtracts_parameter_path
+    ]
+
+    assert len(adds_paths) >= 200
+    assert len(subtracts_paths) >= 1
+    household_state_benefits = us_latest.get_variable("household_state_benefits")
+    assert (
+        household_state_benefits.adds_parameter_path
+        == "gov.household.household_state_benefits"
+    )
+    assert isinstance(household_state_benefits.adds, list)

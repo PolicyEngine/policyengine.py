@@ -58,6 +58,23 @@ class Variable(BaseModel):
         default=None,
         description="Module that defines the variable, as the country model names it",
     )
+    adds_parameter_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Path of the parameter whose value lists the variables this one "
+            "adds, when the country model names a parameter rather than a "
+            "list. adds then holds that parameter's list as of 2025-01-01 only."
+        ),
+    )
+    subtracts_parameter_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Path of the parameter whose value lists the variables this one "
+            "subtracts, when the country model names a parameter rather than a "
+            "list. subtracts then holds that parameter's list as of 2025-01-01 "
+            "only."
+        ),
+    )
     enum_values: Optional[list[EnumValue]] = Field(
         default=None,
         description=(

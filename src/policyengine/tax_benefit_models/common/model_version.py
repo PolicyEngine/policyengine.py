@@ -267,12 +267,14 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     for member in var_obj.possible_values
                 ]
             # Resolve parameter-path adds/subtracts to concrete lists so
-            # consumers always see list[str].
+            # consumers always see list[str], and record the path itself,
+            # since the parameter's list can differ in other years.
             for attr in ("adds", "subtracts"):
                 value = getattr(var_obj, attr, None)
                 if value is None:
                     continue
                 if isinstance(value, str):
+                    setattr(variable, f"{attr}_parameter_path", value)
                     try:
                         param = get_parameter(system.parameters, value)
                         setattr(variable, attr, list(param("2025-01-01")))
