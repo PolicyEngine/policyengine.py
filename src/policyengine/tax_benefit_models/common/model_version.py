@@ -302,6 +302,8 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     description=param_node.description,
                     data_type=type(param_node(2025)),
                     unit=param_node.metadata.get("unit"),
+                    economy=bool(param_node.metadata.get("economy", True)),
+                    household=bool(param_node.metadata.get("household", True)),
                     _core_param=param_node,
                 )
                 self.add_parameter(parameter)
