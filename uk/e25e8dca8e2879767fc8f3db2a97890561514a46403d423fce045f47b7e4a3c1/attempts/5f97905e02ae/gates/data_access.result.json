@@ -1,0 +1,7 @@
+{
+  "details": {},
+  "evidence_sha256": "d51463e21175064dad7cf21d66e50770d92c10bde55132cca512084664a18a8e",
+  "gate_id": "data_access",
+  "status": "pass",
+  "summary": "Read the release manifest and 7 artifacts with the configured credential; anonymous access returned HTTP 401."
+}
