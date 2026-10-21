@@ -237,6 +237,13 @@ differencing.
   moves the totals by design, so they were not run for that switch; its pull
   request compares the two lines' weighted totals instead. The other gates,
   reform responsiveness included, were run on the national cut.
+- **Budget-critical inputs: needs review.** `incapacity_benefit_reported` is
+  missing from the Microcosm file but was a column of the enhanced FRS. The
+  enhanced FRS column carries no values (Incapacity Benefit is closed), so
+  both datasets give zero. Accepted by María Juaristi in #685.
+- **Reform responsiveness: needs review.** The metrics tool's small-cell rule
+  withholds a standard reform's figures, so the gate cannot recompute that
+  reform's verdict. Accepted by María Juaristi in #685.
 
 ## Release runbooks
 
