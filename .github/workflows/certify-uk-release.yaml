@@ -58,7 +58,7 @@ permissions:
 
 env:
   LEDGER_BRANCH: uk-qualification-ledger
-  UV_VERSION: "0.12.14"
+  UV_VERSION: "0.13.4"
   PYTHON_VERSION: "3.13"
   # Keep equal to PYTHON_VERSION. The repository's .python-version asks for a
   # newer Python, and every uv command here must use the 3.13 environment the
