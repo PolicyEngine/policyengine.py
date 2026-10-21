@@ -132,7 +132,9 @@ the ledger keeps their evidence.
 drops main's area routing (`--drop-regional-release`), because the routing
 belongs to the line the pair would replace, and leaves the test constants that
 pin main's certificate as they are, so the candidate's own tests fail. Its pull
-request says it is never promoted, and promotion closes it. The catch-up does
-not recover such a run: re-run it by hand with `force`. Changing the data line
+request says it is never promoted, and promotion closes it once its receipt is
+published, at the commit that receipt qualified. The catch-up does not recover
+such a run: re-run it by hand with `force`. A run whose attempt dies before it
+publishes a receipt leaves its pull request open; close that one by hand. Changing the data line
 is a reviewed certification pull request (see
 `docs/engineering/skills/data-certification.md`), not a promotion.
