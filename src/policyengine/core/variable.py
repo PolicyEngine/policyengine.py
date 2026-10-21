@@ -8,6 +8,15 @@ from pydantic import BaseModel, Field, field_validator
 from .tax_benefit_model_version import TaxBenefitModelVersion
 
 
+class EnumValue(BaseModel):
+    """One value an enum variable can take, with the label users see."""
+
+    value: str = Field(
+        description="Name stored in household data, such as 'SINGLE'",
+    )
+    label: str = Field(description="Label shown to users, such as 'Single'")
+
+
 class Variable(BaseModel):
     id: str
     name: str
@@ -48,6 +57,14 @@ class Variable(BaseModel):
     module_name: Optional[str] = Field(
         default=None,
         description="Module that defines the variable, as the country model names it",
+    )
+    enum_values: Optional[list[EnumValue]] = Field(
+        default=None,
+        description=(
+            "For an enum variable, each value it can take with its label, in "
+            "the order the country model declares them. possible_values holds "
+            "the same names without labels."
+        ),
     )
 
     @field_validator("reference", mode="before")

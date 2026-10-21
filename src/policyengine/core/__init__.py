@@ -32,6 +32,7 @@ from .tax_benefit_model_version import StaleOutputError as StaleOutputError
 from .tax_benefit_model_version import (
     TaxBenefitModelVersion as TaxBenefitModelVersion,
 )
+from .variable import EnumValue as EnumValue
 from .variable import Variable as Variable
 
 # Rebuild models to resolve forward references

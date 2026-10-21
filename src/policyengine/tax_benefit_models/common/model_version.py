@@ -31,6 +31,7 @@ import pandas as pd
 
 from policyengine.core import (
     Entity,
+    EnumValue,
     Parameter,
     ParameterNode,
     StaleOutputError,
@@ -261,6 +262,10 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                         var_obj.possible_values._value2member_map_.values(),
                     )
                 )
+                variable.enum_values = [
+                    EnumValue(value=member.name, label=str(member.value))
+                    for member in var_obj.possible_values
+                ]
             # Resolve parameter-path adds/subtracts to concrete lists so
             # consumers always see list[str].
             for attr in ("adds", "subtracts"):

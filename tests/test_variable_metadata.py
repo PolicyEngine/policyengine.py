@@ -2,11 +2,12 @@
 
 import datetime
 import json
+from enum import Enum
 from types import SimpleNamespace
 
 import pytest
 
-from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion
+from policyengine.core import EnumValue, TaxBenefitModel, TaxBenefitModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     MicrosimulationModelVersion,
 )
@@ -257,3 +258,117 @@ def test_us_model_publishes_hidden_inputs():
     ]
 
     assert hidden_inputs, "The US package hides some inputs from input lists"
+
+
+class _FilingStatus(Enum):
+    SINGLE = "Single"
+    JOINT = "Joint"
+    HEAD_OF_HOUSEHOLD = "Head of household"
+
+
+class _NumberedStatus(Enum):
+    FIRST = 1
+    SECOND = 2
+
+
+def _enum_core_variable(name: str, possible_values: type[Enum]) -> SimpleNamespace:
+    first_member = next(iter(possible_values))
+    return SimpleNamespace(
+        name=name,
+        label=name.replace("_", " ").capitalize(),
+        entity=SimpleNamespace(key="tax_unit"),
+        documentation=None,
+        value_type=str,
+        default_value=first_member.name,
+        possible_values=possible_values,
+        adds=None,
+        subtracts=None,
+    )
+
+
+def test_populate_variables_records_enum_values_with_their_labels_in_order():
+    model = _model_version()
+    filing_status = _enum_core_variable("filing_status", _FilingStatus)
+    numbered_status = _enum_core_variable("numbered_status", _NumberedStatus)
+    system = SimpleNamespace(
+        variables={
+            filing_status.name: filing_status,
+            numbered_status.name: numbered_status,
+        },
+        parameters=None,
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    variable = model.get_variable("filing_status")
+    assert variable.possible_values == ["SINGLE", "JOINT", "HEAD_OF_HOUSEHOLD"]
+    assert variable.enum_values == [
+        EnumValue(value="SINGLE", label="Single"),
+        EnumValue(value="JOINT", label="Joint"),
+        EnumValue(value="HEAD_OF_HOUSEHOLD", label="Head of household"),
+    ]
+    assert json.loads(variable.model_dump_json(include={"enum_values"})) == {
+        "enum_values": [
+            {"value": "SINGLE", "label": "Single"},
+            {"value": "JOINT", "label": "Joint"},
+            {"value": "HEAD_OF_HOUSEHOLD", "label": "Head of household"},
+        ]
+    }
+    assert [
+        (enum_value.value, enum_value.label)
+        for enum_value in model.get_variable("numbered_status").enum_values
+    ] == [("FIRST", "1"), ("SECOND", "2")]
+
+
+def test_variables_without_possible_values_have_no_enum_values():
+    model = _model_version()
+    core_variable = SimpleNamespace(
+        name="minimal_input",
+        label="Minimal input",
+        entity=SimpleNamespace(key="person"),
+        documentation=None,
+        value_type=int,
+        default_value=0,
+        adds=None,
+        subtracts=None,
+    )
+    system = SimpleNamespace(
+        variables={core_variable.name: core_variable},
+        parameters=None,
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    assert model.get_variable("minimal_input").enum_values is None
+
+
+@pytest.mark.parametrize(
+    ("model", "country_system_module"),
+    [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
+    ids=["uk", "us"],
+)
+def test_country_models_publish_every_enum_label(model, country_system_module):
+    country_system = pytest.importorskip(country_system_module).system
+
+    enum_variable_count = 0
+    for name, core_variable in country_system.variables.items():
+        possible_values = getattr(core_variable, "possible_values", None)
+        variable = model.get_variable(name)
+        if possible_values is None:
+            assert variable.enum_values is None, name
+            continue
+        enum_variable_count += 1
+        assert [
+            (enum_value.value, enum_value.label) for enum_value in variable.enum_values
+        ] == [(member.name, str(member.value)) for member in possible_values], name
+        assert [enum_value.value for enum_value in variable.enum_values] == (
+            variable.possible_values
+        ), name
+    assert enum_variable_count > 0
+
+
+def test_us_filing_status_publishes_its_labels():
+    filing_status = us_latest.get_variable("filing_status")
+
+    assert EnumValue(value="SINGLE", label="Single") in filing_status.enum_values
+    assert EnumValue(value="JOINT", label="Joint") in filing_status.enum_values
