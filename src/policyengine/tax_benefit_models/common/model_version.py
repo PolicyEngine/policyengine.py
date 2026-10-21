@@ -94,6 +94,14 @@ def build_runtime_dataset_provenance(
     return provenance
 
 
+def _core_input_flag(core_variable: Any) -> Optional[bool]:
+    """Return whether users enter a core variable, or None if core cannot say."""
+    is_input_variable = getattr(core_variable, "is_input_variable", None)
+    if is_input_variable is None:
+        return None
+    return bool(is_input_variable())
+
+
 class MicrosimulationModelVersion(TaxBenefitModelVersion):
     """Shared init / save / load logic for country microsim model versions.
 
@@ -239,6 +247,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     var_obj, "is_period_size_independent", None
                 ),
                 metadata=getattr(var_obj, "metadata", None) or {},
+                is_input_variable=_core_input_flag(var_obj),
+                hidden_input=getattr(var_obj, "hidden_input", None),
+                module_name=getattr(var_obj, "module_name", None),
             )
             if (
                 hasattr(var_obj, "possible_values")

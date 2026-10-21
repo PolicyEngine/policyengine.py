@@ -30,6 +30,25 @@ class Variable(BaseModel):
     max_value: Optional[Union[int, float]] = None
     is_period_size_independent: Optional[bool] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    is_input_variable: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether users enter the variable rather than it being calculated: "
+            "it has no formula and no adds or subtracts. None when the country "
+            "model does not say."
+        ),
+    )
+    hidden_input: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether the variable is hidden from lists of inputs. None when the "
+            "country model does not say."
+        ),
+    )
+    module_name: Optional[str] = Field(
+        default=None,
+        description="Module that defines the variable, as the country model names it",
+    )
 
     @field_validator("reference", mode="before")
     @classmethod

@@ -4,6 +4,8 @@ import datetime
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     MicrosimulationModelVersion,
@@ -142,3 +144,116 @@ def test_us_model_exposes_selected_variable_metadata():
     ]
     assert employment_income.is_period_size_independent is False
     assert employment_income.metadata == {}
+
+
+def test_populate_variables_records_input_flags_and_module():
+    model = _model_version()
+    entered_input = SimpleNamespace(
+        name="hours_worked",
+        label="Hours worked",
+        entity=SimpleNamespace(key="person"),
+        documentation=None,
+        value_type=float,
+        default_value=0.0,
+        possible_values=None,
+        adds=None,
+        subtracts=None,
+        is_input_variable=lambda: True,
+        hidden_input=True,
+        module_name="household.labor.hours_worked",
+    )
+    calculated_value = SimpleNamespace(
+        name="total_income",
+        label="Total income",
+        entity=SimpleNamespace(key="person"),
+        documentation=None,
+        value_type=float,
+        default_value=0.0,
+        possible_values=None,
+        adds=["hours_worked"],
+        subtracts=None,
+        is_input_variable=lambda: False,
+        hidden_input=False,
+        module_name="household.income.total_income",
+    )
+    system = SimpleNamespace(
+        variables={
+            entered_input.name: entered_input,
+            calculated_value.name: calculated_value,
+        },
+        parameters=None,
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    hours_worked = model.get_variable("hours_worked")
+    assert hours_worked.is_input_variable is True
+    assert hours_worked.hidden_input is True
+    assert hours_worked.module_name == "household.labor.hours_worked"
+    total_income = model.get_variable("total_income")
+    assert total_income.is_input_variable is False
+    assert total_income.hidden_input is False
+    assert total_income.module_name == "household.income.total_income"
+    payload = json.loads(
+        total_income.model_dump_json(
+            include={"is_input_variable", "hidden_input", "module_name"}
+        )
+    )
+    assert payload == {
+        "is_input_variable": False,
+        "hidden_input": False,
+        "module_name": "household.income.total_income",
+    }
+
+
+def test_input_flags_and_module_default_to_unrecorded_for_older_country_models():
+    model = _model_version()
+    core_variable = SimpleNamespace(
+        name="minimal_input",
+        label="Minimal input",
+        entity=SimpleNamespace(key="person"),
+        documentation=None,
+        value_type=int,
+        default_value=0,
+        possible_values=None,
+        adds=None,
+        subtracts=None,
+    )
+    system = SimpleNamespace(
+        variables={core_variable.name: core_variable},
+        parameters=None,
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    variable = model.get_variable("minimal_input")
+    assert variable.is_input_variable is None
+    assert variable.hidden_input is None
+    assert variable.module_name is None
+
+
+@pytest.mark.parametrize(
+    ("model", "country_system_module"),
+    [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
+    ids=["uk", "us"],
+)
+def test_country_models_publish_input_flags_and_modules_as_core_declares_them(
+    model, country_system_module
+):
+    country_system = pytest.importorskip(country_system_module).system
+
+    for name, core_variable in country_system.variables.items():
+        variable = model.get_variable(name)
+        assert variable.is_input_variable is core_variable.is_input_variable(), name
+        assert variable.hidden_input is core_variable.hidden_input, name
+        assert variable.module_name == core_variable.module_name, name
+    assert model.get_variable("age").is_input_variable is True
+    assert any(variable.is_input_variable is False for variable in model.variables)
+
+
+def test_us_model_publishes_hidden_inputs():
+    hidden_inputs = [
+        variable.name for variable in us_latest.variables if variable.hidden_input
+    ]
+
+    assert hidden_inputs, "The US package hides some inputs from input lists"
