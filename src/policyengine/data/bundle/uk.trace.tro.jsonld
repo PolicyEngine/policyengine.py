@@ -75,7 +75,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for uk",
             "trov:mimeType": "application/json",
-            "trov:sha256": "ef8235c112d4aee8436a90d5a562d3459ce05ed46a391b0daaa5693d7518acc7"
+            "trov:sha256": "6bbbfdfb433a5d8de4b1110238311338fd0425d92d4b34f06e7f8d3db3001fad"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -102,7 +102,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "a94a4050211eb02ab9c22629da54c887355c28015f40301122462882691511d8"
+          "trov:sha256": "1cce237175e76a9e5f9dffeb6ec3573dbc78c5facc5a7c55d06886d453641e3a"
         }
       },
       "trov:hasPerformance": {
@@ -112,6 +112,7 @@
         "pe:certifiedBy": "policyengine.py bundle certification",
         "pe:certifiedForModelVersion": "2.132.6",
         "pe:compatibilityBasis": "built_with_model_package",
+        "pe:coreBinding": "bundle_pin",
         "pe:dataBuildId": "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71",
         "pe:emittedIn": "repository-bundle",
         "rdfs:comment": "Certification of build microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71 for policyengine-uk 2.132.6.",

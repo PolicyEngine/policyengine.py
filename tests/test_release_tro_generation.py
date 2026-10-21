@@ -136,6 +136,35 @@ def test_runtime_core_must_match_a_core_the_certificate_names(release):
         generator.generated_tros(strict=True)
 
 
+@pytest.mark.parametrize(("pin", "warned"), [("3.26.11", False), ("99.0.0", True)])
+def test_a_certificate_that_follows_the_pin_reports_an_unclaimed_pin(
+    release, capsys, pin, warned
+):
+    """A certificate that names no core follows the core pin: an unclaimed
+    pin is reported, not refused."""
+
+    path = release[0] / "manifest.json"
+    payload = json.loads(path.read_bytes())
+    payload["data_releases"]["us"]["certification"]["core_binding"] = "bundle_pin"
+    payload["packages"]["policyengine-core"]["version"] = pin
+    path.write_text(json.dumps(payload))
+    manifest.get_release_manifest.cache_clear()
+
+    generator.generated_tros(strict=True)
+
+    assert ("follows the core pin" in capsys.readouterr().err) == warned
+
+
+def test_a_core_binding_must_agree_with_the_named_core(release):
+    path = release[0] / "manifest.json"
+    payload = json.loads(path.read_bytes())
+    payload["data_releases"]["us"]["certification"]["core_binding"] = "certified"
+    path.write_text(json.dumps(payload))
+    manifest.get_release_manifest.cache_clear()
+    with pytest.raises(ValueError, match="core_binding 'certified' disagrees"):
+        generator.generated_tros(strict=True)
+
+
 @pytest.mark.parametrize("field", ["name", "version", "sha256", "wheel_url"])
 def test_runtime_model_identity_must_match_certification(release, field):
     path = release[0] / "manifest.json"

@@ -708,7 +708,7 @@ def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
         changed = json.loads(bundle_path.read_bytes())
         changed["packages"]["policyengine-core"]["version"] = "99.0.0"
         write_json(bundle_path, changed)
-        with pytest.raises(ValueError, match="runtime core 99.0.0 differs"):
+        with pytest.raises(ValueError, match="runtime core 99.0.0 differs.*requalify"):
             tros.generated_tros(strict=True)
 
 

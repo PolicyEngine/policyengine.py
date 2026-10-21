@@ -50,8 +50,7 @@ Microcosm national release with one of:
   python scripts/bundle.py certify-data --country uk --data-producer populace \
     --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
     --regional-manifest-uri "hf://dataset/policyengine/populace-uk-private@<local-cut-tag>/releases/<local-release-id>/release_manifest.json" \
-    --model-version "<policyengine-uk-version>" \
-    --core-version "<policyengine-core-version>"
+    --model-version "<policyengine-uk-version>"
   ```
 
   This records `regional_release_kind: local_area`, and the default UK region
@@ -66,8 +65,7 @@ Microcosm national release with one of:
     --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
     --regional-manifest-uri "hf://model/policyengine/policyengine-uk-data-private@<revision>/releases/<version>/release_manifest.json" \
     --regional-release-kind area_coded_national \
-    --model-version "<policyengine-uk-version>" \
-    --core-version "<policyengine-core-version>"
+    --model-version "<policyengine-uk-version>"
   ```
 
   Certification carries that release's national dataset
@@ -82,17 +80,30 @@ Microcosm national release with one of:
   `dataset_overlays.uk` entry.
 
 Either way, certification checks that the regional release serves the pinned
-model, and the pinned core when `--core-version` is given, by its own build or
-compatibility claims (a `--qualified-pair-id` names the primary release only),
-and HEAD-checks every artifact it carries.
+model by its own build or compatibility claims (a `--qualified-pair-id` names
+the primary release only), checks its core claims as for the primary release
+(below), and HEAD-checks every artifact it carries.
 
-`--core-version` also names the core in the certificate, and receipts then
-certify that core, not the bundle's core pin. So `check --strict-tros` refuses
-a core pin that differs from it: a core bump, a US `--core-version` run
-included, needs the country re-certified for the new core first. Microcosm UK
-releases claim one exact core, so that needs Microcosm cuts that claim the new
-core. To move the core before they exist, re-certify UK without
-`--core-version`: its receipts then certify the pin, as before October 2026.
+### The core
+
+The bundle has one core pin, `packages.policyengine-core`, shared by every
+country. A certificate says how it covers it:
+
+- **`core_binding: bundle_pin` (the default, no `--core-version`).** The
+  certificate names no core and certifies whatever core the bundle pins, so
+  the pin can move with another country without re-certifying this one.
+  Certification checks the pin against each release's build-time core and
+  core claims, and warns, without refusing, when the pin is outside them.
+  `bundle.py check --include-tros --strict-tros` warns the same way when the
+  pin later moves outside the claims. Receipts then certify the pin without
+  the release's claim; the warning, the certificate and its TRO say so.
+- **`core_binding: certified` (`--core-version`).** The certificate names the
+  core (`certified_for_core_version`). Certification refuses a core that a
+  release neither was built with nor claims, and the strict check refuses a
+  pin that differs from the named core, so moving the core needs a
+  re-certification first. A qualified exact pair always binds its core.
+
+Use the default unless a release must not run on any other core.
 
 ### Re-certifying a routed bundle
 

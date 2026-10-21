@@ -169,6 +169,14 @@ class DataCertification(BaseModel):
     data_build_fingerprint: Optional[str] = None
     certified_by: Optional[str] = None
     certified_for_core_version: Optional[str] = None
+    #: How the certificate covers policyengine-core. ``certified``: it names
+    #: the core it was certified for (``certified_for_core_version``), and the
+    #: bundle's core pin must equal it. ``bundle_pin``: it certifies whatever
+    #: core the bundle pins, without holding the pin to the data release's
+    #: core claims; certification and the strict check warn when the pin is
+    #: outside them. Absent in certificates from before October 2026, which
+    #: follow the pin the same way.
+    core_binding: Optional[Literal["certified", "bundle_pin"]] = None
     qualification_pair_id: Optional[str] = None
     qualification_ledger_url: Optional[str] = None
 

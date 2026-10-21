@@ -422,20 +422,8 @@ def _check_core_compatibility(
     case the certificate's basis must be the qualified exact pair.
     """
 
-    build = manifest.build
-    built_with_core = (
-        build.built_with_core_package.version
-        if build is not None and build.built_with_core_package is not None
-        else None
-    )
-    core_claims = [
-        package.specifier
-        for package in manifest.compatible_core_packages
-        if package.name == "policyengine-core"
-    ]
-    if built_with_core == core_version or any(
-        _specifier_matches(core_version, specifier) for specifier in core_claims
-    ):
+    built_with_core, core_claims = _core_claims(manifest)
+    if _core_is_claimed(manifest, core_version):
         return False
     if qualified_pair_id is not None:
         warnings.append(
@@ -448,6 +436,53 @@ def _check_core_compatibility(
         f"policyengine-core {core_version} matches neither the build-time core "
         f"({built_with_core or 'unrecorded'}) nor any publisher core claim "
         f"{core_claims or '(none declared)'}."
+    )
+
+
+def _core_claims(manifest: DataReleaseManifest) -> tuple[Optional[str], list[str]]:
+    """A release's build-time core and its publisher core claims."""
+
+    build = manifest.build
+    built_with_core = (
+        build.built_with_core_package.version
+        if build is not None and build.built_with_core_package is not None
+        else None
+    )
+    core_claims = [
+        package.specifier
+        for package in manifest.compatible_core_packages
+        if package.name == "policyengine-core"
+    ]
+    return built_with_core, core_claims
+
+
+def _core_is_claimed(manifest: DataReleaseManifest, core_version: str) -> bool:
+    """Whether a release was built with, or claims, ``core_version``."""
+
+    built_with_core, core_claims = _core_claims(manifest)
+    return built_with_core == core_version or any(
+        _specifier_matches(core_version, specifier) for specifier in core_claims
+    )
+
+
+def core_claim_warning(
+    manifest: DataReleaseManifest, core_version: str
+) -> Optional[str]:
+    """Why ``core_version`` is outside a release's core claims, or None.
+
+    For a certificate that follows the bundle's core pin: the pin is not held
+    to the release's claims, so a pin outside them is reported, not refused.
+    """
+
+    if _core_is_claimed(manifest, core_version):
+        return None
+    built_with_core, core_claims = _core_claims(manifest)
+    return (
+        f"the bundle's policyengine-core {core_version} is neither the "
+        f"build-time core ({built_with_core or 'unrecorded'}) nor in the "
+        f"release's core claims {core_claims or '(none declared)'}; the "
+        "certificate names no core, so it follows the core pin, and receipts "
+        "certify that core without the release's claim"
     )
 
 
@@ -1002,6 +1037,9 @@ def build_country_manifest_payload(
     }
     if core_version is not None:
         certification["certified_for_core_version"] = core_version
+        certification["core_binding"] = "certified"
+    else:
+        certification["core_binding"] = "bundle_pin"
     if qualified_pair_id is not None:
         certification["qualification_pair_id"] = qualified_pair_id
         certification["qualification_ledger_url"] = (
@@ -1110,6 +1148,7 @@ class DataProducerCertificationStrategy:
         regional_release_kind: RegionalReleaseKind = "local_area",
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
+        bundle_core_version: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         raise NotImplementedError
 
@@ -1132,6 +1171,7 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
         regional_release_kind: RegionalReleaseKind = "local_area",
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
+        bundle_core_version: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         raise CertificationError(
             "Legacy data-producer certification updates are not implemented in "
@@ -1157,10 +1197,13 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         regional_release_kind: RegionalReleaseKind = "local_area",
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
+        bundle_core_version: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         manifest, manifest_sha256, uri_parts = fetch_release_manifest(
             manifest_uri, token=token
         )
+        primary_manifest = manifest
+        regional_manifest = None
         regional_uri_parts = None
         recorded_release_kind = None
         regional_artifacts: dict[str, DataReleaseArtifact] = {}
@@ -1210,6 +1253,18 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             qualified_pair_id=qualified_pair_id,
         )
         warnings = warnings + regional_warnings
+        if core_version is None and bundle_core_version is not None:
+            # The certificate follows the bundle's core pin: report, not
+            # refuse, a pin that a release does not claim.
+            for label, release in (
+                ("data release", primary_manifest),
+                ("regional release", regional_manifest),
+            ):
+                if release is None:
+                    continue
+                warning = core_claim_warning(release, bundle_core_version)
+                if warning is not None:
+                    warnings.append(f"{label}: {warning}")
 
         for filename in required_supplemental_release_files(
             country, manifest, uri_parts
@@ -1371,6 +1426,9 @@ def certify_data_release(
         regional_release_kind=regional_release_kind,
         core_version=core_version,
         qualified_pair_id=qualified_pair_id,
+        bundle_core_version=(
+            (bundle.get("packages") or {}).get("policyengine-core") or {}
+        ).get("version"),
     )
     previous_release = (bundle.get("data_releases") or {}).get(country) or {}
     bundle.setdefault("data_releases", {})[country] = data_release

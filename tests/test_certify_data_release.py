@@ -1447,7 +1447,44 @@ class TestUKRegionalCertification:
         )
         release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
         assert release["certification"]["certified_for_core_version"] == "3.33.0"
+        assert release["certification"]["core_binding"] == "certified"
         assert release["regional_release_kind"] == "area_coded_national"
+
+    def test__given_no_core_version__then_the_certificate_follows_the_pin_openly(
+        self, tmp_path
+    ):
+        """Without --core-version the certificate follows the bundle's core pin.
+
+        It says so (core_binding bundle_pin), and certification reports a
+        release that does not claim the pin instead of refusing it.
+        """
+        national = _microcosm_uk_national_payload()
+        national["compatible_core_packages"] = [
+            {"name": "policyengine-core", "specifier": "==3.33.3"}
+        ]
+        bundle_path = _tmp_bundle(tmp_path)
+        bundle = json.loads(bundle_path.read_text())
+        bundle["packages"]["policyengine-core"] = {
+            "name": "policyengine-core",
+            "version": "3.33.3",
+        }
+        bundle_path.write_text(json.dumps(bundle))
+
+        result = _certify_uk(
+            bundle_path,
+            [_response(national), _response(_microcosm_uk_dense_payload())],
+            regional_manifest_uri=UK_DENSE_URI,
+        )
+
+        written = json.loads(bundle_path.read_text())
+        certification = written["data_releases"]["uk"]["certification"]
+        assert certification["core_binding"] == "bundle_pin"
+        assert "certified_for_core_version" not in certification
+        assert written["packages"]["policyengine-core"]["version"] == "3.33.3"
+        # The national release claims the pin; the local-area one claims no core.
+        unclaimed = [w for w in result.warnings if "follows the core pin" in w]
+        assert len(unclaimed) == 1
+        assert unclaimed[0].startswith("regional release: ")
 
     def test__given_unreachable_regional_artifact__then_refuses(self, tmp_path):
         with (

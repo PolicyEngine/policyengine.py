@@ -107,9 +107,10 @@ when nothing is routed:
 | `local_area` | a local-area release that certification vets and pins | yes |
 
 Certification checks a local-area release's role, its single H5 file and its
-own model and core claims, and pins the file's bytes, but the certificate covers
-the national dataset only: receipts for runs on the local-area file are
-uncertified.
+own model claims, checks its core claims (refusing an unclaimed core with
+`--core-version`, warning about one without it), and pins the file's bytes. The
+certificate covers the national dataset only: receipts for runs on the
+local-area file are uncertified.
 
 The certified bundle routes both to the Microcosm local-area release
 (`local_area`, `microcosm_uk_2024_25_dense.h5`), so the default registry has

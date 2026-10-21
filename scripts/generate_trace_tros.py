@@ -22,7 +22,10 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 from release_lock import PYPI, load_toml, validate_registry_artifacts
 
-from policyengine.provenance.certification import validate_release_manifest
+from policyengine.provenance.certification import (
+    core_claim_warning,
+    validate_release_manifest,
+)
 from policyengine.provenance.manifest import (
     CountryReleaseManifest,
     DataReleaseManifest,
@@ -139,29 +142,42 @@ def _validate_runtime_model(bundle: dict, country: CountryReleaseManifest) -> No
     prefix = f"{country.country_id}: strict TRACE release"
     certification = country.certification
     core = bundle.get("packages", {}).get("policyengine-core", {})
-    if (
-        certification
+    exact_pair = (
+        certification is not None
         and certification.compatibility_basis == "qualified_exact_pair"
-        and not (
-            certification.qualification_pair_id
-            and certification.certified_for_core_version
-        )
+    )
+    if exact_pair and not (
+        certification.qualification_pair_id and certification.certified_for_core_version
     ):
         raise ValueError(
             f"{prefix}: a qualified exact pair must name its pair and core"
         )
     if (
-        certification
+        certification is not None
+        and certification.core_binding is not None
+        and (certification.core_binding == "certified")
+        != (certification.certified_for_core_version is not None)
+    ):
+        raise ValueError(
+            f"{prefix}: core_binding {certification.core_binding!r} disagrees with "
+            "certified_for_core_version"
+        )
+    if (
+        certification is not None
         and certification.certified_for_core_version
         and core.get("version") != certification.certified_for_core_version
     ):
         # Receipts certify the core the certificate names, not the pin, so a
         # core-only pin change would leave every receipt uncertified.
+        remedy = (
+            "requalify the pair for the new core"
+            if exact_pair
+            else "re-certify the data release for the new core, or without "
+            "--core-version so that the certificate follows the core pin"
+        )
         raise ValueError(
             f"{prefix}: runtime core {core.get('version')} differs from the "
-            f"certified core {certification.certified_for_core_version}; "
-            "re-certify the data release for the new core, or without "
-            "--core-version so that receipts certify the pin"
+            f"certified core {certification.certified_for_core_version}; {remedy}"
         )
     if (
         model.name != key
@@ -237,6 +253,20 @@ def generated_tros(*, strict: bool = False) -> list[tuple[Path, bytes]]:
             )
         if strict:
             _validate_reviewed_inputs(country_manifest, data_release_manifest, tro_path)
+            certification = country_manifest.certification
+            core = (
+                bundle.get("packages", {}).get("policyengine-core", {}).get("version")
+            )
+            if (
+                certification is not None
+                and certification.certified_for_core_version is None
+                and core is not None
+            ):
+                # The certificate follows the core pin: an unclaimed pin is
+                # reported, not refused.
+                warning = core_claim_warning(data_release_manifest, core)
+                if warning is not None:
+                    print(f"warning: {country_id}: {warning}", file=sys.stderr)
         tro = build_trace_tro_from_release_bundle(
             country_manifest,
             data_release_manifest,
