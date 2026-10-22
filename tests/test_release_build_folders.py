@@ -245,7 +245,8 @@ def file_response(content: bytes) -> MagicMock:
     response = MagicMock()
     response.status_code = 200
     response.content = content
-    response.text = content.decode()
+    # Like requests, which replaces bytes it cannot decode.
+    response.text = content.decode(errors="replace")
     response.raise_for_status.return_value = None
     return response
 
@@ -617,6 +618,12 @@ RECORD_CHANGES_THE_WRITER_REFUSES = [
         lambda record: record.pop("schema_version"), id="missing schema_version"
     ),
     pytest.param(lambda record: record.update(schema_version=2), id="schema_version 2"),
+    pytest.param(
+        lambda record: record.update(schema_version=True), id="schema_version true"
+    ),
+    pytest.param(
+        lambda record: record.update(schema_version=1.0), id="schema_version 1.0"
+    ),
     pytest.param(lambda record: record.pop("default"), id="missing default"),
     pytest.param(lambda record: record.pop("releases"), id="missing releases"),
     pytest.param(
@@ -751,6 +758,24 @@ class TestCertifyOnlyListedBuilds:
                 empty_bundle(tmp_path),
                 [folder_layout_manifest_payload()],
                 releases_record=record_bytes + padding,
+            )
+
+    @pytest.mark.parametrize(
+        "record_bytes",
+        [
+            pytest.param(b'{"schema_version": 1,', id="truncated JSON"),
+            pytest.param(b"\xff\xfe\x00", id="not text"),
+            pytest.param(b"[" * 100_000 + b"]" * 100_000, id="nested too deeply"),
+        ],
+    )
+    def test__given_record_the_release_writer_cannot_read__then_refuses(
+        self, tmp_path, record_bytes: bytes
+    ):
+        with pytest.raises(CertificationError, match="releases.json"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [folder_layout_manifest_payload()],
+                releases_record=record_bytes,
             )
 
     @pytest.mark.parametrize("change_record", RECORD_CHANGES_THE_WRITER_ACCEPTS)
