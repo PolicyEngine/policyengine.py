@@ -52,10 +52,12 @@ class DataReleaseManifestUnavailableError(ValueError):
 
 
 class ReleaseBuildFolderError(ValueError):
-    """A build in its own release folder that does not match that folder.
+    """A build in its own release folder that cannot be certified or loaded.
 
     Its manifest names another release or build than the folder it was read
-    from, or one of its own files lies outside the folder. Unlike an
+    from, or one of its own files lies outside the folder; or, at
+    certification, the repository's ``releases.json`` is a record the release
+    writer refuses, does not list the build, or marks it withdrawn. Unlike an
     unavailable manifest, this is never covered by a bundled certificate.
     """
 
