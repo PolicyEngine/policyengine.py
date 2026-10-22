@@ -263,7 +263,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     )
                 )
                 variable.enum_values = [
-                    EnumValue(value=member.name, label=str(member.value))
+                    EnumValue(value=member.name, label=member.value)
                     for member in var_obj.possible_values
                 ]
             # Resolve parameter-path adds/subtracts to concrete lists so

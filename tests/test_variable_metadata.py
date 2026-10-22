@@ -290,12 +290,8 @@ def _enum_core_variable(name: str, possible_values: type[Enum]) -> SimpleNamespa
 def test_populate_variables_records_enum_values_with_their_labels_in_order():
     model = _model_version()
     filing_status = _enum_core_variable("filing_status", _FilingStatus)
-    numbered_status = _enum_core_variable("numbered_status", _NumberedStatus)
     system = SimpleNamespace(
-        variables={
-            filing_status.name: filing_status,
-            numbered_status.name: numbered_status,
-        },
+        variables={filing_status.name: filing_status},
         parameters=None,
     )
 
@@ -315,10 +311,34 @@ def test_populate_variables_records_enum_values_with_their_labels_in_order():
             {"value": "HEAD_OF_HOUSEHOLD", "label": "Head of household"},
         ]
     }
-    assert [
-        (enum_value.value, enum_value.label)
-        for enum_value in model.get_variable("numbered_status").enum_values
-    ] == [("FIRST", "1"), ("SECOND", "2")]
+
+
+def test_enum_values_keep_integer_labels_as_declared():
+    # The Public API's /{country}/metadata publishes an enum member's
+    # declared value unchanged, so an integer stays an integer.
+    model = _model_version()
+    numbered_status = _enum_core_variable("numbered_status", _NumberedStatus)
+    system = SimpleNamespace(
+        variables={numbered_status.name: numbered_status},
+        parameters=None,
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    enum_values = model.get_variable("numbered_status").enum_values
+    assert [(enum_value.value, enum_value.label) for enum_value in enum_values] == [
+        ("FIRST", 1),
+        ("SECOND", 2),
+    ]
+    assert all(type(enum_value.label) is int for enum_value in enum_values)
+    assert json.loads(
+        model.get_variable("numbered_status").model_dump_json(include={"enum_values"})
+    ) == {
+        "enum_values": [
+            {"value": "FIRST", "label": 1},
+            {"value": "SECOND", "label": 2},
+        ]
+    }
 
 
 def test_variables_without_possible_values_have_no_enum_values():
@@ -361,7 +381,10 @@ def test_country_models_publish_every_enum_label(model, country_system_module):
         enum_variable_count += 1
         assert [
             (enum_value.value, enum_value.label) for enum_value in variable.enum_values
-        ] == [(member.name, str(member.value)) for member in possible_values], name
+        ] == [(member.name, member.value) for member in possible_values], name
+        assert [type(enum_value.label) for enum_value in variable.enum_values] == [
+            type(member.value) for member in possible_values
+        ], name
         assert [enum_value.value for enum_value in variable.enum_values] == (
             variable.possible_values
         ), name
@@ -373,6 +396,15 @@ def test_us_filing_status_publishes_its_labels():
 
     assert EnumValue(value="SINGLE", label="Single") in filing_status.enum_values
     assert EnumValue(value="JOINT", label="Joint") in filing_status.enum_values
+
+
+def test_us_integer_valued_enum_publishes_integer_labels():
+    eligibility = us_latest.get_variable("il_personal_exemption_eligibility_status")
+
+    assert [
+        (enum_value.value, enum_value.label) for enum_value in eligibility.enum_values
+    ] == [("BOTH_ELIGIBLE", 1), ("PARTIALLY_ELIGIBLE", 2), ("NOT_ELIGIBLE", 3)]
+    assert all(type(enum_value.label) is int for enum_value in eligibility.enum_values)
 
 
 def _components_parameter_tree() -> CoreParameterNode:

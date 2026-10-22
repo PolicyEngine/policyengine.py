@@ -14,7 +14,13 @@ class EnumValue(BaseModel):
     value: str = Field(
         description="Name stored in household data, such as 'SINGLE'",
     )
-    label: str = Field(description="Label shown to users, such as 'Single'")
+    label: Union[str, int] = Field(
+        description=(
+            "Label shown to users, such as 'Single': the value the country "
+            "model declares for the member, unchanged, so a member declared "
+            "with an integer has an integer label"
+        ),
+    )
 
 
 class Variable(BaseModel):
