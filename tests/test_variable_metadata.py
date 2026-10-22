@@ -273,6 +273,16 @@ class _NumberedStatus(Enum):
     SECOND = 2
 
 
+class _MixedScalarStatus(Enum):
+    # Distinct values, since equal values (True, 1 and 1.0) would be aliases.
+    NAMED = "Named"
+    FLAGGED = True
+    COUNTED = 3
+    WHOLE_RATE = 2.0
+    PART_RATE = 0.5
+    UNSET = None
+
+
 def _enum_core_variable(name: str, possible_values: type[Enum]) -> SimpleNamespace:
     first_member = next(iter(possible_values))
     return SimpleNamespace(
@@ -340,6 +350,38 @@ def test_enum_values_keep_integer_labels_as_declared():
             {"value": "SECOND", "label": 2},
         ]
     }
+
+
+def test_enum_values_keep_each_declared_scalar_type():
+    model = _model_version()
+    mixed_status = _enum_core_variable("mixed_status", _MixedScalarStatus)
+    system = SimpleNamespace(
+        variables={mixed_status.name: mixed_status},
+        parameters=None,
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    variable = model.get_variable("mixed_status")
+    published = [
+        (enum_value.value, enum_value.label, type(enum_value.label))
+        for enum_value in variable.enum_values
+    ]
+    assert published == [
+        ("NAMED", "Named", str),
+        ("FLAGGED", True, bool),
+        ("COUNTED", 3, int),
+        ("WHOLE_RATE", 2.0, float),
+        ("PART_RATE", 0.5, float),
+        ("UNSET", None, type(None)),
+    ]
+    restored = [
+        EnumValue.model_validate_json(enum_value.model_dump_json())
+        for enum_value in variable.enum_values
+    ]
+    assert [(enum_value.label, type(enum_value.label)) for enum_value in restored] == [
+        (label, label_type) for _, label, label_type in published
+    ]
 
 
 def test_variables_without_possible_values_have_no_enum_values():

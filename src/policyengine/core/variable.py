@@ -14,11 +14,13 @@ class EnumValue(BaseModel):
     value: str = Field(
         description="Name stored in household data, such as 'SINGLE'",
     )
-    label: Union[str, int] = Field(
+    # Pydantic's smart union keeps each declared scalar's own type: True stays
+    # True, 1.0 stays 1.0 and None stays None, rather than being converted.
+    label: Union[str, int, float, bool, None] = Field(
         description=(
             "Label shown to users, such as 'Single': the value the country "
             "model declares for the member, unchanged, so a member declared "
-            "with an integer has an integer label"
+            "with an integer, number, boolean or None keeps that value"
         ),
     )
 
