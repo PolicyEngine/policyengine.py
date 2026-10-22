@@ -4,21 +4,16 @@ from types import SimpleNamespace
 
 import pytest
 from policyengine_core.parameters import ParameterNode as CoreParameterNode
+from policyengine_core.parameters import ParameterScale as CoreParameterScale
 
-from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     MicrosimulationModelVersion,
 )
 from policyengine.tax_benefit_models.uk import uk_latest
 from policyengine.tax_benefit_models.us import us_latest
-
-
-def _model_version() -> TaxBenefitModelVersion:
-    return TaxBenefitModelVersion(
-        id="test@1",
-        model=TaxBenefitModel(id="test", name="Test"),
-        version="1",
-    )
+from tests.fixtures.country_model_fixtures import (
+    make_empty_model_version as _model_version,
+)
 
 
 def test_populate_parameters_excludes_empty_organizational_nodes():
@@ -54,3 +49,135 @@ def test_country_models_do_not_expose_python_cache_nodes(model):
     assert all(
         "__pycache__" not in name.split(".") for name in model.parameter_nodes_by_name
     )
+
+
+def _bracket(rate: float, threshold: float) -> dict:
+    return {
+        "rate": {"values": {"2020-01-01": rate}},
+        "threshold": {"values": {"2020-01-01": threshold}},
+    }
+
+
+def _system_with_bracket_schedules() -> SimpleNamespace:
+    parameters = CoreParameterNode(
+        "",
+        data={
+            "gov": {
+                "tax": {
+                    "rates": {
+                        "description": "Income tax rates by band",
+                        "metadata": {
+                            "label": "Income tax rates",
+                            "type": "marginal_rate",
+                        },
+                        "brackets": [_bracket(0.1, 0), _bracket(0.2, 1_000)],
+                    },
+                    "unlabelled_rates": {
+                        "description": "A schedule with no stored label",
+                        "metadata": {"type": "marginal_rate"},
+                        "brackets": [_bracket(0.05, 0)],
+                    },
+                }
+            }
+        },
+    )
+    return SimpleNamespace(parameters=parameters, variables={})
+
+
+def test_populate_parameters_publishes_bracket_schedules_as_labelled_nodes():
+    model = _model_version()
+
+    MicrosimulationModelVersion._populate_parameters(
+        model, _system_with_bracket_schedules()
+    )
+
+    schedule = model.get_parameter_node("gov.tax.rates")
+    assert schedule.label == "Income tax rates"
+    assert schedule.description == "Income tax rates by band"
+    assert schedule.id == "test@1-gov.tax.rates"
+    assert model.get_parameter_node("gov.tax.unlabelled_rates").label is None
+    node_names = [node.name for node in model.parameter_nodes]
+    # Each schedule precedes its brackets, which stay nodes of their own.
+    assert node_names.index("gov.tax.rates") < node_names.index("gov.tax.rates[0]")
+    assert {"gov.tax.rates[0]", "gov.tax.rates[1]"} <= set(node_names)
+    assert model.get_parameter("gov.tax.rates[1].rate").label == (
+        "Income tax rates (bracket 2 rate)"
+    )
+
+
+def test_populate_parameters_leaves_out_bracket_schedules_without_brackets():
+    parameters = CoreParameterNode(
+        "",
+        data={
+            "gov": {
+                "tax": {
+                    "empty_rates": {
+                        "description": "A schedule whose brackets are not set yet",
+                        "metadata": {"label": "Empty rates", "type": "marginal_rate"},
+                        "brackets": [],
+                    },
+                    "rates": {
+                        "metadata": {"label": "Income tax rates"},
+                        "brackets": [_bracket(0.1, 0)],
+                    },
+                }
+            }
+        },
+    )
+    assert isinstance(parameters.gov.tax.empty_rates, CoreParameterScale)
+    model = _model_version()
+
+    MicrosimulationModelVersion._populate_parameters(
+        model, SimpleNamespace(parameters=parameters, variables={})
+    )
+
+    assert "gov.tax.empty_rates" not in model.parameter_nodes_by_name
+    assert all(node.name != "gov.tax.empty_rates" for node in model.parameter_nodes)
+    assert "gov.tax.rates" in model.parameter_nodes_by_name
+
+
+def test_country_models_publish_every_bracket_schedule(country_model):
+    model = country_model.model_version
+    country_system = country_model.core_system
+
+    schedules = [
+        core_parameter
+        for core_parameter in country_system.parameters.get_descendants()
+        if isinstance(core_parameter, CoreParameterScale) and core_parameter.brackets
+    ]
+    assert schedules
+    for core_schedule in schedules:
+        schedule = model.get_parameter_node(core_schedule.name)
+        assert schedule.label == core_schedule.metadata.get("label"), core_schedule.name
+        assert schedule.description == core_schedule.description
+
+
+def test_uk_income_tax_schedule_is_a_node_above_its_brackets(uk_country_model):
+    model = uk_country_model.model_version
+
+    assert "gov.hmrc.income_tax.rates.uk" in model.parameter_nodes_by_name
+    assert "gov.hmrc.income_tax.rates.uk[0]" in model.parameter_nodes_by_name
+
+
+# Stored labels in the country packages pinned in pyproject.toml. A schedule
+# without one publishes None; consumers generate a label from its name.
+PINNED_SCHEDULE_LABELS = {
+    "uk": {
+        "gov.hmrc.income_tax.rates.uk": "Income Tax main rates",
+        "gov.hmrc.income_tax.rates.dividends": None,
+    },
+    "us": {
+        "gov.irs.income.bracket.rates": "Individual income tax rates",
+        "gov.contrib.ubi_center.basic_income.amount.person.by_age": None,
+    },
+}
+
+
+def test_country_schedules_publish_their_stored_label_or_none(country_model):
+    model = country_model.model_version
+    pinned_labels = PINNED_SCHEDULE_LABELS[country_model.country_id]
+
+    assert {
+        schedule_name: model.get_parameter_node(schedule_name).label
+        for schedule_name in pinned_labels
+    } == pinned_labels
