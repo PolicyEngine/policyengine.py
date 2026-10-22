@@ -1,5 +1,6 @@
 """Tests for public parameter-node projection from country models."""
 
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -117,7 +118,7 @@ def test_populate_parameters_publishes_bracket_schedules_as_labelled_nodes():
     ids=["uk", "us"],
 )
 def test_country_models_publish_every_bracket_schedule(model, country_system_module):
-    country_system = pytest.importorskip(country_system_module).system
+    country_system = importlib.import_module(country_system_module).system
 
     schedules = [
         core_parameter

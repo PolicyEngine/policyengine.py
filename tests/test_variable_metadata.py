@@ -1,6 +1,7 @@
 """Tests for public variable metadata copied from country models."""
 
 import datetime
+import importlib
 import json
 from enum import Enum
 from types import SimpleNamespace
@@ -242,7 +243,7 @@ def test_input_flags_and_module_default_to_unrecorded_for_older_country_models()
 def test_country_models_publish_input_flags_and_modules_as_core_declares_them(
     model, country_system_module
 ):
-    country_system = pytest.importorskip(country_system_module).system
+    country_system = importlib.import_module(country_system_module).system
 
     for name, core_variable in country_system.variables.items():
         variable = model.get_variable(name)
@@ -369,7 +370,7 @@ def test_variables_without_possible_values_have_no_enum_values():
     ids=["uk", "us"],
 )
 def test_country_models_publish_every_enum_label(model, country_system_module):
-    country_system = pytest.importorskip(country_system_module).system
+    country_system = importlib.import_module(country_system_module).system
 
     enum_variable_count = 0
     for name, core_variable in country_system.variables.items():
@@ -503,7 +504,7 @@ def test_parameter_path_is_published_when_the_parameter_cannot_be_resolved():
 def test_country_models_publish_every_parameter_named_by_adds_or_subtracts(
     model, country_system_module
 ):
-    country_system = pytest.importorskip(country_system_module).system
+    country_system = importlib.import_module(country_system_module).system
 
     for name, core_variable in country_system.variables.items():
         variable = model.get_variable(name)

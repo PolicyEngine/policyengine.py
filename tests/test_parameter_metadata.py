@@ -1,5 +1,6 @@
 """Tests for the economy and household flags each parameter publishes."""
 
+import importlib
 import json
 from types import SimpleNamespace
 
@@ -11,8 +12,6 @@ from policyengine.core import Parameter, TaxBenefitModel, TaxBenefitModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     MicrosimulationModelVersion,
 )
-from policyengine.tax_benefit_models.uk import uk_latest
-from policyengine.tax_benefit_models.us import us_latest
 
 
 def _model_version() -> TaxBenefitModelVersion:
@@ -20,6 +19,26 @@ def _model_version() -> TaxBenefitModelVersion:
         id="test@1",
         model=TaxBenefitModel(id="test", name="Test"),
         version="1",
+    )
+
+
+@pytest.fixture(params=["uk", "us"])
+def country(request) -> SimpleNamespace:
+    """The country's published model version and its core tax-benefit system.
+
+    Skips when the country package is not installed. The model is imported
+    here, after that check, because the country module defines it only when
+    the package is installed.
+    """
+    country_id = request.param
+    country_system = pytest.importorskip(f"policyengine_{country_id}.system").system
+    country_module = importlib.import_module(
+        f"policyengine.tax_benefit_models.{country_id}"
+    )
+    return SimpleNamespace(
+        id=country_id,
+        model=getattr(country_module, f"{country_id}_latest"),
+        system=country_system,
     )
 
 
@@ -75,13 +94,9 @@ def test_parameter_flags_default_to_offered():
     assert manually_built.household is True
 
 
-@pytest.mark.parametrize(
-    ("model", "country_system_module"),
-    [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
-    ids=["uk", "us"],
-)
-def test_country_models_publish_each_parameters_flags(model, country_system_module):
-    country_system = pytest.importorskip(country_system_module).system
+def test_country_models_publish_each_parameters_flags(country):
+    model = country.model
+    country_system = country.system
 
     for core_parameter in country_system.parameters.get_descendants():
         if not isinstance(core_parameter, CoreParameter):
