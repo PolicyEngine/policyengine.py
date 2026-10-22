@@ -29,6 +29,13 @@ exact pair.
 Pin the cut tag (``@<cut-tag>``), never a branch: a release line's directory
 (``releases/<release-id>/``) is rewritten by each cut.
 
+A build published in its own folder (``releases/<release>/<build>/``, named
+by its manifest's ``release`` and ``build`` strings) has no tag. Certify it
+from that folder at the commit that published it; its own files are pinned
+inside the folder at that revision, and its ``build`` names the certificate.
+The repository's ``releases.json`` at ``main`` must list the build and not
+have withdrawn it, and must be a record the release writer accepts.
+
 ``scripts/bundle.py certify-data`` is the operator-facing wrapper. Network
 access is required (HF manifest fetch + PyPI wheel metadata). Countries whose
 data release predates release manifests need a dedicated data-producer strategy
@@ -55,11 +62,16 @@ from policyengine.data.uk_geography_assets import (
 from policyengine.provenance.bundle_validation import shadowed_dataset_overlays
 from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
+    RELEASES_RECORD_NAME,
+    RELEASES_RECORD_REVISION,
     DataReleaseArtifact,
     DataReleaseManifest,
     RegionalReleaseKind,
+    ReleaseBuildFolderError,
     _specifier_matches,
+    check_build_listed,
     fetch_pypi_wheel_metadata,
+    read_build_folder,
     release_build_id,
 )
 
@@ -240,12 +252,53 @@ def release_manifest_dir(parts: dict) -> str:
     return parts["path"].rsplit("/", 1)[0]
 
 
+def https_releases_record_url(parts: dict) -> str:
+    """The repository's ``releases.json`` at ``main``, its current record."""
+    prefix = "datasets/" if parts["repo_type"] == "dataset" else ""
+    return (
+        f"https://huggingface.co/{prefix}{parts['repo_id']}/resolve/"
+        f"{RELEASES_RECORD_REVISION}/{RELEASES_RECORD_NAME}"
+    )
+
+
+def _require_listed_build(
+    manifest: DataReleaseManifest, parts: dict, headers: dict
+) -> None:
+    """Refuse a build in its own folder that ``releases.json`` at ``main``
+    does not list, or has withdrawn.
+
+    The record is read at ``main``, not at the URI's revision: a build is
+    withdrawn after the commit that published it.
+    """
+    release, build = manifest.release, release_build_id(manifest.build)
+    if release is None or build is None:
+        return
+    url = https_releases_record_url(parts)
+    response = requests.get(url, headers=headers, timeout=HF_REQUEST_TIMEOUT_SECONDS)
+    if response.status_code != 200:
+        raise CertificationError(
+            f"Could not fetch {RELEASES_RECORD_NAME} ({response.status_code}) "
+            f"from {url}; a build in its own release folder is certified only "
+            "while that record lists it."
+        )
+    try:
+        check_build_listed(response.content, release=release, build=build)
+    except ReleaseBuildFolderError as exc:
+        raise CertificationError(str(exc)) from exc
+
+
 def fetch_release_manifest(
     manifest_uri: str,
     token: Optional[str] = None,
 ) -> tuple[DataReleaseManifest, str, dict]:
     """Fetch and parse the data release manifest; returns
-    (manifest, sha256 of the fetched bytes, parsed URI parts)."""
+    (manifest, sha256 of the fetched bytes, parsed URI parts).
+
+    A build published in its own release folder must be read from that
+    folder, and its own files are pinned inside it at the URI's revision
+    (``read_build_folder``). The repository's ``releases.json`` at ``main``
+    must list the build and not have withdrawn it, and must be a record the
+    release writer accepts (``check_build_listed``)."""
     parts = parse_manifest_uri(manifest_uri)
     url = https_manifest_url(parts)
     headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -258,6 +311,17 @@ def fetch_release_manifest(
     sha256 = hashlib.sha256(response.content).hexdigest()
     payload = json.loads(response.content)
     manifest = DataReleaseManifest.model_validate(payload)
+    try:
+        manifest = read_build_folder(
+            manifest,
+            repo_id=parts["repo_id"],
+            manifest_path=parts["path"],
+            revision=parts["revision"],
+        )
+    except ReleaseBuildFolderError as exc:
+        raise CertificationError(str(exc)) from exc
+    if manifest.build_folder is not None:
+        _require_listed_build(manifest, parts, headers)
     return manifest, sha256, parts
 
 

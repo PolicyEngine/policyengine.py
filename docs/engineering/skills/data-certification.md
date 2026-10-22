@@ -34,6 +34,52 @@ uses the cut tag as the build id (`data_releases.<country>.version`, the
 certification's `data_build_id` and the changelog fragment name), so two cuts
 of one line never look identical.
 
+### Builds in their own release folders
+
+Once Microcosm publishes each build in its own folder,
+`releases/<release>/<build>/`, a build is never changed after publishing and
+gets no Hugging Face tag. The repository's root `releases.json` records which
+build of each release is current. That build's `release_manifest.json` names
+its `release` and `build` as strings, for example
+`microcosm-uk-2024-25-national` and
+`uk-frs-calibration-attempt-20261019T083323Z-6cba5d71`. Certify the build from
+its own folder, at the commit that published it:
+
+```bash
+python scripts/bundle.py certify-data --country uk --data-producer populace \
+  --manifest-uri "hf://dataset/policyengine/populace-uk-private@<commit>/releases/<release>/<build>/release_manifest.json"
+```
+
+- The URI must be the build's own folder: a manifest that names another
+  release or build than the folder it was read from is refused.
+- The repository's `releases.json` at `main` must list the build and must not
+  mark it withdrawn, or certification refuses it. A local-area release passed
+  with `--regional-manifest-uri` is checked the same way. Which build is
+  `current` doesn't matter: a certificate pins one build.
+- The whole record must also be one the release writer's parser
+  (microcosm-emitter's `ReleasesRecord.parse`) accepts, or certification
+  refuses it. .py repeats the writer's rules: exactly the keys the writer
+  writes, at every level; `schema_version` 1; safe release and build names and
+  valid roles; a non-empty `published_at` and a boolean `withdrawn` on every
+  build; a `default` that is null or a listed release; a `current` that is null
+  or a listed build that isn't withdrawn; and at most 4 MiB.
+- The build's own files are pinned at `releases/<release>/<build>/<file>` and
+  at the URI's revision, whatever revision their manifest entries name. Each
+  one's `path` must be a bare file name, alone or after the folder, as the
+  release writer publishes it; a nested path, a `.` or `..` segment or a
+  backslash is refused. Artifacts from other repositories keep their own pins.
+- The certificate names the build by `build`
+  (`data_releases.<country>.version`, the certification's `data_build_id` and
+  the changelog fragment name), so two builds of one release never match.
+- At import, a remote manifest that names another release or build than the
+  bundle's pinned folder is refused, even when the bundle carries a
+  certificate. Import doesn't read `releases.json`: a build withdrawn after it
+  was certified keeps loading in every installed .py release whose bundle pins
+  it. Certifying again changes only the .py releases published afterwards.
+
+Manifests published before this layout, whose `build` is an object, are
+certified as described above.
+
 ### UK constituency and local-authority regions
 
 UK constituency and local-authority regions row-filter the dataset a regional

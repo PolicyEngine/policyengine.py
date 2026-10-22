@@ -1,14 +1,21 @@
 import hashlib
 import json
 import os
+import re
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import quote
 
 import requests
-from pydantic import BaseModel, Field
+from pydantic import (
+    BaseModel,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from policyengine.provenance.bundle_validation import (
     shadowed_dataset_overlays,
@@ -18,9 +25,46 @@ from policyengine.provenance.bundle_validation import (
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
 
+#: Microcosm publishes each build once, in its own folder
+#: ``releases/<release>/<build>/``, and never changes it afterwards; a root
+#: ``releases.json`` records which build of each release is current
+#: (microcosm-emitter's ``microcosm_emitter_interface.releases``).
+RELEASES_FOLDER = "releases"
+RELEASE_MANIFEST_NAME = "release_manifest.json"
+#: The record of every published build and of which ones are withdrawn, at
+#: the repository's root. Only the release writer changes it, always on
+#: ``main``, so ``main`` holds the current record.
+RELEASES_RECORD_NAME = "releases.json"
+RELEASES_RECORD_REVISION = "main"
+RELEASES_RECORD_SCHEMA_VERSION = 1
+#: The largest ``releases.json`` the release writer reads
+#: (``microcosm_emitter_interface.releases.MAX_RECORD_BYTES``).
+RELEASES_RECORD_MAX_BYTES = 4 * 1024 * 1024
+#: The publisher refuses any other release or build name
+#: (``microcosm_emitter_interface.identifiers.SAFE_IDENTIFIER``), and both
+#: are interpolated into repository paths.
+RELEASE_FOLDER_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+#: The publisher refuses any other release role
+#: (``microcosm_emitter_interface.identifiers.ROLE_IDENTIFIER``).
+RELEASE_ROLE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_RELEASES_RECORD_KEYS = frozenset({"schema_version", "default", "releases"})
+_RELEASE_ENTRY_KEYS = frozenset({"role", "current", "builds"})
+_BUILD_ENTRY_KEYS = frozenset({"published_at", "withdrawn"})
+
 
 class DataReleaseManifestUnavailableError(ValueError):
     """Raised when a data release manifest cannot be fetched or is absent."""
+
+
+class ReleaseBuildFolderError(ValueError):
+    """A build in its own release folder that cannot be certified or loaded.
+
+    Its manifest names another release or build than the folder it was read
+    from, or one of its own files lies outside the folder; or, at
+    certification, the repository's ``releases.json`` is a record the release
+    writer refuses, does not list the build, or marks it withdrawn. Unlike an
+    unavailable manifest, this is never covered by a bundled certificate.
+    """
 
 
 class PackageVersion(BaseModel):
@@ -52,17 +96,25 @@ class BuiltWithModelPackage(PackageVersion):
 
 class DataBuildInfo(BaseModel):
     build_id: Optional[str] = None
+    """The build's name. For a build published in its own release folder
+    (``DataReleaseManifest.release`` set), this is the manifest's ``build``
+    string, the attempt ID that names the folder."""
     cut_tag: Optional[str] = None
     """The immutable tag of one cut of a release line. Microcosm keeps
     ``build_id`` equal to the line name for every cut, so the cut tag is what
-    tells two cuts apart (see ``release_build_id``)."""
+    tells two cuts apart (see ``release_build_id``). Builds published in their
+    own release folders have no tag."""
     built_at: Optional[str] = None
     built_with_core_package: Optional[PackageVersion] = None
     built_with_model_package: Optional[BuiltWithModelPackage] = None
 
 
 def release_build_id(build: Optional[DataBuildInfo]) -> Optional[str]:
-    """Identify one data build: its cut tag when it has one, else its build id."""
+    """Identify one data build: its cut tag when it has one, else its build id.
+
+    A build published in its own release folder has no cut tag, and its build
+    id is the folder's build name, so two builds of one release differ.
+    """
     if build is None:
         return None
     return build.cut_tag or build.build_id
@@ -121,7 +173,10 @@ class DataReleaseArtifact(BaseModel):
     kind: str
     path: str
     repo_id: str
-    revision: str
+    revision: Optional[str] = None
+    """Required unless the manifest is a build in its own release folder,
+    whose own files are pinned at the revision its manifest is certified at
+    (``read_build_folder``)."""
     repo_type: Optional[Literal["model", "dataset"]] = None
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
@@ -132,6 +187,8 @@ class DataReleaseArtifact(BaseModel):
 
     @property
     def uri(self) -> str:
+        if self.revision is None:
+            raise ValueError(f"Artifact {self.path!r} has no revision pin.")
         return build_hf_uri(
             repo_id=self.repo_id,
             path_in_repo=self.path,
@@ -149,6 +206,12 @@ class DataReleaseManifest(BaseModel):
     compatible_model_packages: list[CompatiblePackage] = Field(default_factory=list)
     compatible_core_packages: list[CompatiblePackage] = Field(default_factory=list)
     default_datasets: dict[str, str] = Field(default_factory=dict)
+    release: Optional[str] = None
+    """The release of a build published in its own folder,
+    ``releases/<release>/<build>/``. Such a manifest names its ``release``
+    and ``build`` as strings; ``build`` is read as ``DataBuildInfo`` with only
+    ``build_id`` set, and written back as the string. ``None`` for a manifest
+    published before that layout, whose ``build`` is an object."""
     build: Optional[DataBuildInfo] = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
     preservation_dois: list[str] = Field(default_factory=list)
@@ -161,6 +224,69 @@ class DataReleaseManifest(BaseModel):
     consumed by certification)."""
     source_sha256: Optional[str] = Field(default=None, exclude=True)
     """Byte sha256 of the fetched manifest before runtime URI rewrites."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_build_folder_identity(cls, data: Any) -> Any:
+        """Read a string ``build`` with its ``release`` as the build folder."""
+
+        if not isinstance(data, dict):
+            return data
+        release = data.get("release")
+        build = data.get("build")
+        if release is None and not isinstance(build, str):
+            return data
+        if release is None:
+            raise ValueError(
+                "A release manifest that names its build as a string must "
+                "name its release."
+            )
+        if not isinstance(build, str):
+            raise ValueError(
+                "A release manifest that names its release must name its "
+                "build as a string."
+            )
+        for label, name in (("release", release), ("build", build)):
+            if not isinstance(name, str) or not RELEASE_FOLDER_NAME.fullmatch(name):
+                raise ValueError(f"{label} must match {RELEASE_FOLDER_NAME.pattern}.")
+        return {**data, "build": {"build_id": build}}
+
+    @model_validator(mode="after")
+    def _require_revision_pins_outside_build_folders(self) -> "DataReleaseManifest":
+        if self.release is None:
+            unpinned = sorted(
+                name
+                for name, artifact in self.artifacts.items()
+                if artifact.revision is None
+            )
+            if unpinned:
+                raise ValueError(
+                    f"Artifacts {unpinned} have no revision; only a build in "
+                    "its own release folder may leave it to certification."
+                )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _write_build_folder_identity(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> Any:
+        data = handler(self)
+        if (
+            self.release is not None
+            and self.build is not None
+            and isinstance(data, dict)
+            and "build" in data
+        ):
+            data["build"] = self.build.build_id
+        return data
+
+    @property
+    def build_folder(self) -> Optional[str]:
+        """``releases/<release>/<build>`` for a build in its own folder."""
+
+        if self.release is None or self.build is None or self.build.build_id is None:
+            return None
+        return f"{RELEASES_FOLDER}/{self.release}/{self.build.build_id}"
 
 
 class DataCertification(BaseModel):
@@ -231,6 +357,208 @@ class CountryReleaseManifest(BaseModel):
         ):
             return self.certified_data_artifact.uri
         return resolve_dataset_reference(self.country_id, self.default_dataset)
+
+
+def read_build_folder(
+    manifest: DataReleaseManifest,
+    *,
+    repo_id: str,
+    manifest_path: str,
+    revision: str,
+) -> DataReleaseManifest:
+    """Pin a build published in its own release folder to that folder.
+
+    ``manifest_path`` and ``revision`` say where the manifest was read from in
+    ``repo_id``. The manifest must be the one in its own build folder,
+    ``releases/<release>/<build>/release_manifest.json``. Its own files (the
+    artifacts in ``repo_id``) are then pinned at
+    ``releases/<release>/<build>/<file>`` and at ``revision``: the publisher
+    writes a build's files and its manifest in one commit and never changes
+    them afterwards, so any revision holding the manifest holds the same
+    files, while an artifact's own ``revision`` field cannot name that commit.
+    Artifacts in other repositories keep their own paths and pins.
+
+    The publisher writes only bare file names, directly inside the folder, so
+    an own file's ``path`` must be such a name, alone or after the folder.
+
+    A manifest published before that layout is returned unchanged.
+
+    Raises:
+        ReleaseBuildFolderError: If the manifest was read from another folder,
+            or one of its own files is not directly inside the folder.
+    """
+
+    folder = manifest.build_folder
+    if folder is None:
+        return manifest
+    expected_path = f"{folder}/{RELEASE_MANIFEST_NAME}"
+    if manifest_path != expected_path:
+        raise ReleaseBuildFolderError(
+            f"The release manifest at {manifest_path} names release "
+            f"{manifest.release} and build {release_build_id(manifest.build)}, "
+            f"whose manifest is {expected_path}."
+        )
+    pinned = manifest.model_copy(deep=True)
+    for name, artifact in pinned.artifacts.items():
+        if artifact.repo_id != repo_id:
+            continue
+        if "/" not in artifact.path:
+            file_name = artifact.path
+        elif artifact.path.startswith(f"{folder}/"):
+            file_name = artifact.path.removeprefix(f"{folder}/")
+        else:
+            raise ReleaseBuildFolderError(
+                f"Artifact {name!r} ({artifact.path}) is outside its build "
+                f"folder {folder}/."
+            )
+        if not _is_bare_file_name(file_name):
+            # HTTP clients remove dot segments, so "<folder>/../<other>/<file>"
+            # would fetch another build's file.
+            raise ReleaseBuildFolderError(
+                f"Artifact {name!r} ({artifact.path}) is not a file directly "
+                f"inside its build folder {folder}/."
+            )
+        artifact.path = f"{folder}/{file_name}"
+        artifact.revision = revision
+    return pinned
+
+
+def _is_bare_file_name(name: str) -> bool:
+    """One path segment that names a file: what the publisher accepts
+    (``microcosm_emitter_interface.identifiers.bare_file_name``)."""
+
+    return bool(name) and name not in {".", ".."} and not set(name) & {"/", "\\"}
+
+
+def check_build_listed(record_bytes: bytes, *, release: str, build: str) -> None:
+    """Refuse a build that ``releases.json`` does not list, or has withdrawn.
+
+    ``record_bytes`` is the repository's ``releases.json`` in the release
+    writer's format (``microcosm_emitter_interface.releases``)::
+
+        {"schema_version": 1, "default": ..., "releases": {<release>: {
+            "role": ..., "current": ..., "builds": {<build>: {
+                "published_at": ..., "withdrawn": <bool>}}}}}
+
+    Which build is current does not matter here: a certificate pins one
+    build, current or not. The whole record must still be one the release
+    writer accepts (``_read_releases_record``).
+
+    Raises:
+        ReleaseBuildFolderError: If the release writer would refuse the
+            record, or the record does not list the build, or marks it
+            withdrawn.
+    """
+
+    record = _read_releases_record(record_bytes)
+    release_entry = record["releases"].get(release)
+    if release_entry is None or build not in release_entry["builds"]:
+        raise ReleaseBuildFolderError(
+            f"{RELEASES_RECORD_NAME} does not list build {build} of release {release}."
+        )
+    if release_entry["builds"][build]["withdrawn"]:
+        raise ReleaseBuildFolderError(
+            f"Build {build} of release {release} is withdrawn in "
+            f"{RELEASES_RECORD_NAME}."
+        )
+
+
+def _read_releases_record(record_bytes: bytes) -> dict[str, Any]:
+    """Parse ``releases.json``, refusing any record the release writer refuses.
+
+    These rules repeat those of the release writer's parser, microcosm-emitter's
+    ``microcosm_emitter_interface.releases.ReleasesRecord.parse`` and its
+    ``check_record``, so that .py certifies only from a record the writer and
+    its other readers accept. .py does not depend on that package; when the
+    writer's rules change, change these with them.
+
+    Raises:
+        ReleaseBuildFolderError: If the record is larger than
+            ``RELEASES_RECORD_MAX_BYTES`` or not a JSON document, has other
+            keys or another schema version, has a malformed release or build
+            entry or an unsafe release or build name, or names as ``default``
+            a release it does not list or as ``current`` a build it does not
+            list or has withdrawn.
+    """
+
+    def refuse(problem: str) -> ReleaseBuildFolderError:
+        return ReleaseBuildFolderError(f"{RELEASES_RECORD_NAME} {problem}")
+
+    if len(record_bytes) > RELEASES_RECORD_MAX_BYTES:
+        raise refuse(f"is larger than {RELEASES_RECORD_MAX_BYTES} bytes.")
+    try:
+        record = json.loads(record_bytes)
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        raise refuse("is not a readable JSON document.") from None
+    if not isinstance(record, dict) or set(record) != _RELEASES_RECORD_KEYS:
+        raise refuse(f"must have exactly the keys {sorted(_RELEASES_RECORD_KEYS)}.")
+    schema_version = record["schema_version"]
+    # ``True`` and ``1.0`` equal 1 in Python; only the integer is the version.
+    if (
+        type(schema_version) is not int
+        or schema_version != RELEASES_RECORD_SCHEMA_VERSION
+    ):
+        raise refuse(f"must have schema_version {RELEASES_RECORD_SCHEMA_VERSION}.")
+    releases = record["releases"]
+    if not isinstance(releases, dict):
+        raise refuse("must have an object as releases.")
+    for release_name, release_entry in releases.items():
+        if not RELEASE_FOLDER_NAME.fullmatch(release_name):
+            raise refuse("names a release that is not a safe identifier.")
+        if (
+            not isinstance(release_entry, dict)
+            or set(release_entry) != _RELEASE_ENTRY_KEYS
+        ):
+            raise refuse(
+                f"must give release {release_name} exactly the keys "
+                f"{sorted(_RELEASE_ENTRY_KEYS)}."
+            )
+        role = release_entry["role"]
+        if not isinstance(role, str) or not RELEASE_ROLE_NAME.fullmatch(role):
+            raise refuse(f"gives release {release_name} an invalid role.")
+        current = release_entry["current"]
+        if current is not None and not isinstance(current, str):
+            raise refuse(
+                f"must give release {release_name} a build or null as current."
+            )
+        builds = release_entry["builds"]
+        if not isinstance(builds, dict):
+            raise refuse(f"must give release {release_name} an object as builds.")
+        for build_name, build_entry in builds.items():
+            if not RELEASE_FOLDER_NAME.fullmatch(build_name):
+                raise refuse(
+                    f"names a build of release {release_name} that is not a "
+                    "safe identifier."
+                )
+            if (
+                not isinstance(build_entry, dict)
+                or set(build_entry) != _BUILD_ENTRY_KEYS
+                or not isinstance(build_entry["published_at"], str)
+                or not build_entry["published_at"]
+                or not isinstance(build_entry["withdrawn"], bool)
+            ):
+                raise refuse(
+                    f"must give build {build_name} of release {release_name} "
+                    "a non-empty published_at string and a boolean withdrawn, "
+                    "and nothing else."
+                )
+        if current is not None:
+            if current not in builds:
+                raise refuse(
+                    f"names unlisted build {current} as the current build of "
+                    f"release {release_name}."
+                )
+            if builds[current]["withdrawn"]:
+                raise refuse(
+                    f"names withdrawn build {current} as the current build of "
+                    f"release {release_name}."
+                )
+    default = record["default"]
+    if default is not None and not isinstance(default, str):
+        raise refuse("must have a release name or null as default.")
+    if default is not None and default not in releases:
+        raise refuse(f"names unlisted release {default} as default.")
+    return record
 
 
 def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
@@ -402,6 +730,16 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     if not isinstance(source_bytes, bytes):
         source_bytes = response.text.encode("utf-8")
     data_release_manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    if data_release_manifest.build_folder is not None:
+        # A build in its own release folder must be the build the bundle
+        # pinned; ReleaseBuildFolderError is not an unavailable manifest, so
+        # no bundled certificate covers it.
+        return read_build_folder(
+            data_release_manifest,
+            repo_id=country_manifest.data_package.repo_id,
+            manifest_path=country_manifest.data_package.release_manifest_path,
+            revision=_artifact_revision(country_manifest.data_package),
+        )
     release_revision = country_manifest.data_package.release_manifest_revision
     if release_revision is not None:
         for artifact in data_release_manifest.artifacts.values():
