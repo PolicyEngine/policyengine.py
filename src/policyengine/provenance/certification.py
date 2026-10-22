@@ -410,6 +410,56 @@ def model_compatibility_basis(
     return basis, [] if warning is None else [warning]
 
 
+#: A regional release's model coverage accepted by a reviewer, not by the
+#: release's own build or claims (``--accept-regional-model-mismatch``).
+REGIONAL_BASIS_ACCEPTED_MISMATCH = "accepted_model_mismatch"
+
+
+def accepted_regional_mismatch(
+    regional_manifest: DataReleaseManifest,
+    model_package: str,
+    model_version: str,
+    reason: str,
+) -> tuple[dict, str]:
+    """Record a reviewed decision to route regions to a release on another model.
+
+    Area runs on such a release are uncertified twice over: the certificate
+    covers the national dataset only, and the regional file was built and
+    calibrated under another model version. The record names both versions
+    and the reason so the bundle, its TRO and every consumer can say so.
+    Returns ``(record, warning)``.
+    """
+
+    reason = reason.strip()
+    if not reason:
+        raise CertificationError(
+            "--accept-regional-model-mismatch needs a reason a reviewer can read."
+        )
+    built = (
+        regional_manifest.build.built_with_model_package
+        if (regional_manifest.build is not None)
+        else None
+    )
+    built_with = (
+        built.version if built is not None and built.name == model_package else None
+    )
+    record = {
+        "compatibility_basis": REGIONAL_BASIS_ACCEPTED_MISMATCH,
+        "certified_for_model_version": model_version,
+        "built_with_model_version": built_with,
+        "accepted_reason": reason,
+        "area_receipts": "uncertified",
+    }
+    warning = (
+        f"regional release: built with {model_package} "
+        f"{built_with or 'an unrecorded version'} and routed under "
+        f"{model_version} on an accepted mismatch ({reason}); area runs are "
+        "uncertified, inputs the newer model added take their defaults there, "
+        "and columns it dropped are ignored on load"
+    )
+    return record, warning
+
+
 def _check_core_compatibility(
     manifest: DataReleaseManifest,
     core_version: str,
@@ -1107,6 +1157,7 @@ def build_bundle_data_release_payload(
     regional_manifest_uri: Optional[str] = None,
     regional_uri_parts: Optional[dict] = None,
     regional_release_kind: Optional[RegionalReleaseKind] = None,
+    regional_certification: Optional[dict] = None,
 ) -> dict:
     """Map the country certification payload into bundle ``data_releases``."""
     payload = copy.deepcopy(country_payload)
@@ -1126,6 +1177,8 @@ def build_bundle_data_release_payload(
         )
     if regional_release_kind is not None:
         payload["regional_release_kind"] = regional_release_kind
+    if regional_certification is not None:
+        payload["regional_certification"] = regional_certification
     payload["default_dataset_uri"] = certified_artifact.get("uri")
     return payload
 
@@ -1149,6 +1202,7 @@ class DataProducerCertificationStrategy:
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
         bundle_core_version: Optional[str] = None,
+        regional_model_mismatch_reason: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         raise NotImplementedError
 
@@ -1172,6 +1226,7 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
         bundle_core_version: Optional[str] = None,
+        regional_model_mismatch_reason: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         raise CertificationError(
             "Legacy data-producer certification updates are not implemented in "
@@ -1198,6 +1253,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         core_version: Optional[str] = None,
         qualified_pair_id: Optional[str] = None,
         bundle_core_version: Optional[str] = None,
+        regional_model_mismatch_reason: Optional[str] = None,
     ) -> tuple[dict, str, list[str]]:
         manifest, manifest_sha256, uri_parts = fetch_release_manifest(
             manifest_uri, token=token
@@ -1208,6 +1264,18 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         recorded_release_kind = None
         regional_artifacts: dict[str, DataReleaseArtifact] = {}
         regional_warnings: list[str] = []
+        regional_certification: Optional[dict] = None
+        mismatch_warning: Optional[str] = None
+        if regional_model_mismatch_reason is not None and regional_manifest_uri is None:
+            raise CertificationError(
+                "--accept-regional-model-mismatch applies to a regional release; "
+                "pass --regional-manifest-uri."
+            )
+        if regional_model_mismatch_reason is not None and country != "uk":
+            raise CertificationError(
+                "--accept-regional-model-mismatch is only supported for the UK, "
+                "whose area receipts are uncertified."
+            )
         if regional_manifest_uri is not None:
             regional_manifest, _, regional_uri_parts = fetch_release_manifest(
                 regional_manifest_uri, token=token
@@ -1219,6 +1287,27 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                 _, regional_warnings = model_compatibility_basis(
                     regional_manifest, model_package, model_version
                 )
+            except CertificationError as exc:
+                if regional_model_mismatch_reason is None:
+                    raise CertificationError(
+                        f"Regional release {regional_manifest_uri}: {exc}"
+                    ) from exc
+                regional_certification, mismatch_warning = accepted_regional_mismatch(
+                    regional_manifest,
+                    model_package,
+                    model_version,
+                    regional_model_mismatch_reason,
+                )
+                regional_warnings = []
+            else:
+                if regional_model_mismatch_reason is not None:
+                    raise CertificationError(
+                        f"Regional release {regional_manifest_uri} serves "
+                        f"{model_package} {model_version} by its own build or "
+                        "claims; drop --accept-regional-model-mismatch so the "
+                        "certificate does not record a mismatch that is not there."
+                    )
+            try:
                 if core_version is not None:
                     _check_core_compatibility(
                         regional_manifest, core_version, None, regional_warnings
@@ -1230,6 +1319,8 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             regional_warnings = [
                 f"regional release: {warning}" for warning in regional_warnings
             ]
+            if mismatch_warning is not None:
+                regional_warnings.append(mismatch_warning)
             primary_artifact_names = set(manifest.artifacts)
             manifest, recorded_release_kind = merge_regional_release_manifest(
                 country,
@@ -1323,6 +1414,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                 regional_manifest_uri=regional_manifest_uri,
                 regional_uri_parts=regional_uri_parts,
                 regional_release_kind=recorded_release_kind,
+                regional_certification=regional_certification,
             ),
             manifest_sha256,
             warnings,
@@ -1368,6 +1460,7 @@ def certify_data_release(
     drop_regional_release: bool = False,
     core_version: Optional[str] = None,
     qualified_pair_id: Optional[str] = None,
+    regional_model_mismatch_reason: Optional[str] = None,
 ) -> CertificationResult:
     """Certify a data release into the bundle manifest.
 
@@ -1383,6 +1476,12 @@ def certify_data_release(
     given, by its own build or claims: a qualified pair names the primary
     release only. While the bundle routes regions, a run without
     ``regional_manifest_uri`` is refused unless ``drop_regional_release``.
+
+    ``regional_model_mismatch_reason`` (UK only) records a reviewer's
+    acceptance of a regional release that does not cover the pinned model,
+    instead of refusing it. The core must still be covered. The bundle then
+    carries ``regional_certification`` naming both model versions and the
+    reason; area receipts are uncertified either way.
     """
     certified_country = _certified_country(country)
     if drop_regional_release and regional_manifest_uri is not None:
@@ -1429,6 +1528,7 @@ def certify_data_release(
         bundle_core_version=(
             (bundle.get("packages") or {}).get("policyengine-core") or {}
         ).get("version"),
+        regional_model_mismatch_reason=regional_model_mismatch_reason,
     )
     previous_release = (bundle.get("data_releases") or {}).get(country) or {}
     bundle.setdefault("data_releases", {})[country] = data_release

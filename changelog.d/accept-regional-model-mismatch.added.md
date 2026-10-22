@@ -1,0 +1,1 @@
+`certify-data --accept-regional-model-mismatch REASON` (UK only) keeps a local-area release routed when it was built on another policyengine-uk version, and records the reviewed mismatch as `regional_certification` in the bundle instead of refusing; area receipts are uncertified.

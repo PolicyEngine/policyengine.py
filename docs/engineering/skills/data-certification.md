@@ -79,6 +79,31 @@ Microcosm national release with one of:
   claim first. Its `frs_2024_25` is not carried, so keep it loadable with a
   `dataset_overlays.uk` entry.
 
+- **An older local-area release, on an accepted mismatch.** When the national
+  cut moves to a new policyengine-uk before a local-area cut on that version
+  exists, a reviewer can keep the current local-area release routed instead of
+  dropping area regions:
+
+  ```bash
+  python scripts/bundle.py certify-data --country uk --data-producer populace \
+    --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
+    --regional-manifest-uri "<the routed local-area release_manifest.json URI>" \
+    --accept-regional-model-mismatch "<who accepted it and why>" \
+    --model-version "<policyengine-uk-version>"
+  ```
+
+  Certification then records `regional_certification` in the bundle:
+  `compatibility_basis: accepted_model_mismatch`, both model versions, the
+  reason and `area_receipts: uncertified`. Area receipts are uncertified in any
+  case, because the certificate covers the national dataset only (#685).
+  The cost is real and goes in the pull request. The local-area file was built
+  and calibrated under the older model. policyengine-core ignores, with a
+  warning, the columns the newer model no longer defines, and inputs the newer
+  model added take their defaults in area runs. The flag is UK only. It refuses
+  an empty reason, a regional release that already covers the version (so no
+  certificate records a mismatch that is not there) and a run without a
+  regional release. The core must still be covered.
+
 Either way, certification checks that the regional release serves the pinned
 model by its own build or compatibility claims (a `--qualified-pair-id` names
 the primary release only), checks its core claims as for the primary release

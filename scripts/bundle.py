@@ -48,6 +48,10 @@ def _certify_data(args: argparse.Namespace) -> int:
         argv.extend(["--regional-release-kind", args.regional_release_kind])
     if args.drop_regional_release:
         argv.append("--drop-regional-release")
+    if args.accept_regional_model_mismatch:
+        argv.extend(
+            ["--accept-regional-model-mismatch", args.accept_regional_model_mismatch]
+        )
     if args.no_generate:
         argv.append("--no-generate")
     if args.no_changelog:
@@ -224,6 +228,15 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "Remove the bundle's current regional routing on re-certification. "
             "Cannot be combined with --regional-manifest-uri."
+        ),
+    )
+    certify.add_argument(
+        "--accept-regional-model-mismatch",
+        metavar="REASON",
+        help=(
+            "UK only: route regions to a regional release on another model "
+            "version, recording this reviewed reason; forwarded to "
+            "scripts/certify_data_release.py."
         ),
     )
     certify.add_argument(

@@ -202,6 +202,21 @@ class CertifiedDataArtifact(BaseModel):
 RegionalReleaseKind = Literal["local_area", "area_coded_national"]
 
 
+class RegionalCertification(BaseModel):
+    """A reviewer's acceptance of a regional release on another model version.
+
+    Written only by ``certify-data --accept-regional-model-mismatch``: the
+    regional release neither was built with nor claims the certified model,
+    and area runs on it are uncertified.
+    """
+
+    compatibility_basis: Literal["accepted_model_mismatch"]
+    certified_for_model_version: str
+    built_with_model_version: Optional[str] = None
+    accepted_reason: str
+    area_receipts: Literal["uncertified"] = "uncertified"
+
+
 class CountryReleaseManifest(BaseModel):
     schema_version: int = 1
     bundle_id: Optional[str] = None
@@ -218,6 +233,9 @@ class CountryReleaseManifest(BaseModel):
     ``local_area`` for a non-default local-area release, and
     ``area_coded_national`` for another release's national dataset that
     carries area codes (and its area weight matrices)."""
+    regional_certification: Optional[RegionalCertification] = None
+    """Present only when the regional release was routed on an accepted
+    model mismatch rather than its own build or claims."""
     certified_data_artifact: Optional[CertifiedDataArtifact] = None
     certification: Optional[DataCertification] = None
     source_sha256: Optional[str] = Field(default=None, exclude=True)

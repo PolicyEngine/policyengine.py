@@ -115,6 +115,15 @@ def main(argv=None) -> int:
             "qualification of this pair (requires --core-version)."
         ),
     )
+    parser.add_argument(
+        "--accept-regional-model-mismatch",
+        metavar="REASON",
+        help=(
+            "UK only: route regions to a regional release that does not cover "
+            "the pinned model, recording this reviewed reason in the bundle "
+            "instead of refusing. The core must still be covered."
+        ),
+    )
     parser.add_argument("--no-generate", action="store_true")
     parser.add_argument("--no-changelog", action="store_true")
     parser.add_argument(
@@ -149,6 +158,7 @@ def main(argv=None) -> int:
         drop_regional_release=args.drop_regional_release,
         core_version=args.core_version,
         qualified_pair_id=args.qualified_pair_id,
+        regional_model_mismatch_reason=args.accept_regional_model_mismatch,
     )
     print(result.summary())
 
