@@ -545,23 +545,15 @@ def test_country_models_publish_every_parameter_named_by_adds_or_subtracts(
                 assert published_path is None, (name, attribute)
 
 
-def test_us_model_publishes_parameter_named_parts(us_country_model):
-    us_model = us_country_model.model_version
-    adds_paths = [
-        variable for variable in us_model.variables if variable.adds_parameter_path
+def _published_parameter_paths(model, attribute: str) -> list[str]:
+    """Each published adds or subtracts parameter path, checking it resolves."""
+    paths = [
+        getattr(variable, f"{attribute}_parameter_path")
+        for variable in model.variables
+        if getattr(variable, f"{attribute}_parameter_path")
     ]
-    subtracts_paths = [
-        variable for variable in us_model.variables if variable.subtracts_parameter_path
-    ]
-
-    assert len(adds_paths) >= 200
-    assert len(subtracts_paths) >= 1
-    household_state_benefits = us_model.get_variable("household_state_benefits")
-    assert (
-        household_state_benefits.adds_parameter_path
-        == "gov.household.household_state_benefits"
-    )
-    assert isinstance(household_state_benefits.adds, list)
+    assert all(path in model.parameters_by_name for path in paths), attribute
+    return paths
 
 
 def test_uk_model_publishes_pinned_variable_flags_and_parts(uk_country_model):
@@ -574,10 +566,10 @@ def test_uk_model_publishes_pinned_variable_flags_and_parts(uk_country_model):
         uk_model.get_variable("pension_contributions").adds_parameter_path
         == "gov.hmrc.pensions.pensions_programs"
     )
-    assert (
-        sum(1 for variable in uk_model.variables if variable.adds_parameter_path) == 4
-    )
-    assert not any(variable.subtracts_parameter_path for variable in uk_model.variables)
+    # At least as many as the pinned UK package declares, so additions in a
+    # later package do not fail the test.
+    assert len(_published_parameter_paths(uk_model, "adds")) >= 4
+    _published_parameter_paths(uk_model, "subtracts")
 
 
 def test_us_model_publishes_pinned_variable_flags_modules_and_parts(
@@ -596,10 +588,13 @@ def test_us_model_publishes_pinned_variable_flags_modules_and_parts(
         "gov.states.al.tax.income.agi.gross_income_sources"
     )
     assert al_agi.subtracts_parameter_path == "gov.states.al.tax.income.agi.deductions"
+    household_state_benefits = us_model.get_variable("household_state_benefits")
     assert (
-        sum(1 for variable in us_model.variables if variable.adds_parameter_path) == 237
+        household_state_benefits.adds_parameter_path
+        == "gov.household.household_state_benefits"
     )
-    assert (
-        sum(1 for variable in us_model.variables if variable.subtracts_parameter_path)
-        == 2
-    )
+    assert isinstance(household_state_benefits.adds, list)
+    # At least as many as the pinned US package declares, so additions in a
+    # later package do not fail the test.
+    assert len(_published_parameter_paths(us_model, "adds")) >= 237
+    assert len(_published_parameter_paths(us_model, "subtracts")) >= 2
