@@ -112,6 +112,37 @@ def test_populate_parameters_publishes_bracket_schedules_as_labelled_nodes():
     )
 
 
+def test_populate_parameters_leaves_out_bracket_schedules_without_brackets():
+    parameters = CoreParameterNode(
+        "",
+        data={
+            "gov": {
+                "tax": {
+                    "empty_rates": {
+                        "description": "A schedule whose brackets are not set yet",
+                        "metadata": {"label": "Empty rates", "type": "marginal_rate"},
+                        "brackets": [],
+                    },
+                    "rates": {
+                        "metadata": {"label": "Income tax rates"},
+                        "brackets": [_bracket(0.1, 0)],
+                    },
+                }
+            }
+        },
+    )
+    assert isinstance(parameters.gov.tax.empty_rates, CoreParameterScale)
+    model = _model_version()
+
+    MicrosimulationModelVersion._populate_parameters(
+        model, SimpleNamespace(parameters=parameters, variables={})
+    )
+
+    assert "gov.tax.empty_rates" not in model.parameter_nodes_by_name
+    assert all(node.name != "gov.tax.empty_rates" for node in model.parameter_nodes)
+    assert "gov.tax.rates" in model.parameter_nodes_by_name
+
+
 @pytest.mark.parametrize(
     ("model", "country_system_module"),
     [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
