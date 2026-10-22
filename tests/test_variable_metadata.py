@@ -536,3 +536,43 @@ def test_us_model_publishes_parameter_named_parts():
         == "gov.household.household_state_benefits"
     )
     assert isinstance(household_state_benefits.adds, list)
+
+
+def test_uk_model_publishes_pinned_variable_flags_and_parts():
+    assert uk_latest.get_variable("age").is_input_variable is True
+    assert uk_latest.get_variable("employment_income_before_lsr").is_input_variable
+    assert uk_latest.get_variable("income_tax").is_input_variable is False
+    assert uk_latest.get_variable("employment_income").hidden_input is False
+    assert (
+        uk_latest.get_variable("pension_contributions").adds_parameter_path
+        == "gov.hmrc.pensions.pensions_programs"
+    )
+    assert (
+        sum(1 for variable in uk_latest.variables if variable.adds_parameter_path) == 4
+    )
+    assert not any(
+        variable.subtracts_parameter_path for variable in uk_latest.variables
+    )
+
+
+def test_us_model_publishes_pinned_variable_flags_modules_and_parts():
+    age = us_latest.get_variable("age")
+    income_tax = us_latest.get_variable("income_tax")
+    assert (age.is_input_variable, income_tax.is_input_variable) == (True, False)
+    assert age.module_name == "household.demographic.age.age"
+    assert income_tax.module_name == "gov.irs.tax.federal_income.income_tax"
+    assert us_latest.get_variable("medicaid_rating_area").hidden_input is True
+    assert us_latest.get_variable("employment_income").hidden_input is False
+    al_agi = us_latest.get_variable("al_agi")
+    assert al_agi.adds_parameter_path == (
+        "gov.states.al.tax.income.agi.gross_income_sources"
+    )
+    assert al_agi.subtracts_parameter_path == "gov.states.al.tax.income.agi.deductions"
+    assert (
+        sum(1 for variable in us_latest.variables if variable.adds_parameter_path)
+        == 237
+    )
+    assert (
+        sum(1 for variable in us_latest.variables if variable.subtracts_parameter_path)
+        == 2
+    )

@@ -166,5 +166,23 @@ def test_country_models_publish_every_bracket_schedule(model, country_system_mod
 def test_uk_income_tax_schedule_is_a_labelled_node():
     schedule = uk_latest.get_parameter_node("gov.hmrc.income_tax.rates.uk")
 
-    assert schedule.label
+    assert schedule.label == "Income Tax main rates"
     assert "gov.hmrc.income_tax.rates.uk[0]" in uk_latest.parameter_nodes_by_name
+
+
+@pytest.mark.parametrize(
+    ("model", "schedule_name", "stored_label"),
+    [
+        (uk_latest, "gov.hmrc.income_tax.rates.uk", "Income Tax main rates"),
+        (uk_latest, "gov.hmrc.income_tax.rates.dividends", None),
+        (us_latest, "gov.irs.income.bracket.rates", "Individual income tax rates"),
+        (us_latest, "gov.contrib.ubi_center.basic_income.amount.person.by_age", None),
+    ],
+    ids=["uk-labelled", "uk-unlabelled", "us-labelled", "us-unlabelled"],
+)
+def test_country_schedules_publish_their_stored_label_or_none(
+    model, schedule_name, stored_label
+):
+    # A schedule without a stored label publishes None; consumers generate
+    # one from its name.
+    assert model.get_parameter_node(schedule_name).label == stored_label

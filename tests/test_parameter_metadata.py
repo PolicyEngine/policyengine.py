@@ -110,3 +110,31 @@ def test_country_models_publish_each_parameters_flags(country):
         ), core_parameter.name
     assert any(not parameter.economy for parameter in model.parameters)
     assert any(not parameter.household for parameter in model.parameters)
+
+
+# (economy, household) as the country packages' parameter files declare them,
+# directly or through propagate_metadata_to_children.
+PINNED_PARAMETER_FLAGS = {
+    "uk": {
+        "gov.dwp.ESA.eligibility.min_age": (False, True),
+        "gov.hmrc.minimum_wage.apprentice": (False, False),
+        "gov.hmrc.income_tax.rates.uk[0].rate": (True, True),
+    },
+    "us": {
+        "gov.bls.cpi.cpi_u": (False, True),
+        "gov.aca.slcsp.max_adult_age": (False, False),
+        "gov.irs.income.bracket.rates.1": (True, True),
+    },
+}
+
+
+def test_country_models_publish_pinned_parameter_flags(country):
+    published_flags = {
+        name: (
+            country.model.get_parameter(name).economy,
+            country.model.get_parameter(name).household,
+        )
+        for name in PINNED_PARAMETER_FLAGS[country.id]
+    }
+
+    assert published_flags == PINNED_PARAMETER_FLAGS[country.id]

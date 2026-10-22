@@ -123,3 +123,30 @@ def test_country_models_publish_their_entities_and_basic_inputs(country):
     assert all(name in model.variables_by_name for name in model.basic_inputs)
     entity_keys = {entity.key for entity in model.entities}
     assert {variable.entity for variable in model.variables} <= entity_keys
+
+
+# Read from the country packages pinned in pyproject.toml, independently of
+# how the model version derives them.
+PINNED_ENTITIES = {
+    "uk": [
+        ("person", "people", True),
+        ("benunit", "benunits", False),
+        ("household", "households", False),
+    ],
+    "us": [
+        ("household", "households", False),
+        ("spm_unit", "spm_units", False),
+        ("family", "families", False),
+        ("tax_unit", "tax_units", False),
+        ("marital_unit", "marital_units", False),
+        ("person", "people", True),
+    ],
+}
+
+
+def test_country_models_publish_their_pinned_entities(country):
+    assert [
+        (entity.key, entity.plural, entity.is_person)
+        for entity in country.model.entities
+    ] == PINNED_ENTITIES[country.id]
+    assert {"employment_income", "age"} <= set(country.model.basic_inputs)
