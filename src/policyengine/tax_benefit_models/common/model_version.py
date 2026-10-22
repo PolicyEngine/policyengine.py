@@ -287,6 +287,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
     def _populate_parameters(self, system) -> None:
         from policyengine_core.parameters import Parameter as CoreParameter
         from policyengine_core.parameters import ParameterNode as CoreParameterNode
+        from policyengine_core.parameters import ParameterScale as CoreParameterScale
 
         scale_lookup = build_scale_lookup(system)
 
@@ -307,6 +308,19 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     _core_param=param_node,
                 )
                 self.add_parameter(parameter)
+            elif isinstance(param_node, CoreParameterScale):
+                # A bracket schedule is not a core ParameterNode, but it groups
+                # its brackets (``name[0]``, ``name[1]``, ...) as a node does.
+                if not param_node.brackets:
+                    continue
+                schedule = ParameterNode(
+                    id=self.id + "-" + param_node.name,
+                    name=param_node.name,
+                    label=param_node.metadata.get("label"),
+                    description=param_node.description,
+                    tax_benefit_model_version=self,
+                )
+                self.add_parameter_node(schedule)
             elif isinstance(param_node, CoreParameterNode):
                 if not param_node.children:
                     continue
