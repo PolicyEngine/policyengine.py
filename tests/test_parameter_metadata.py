@@ -1,45 +1,16 @@
 """Tests for the economy and household flags each parameter publishes."""
 
-import importlib
 import json
 from types import SimpleNamespace
 
-import pytest
 from policyengine_core.parameters import Parameter as CoreParameter
 from policyengine_core.parameters import ParameterNode as CoreParameterNode
 
-from policyengine.core import Parameter, TaxBenefitModel, TaxBenefitModelVersion
+from policyengine.core import Parameter
 from policyengine.tax_benefit_models.common.model_version import (
     MicrosimulationModelVersion,
 )
-
-
-def _model_version() -> TaxBenefitModelVersion:
-    return TaxBenefitModelVersion(
-        id="test@1",
-        model=TaxBenefitModel(id="test", name="Test"),
-        version="1",
-    )
-
-
-@pytest.fixture(params=["uk", "us"])
-def country(request) -> SimpleNamespace:
-    """The country's published model version and its core tax-benefit system.
-
-    Skips when the country package is not installed. The model is imported
-    here, after that check, because the country module defines it only when
-    the package is installed.
-    """
-    country_id = request.param
-    country_system = pytest.importorskip(f"policyengine_{country_id}.system").system
-    country_module = importlib.import_module(
-        f"policyengine.tax_benefit_models.{country_id}"
-    )
-    return SimpleNamespace(
-        id=country_id,
-        model=getattr(country_module, f"{country_id}_latest"),
-        system=country_system,
-    )
+from tests.fixtures.country_model_fixtures import make_empty_model_version
 
 
 def _flagged_parameter(metadata: dict) -> dict:
@@ -51,7 +22,7 @@ def _flagged_parameter(metadata: dict) -> dict:
 
 
 def test_populate_parameters_records_economy_and_household_flags():
-    model = _model_version()
+    model = make_empty_model_version()
     parameters = CoreParameterNode(
         "",
         data={
@@ -85,7 +56,7 @@ def test_populate_parameters_records_economy_and_household_flags():
 
 
 def test_parameter_flags_default_to_offered():
-    model = _model_version()
+    model = make_empty_model_version()
     manually_built = Parameter(
         name="gov.example.amount", tax_benefit_model_version=model
     )
@@ -94,9 +65,9 @@ def test_parameter_flags_default_to_offered():
     assert manually_built.household is True
 
 
-def test_country_models_publish_each_parameters_flags(country):
-    model = country.model
-    country_system = country.system
+def test_country_models_publish_each_parameters_flags(country_model):
+    model = country_model.model_version
+    country_system = country_model.core_system
 
     for core_parameter in country_system.parameters.get_descendants():
         if not isinstance(core_parameter, CoreParameter):
@@ -128,13 +99,14 @@ PINNED_PARAMETER_FLAGS = {
 }
 
 
-def test_country_models_publish_pinned_parameter_flags(country):
+def test_country_models_publish_pinned_parameter_flags(country_model):
+    model = country_model.model_version
     published_flags = {
         name: (
-            country.model.get_parameter(name).economy,
-            country.model.get_parameter(name).household,
+            model.get_parameter(name).economy,
+            model.get_parameter(name).household,
         )
-        for name in PINNED_PARAMETER_FLAGS[country.id]
+        for name in PINNED_PARAMETER_FLAGS[country_model.country_id]
     }
 
-    assert published_flags == PINNED_PARAMETER_FLAGS[country.id]
+    assert published_flags == PINNED_PARAMETER_FLAGS[country_model.country_id]

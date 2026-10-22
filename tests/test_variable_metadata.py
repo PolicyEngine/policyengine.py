@@ -1,20 +1,21 @@
 """Tests for public variable metadata copied from country models."""
 
 import datetime
-import importlib
 import json
 from enum import Enum
 from types import SimpleNamespace
 
-import pytest
 from policyengine_core.parameters import ParameterNode as CoreParameterNode
 
-from policyengine.core import EnumValue, TaxBenefitModel, TaxBenefitModelVersion
+from policyengine.core import EnumValue
 from policyengine.tax_benefit_models.common.model_version import (
     MicrosimulationModelVersion,
 )
 from policyengine.tax_benefit_models.uk import uk_latest
 from policyengine.tax_benefit_models.us import us_latest
+from tests.fixtures.country_model_fixtures import (
+    make_empty_model_version as _model_version,
+)
 
 SELECTED_METADATA_FIELDS = {
     "definition_period",
@@ -27,14 +28,6 @@ SELECTED_METADATA_FIELDS = {
     "is_period_size_independent",
     "metadata",
 }
-
-
-def _model_version() -> TaxBenefitModelVersion:
-    return TaxBenefitModelVersion(
-        id="test@1",
-        model=TaxBenefitModel(id="test", name="Test"),
-        version="1",
-    )
 
 
 def test_populate_variables_exposes_selected_country_metadata():
@@ -235,15 +228,11 @@ def test_input_flags_and_module_default_to_unrecorded_for_older_country_models()
     assert variable.module_name is None
 
 
-@pytest.mark.parametrize(
-    ("model", "country_system_module"),
-    [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
-    ids=["uk", "us"],
-)
 def test_country_models_publish_input_flags_and_modules_as_core_declares_them(
-    model, country_system_module
+    country_model,
 ):
-    country_system = importlib.import_module(country_system_module).system
+    model = country_model.model_version
+    country_system = country_model.core_system
 
     for name, core_variable in country_system.variables.items():
         variable = model.get_variable(name)
@@ -254,9 +243,11 @@ def test_country_models_publish_input_flags_and_modules_as_core_declares_them(
     assert any(variable.is_input_variable is False for variable in model.variables)
 
 
-def test_us_model_publishes_hidden_inputs():
+def test_us_model_publishes_hidden_inputs(us_country_model):
     hidden_inputs = [
-        variable.name for variable in us_latest.variables if variable.hidden_input
+        variable.name
+        for variable in us_country_model.model_version.variables
+        if variable.hidden_input
     ]
 
     assert hidden_inputs, "The US package hides some inputs from input lists"
@@ -406,13 +397,9 @@ def test_variables_without_possible_values_have_no_enum_values():
     assert model.get_variable("minimal_input").enum_values is None
 
 
-@pytest.mark.parametrize(
-    ("model", "country_system_module"),
-    [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
-    ids=["uk", "us"],
-)
-def test_country_models_publish_every_enum_label(model, country_system_module):
-    country_system = importlib.import_module(country_system_module).system
+def test_country_models_publish_every_enum_label(country_model):
+    model = country_model.model_version
+    country_system = country_model.core_system
 
     enum_variable_count = 0
     for name, core_variable in country_system.variables.items():
@@ -434,15 +421,17 @@ def test_country_models_publish_every_enum_label(model, country_system_module):
     assert enum_variable_count > 0
 
 
-def test_us_filing_status_publishes_its_labels():
-    filing_status = us_latest.get_variable("filing_status")
+def test_us_filing_status_publishes_its_labels(us_country_model):
+    filing_status = us_country_model.model_version.get_variable("filing_status")
 
     assert EnumValue(value="SINGLE", label="Single") in filing_status.enum_values
     assert EnumValue(value="JOINT", label="Joint") in filing_status.enum_values
 
 
-def test_us_integer_valued_enum_publishes_integer_labels():
-    eligibility = us_latest.get_variable("il_personal_exemption_eligibility_status")
+def test_us_integer_valued_enum_publishes_integer_labels(us_country_model):
+    eligibility = us_country_model.model_version.get_variable(
+        "il_personal_exemption_eligibility_status"
+    )
 
     assert [
         (enum_value.value, enum_value.label) for enum_value in eligibility.enum_values
@@ -538,15 +527,11 @@ def test_parameter_path_is_published_when_the_parameter_cannot_be_resolved():
     assert variable.adds_parameter_path == "gov.example.missing"
 
 
-@pytest.mark.parametrize(
-    ("model", "country_system_module"),
-    [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
-    ids=["uk", "us"],
-)
 def test_country_models_publish_every_parameter_named_by_adds_or_subtracts(
-    model, country_system_module
+    country_model,
 ):
-    country_system = importlib.import_module(country_system_module).system
+    model = country_model.model_version
+    country_system = country_model.core_system
 
     for name, core_variable in country_system.variables.items():
         variable = model.get_variable(name)
@@ -560,19 +545,18 @@ def test_country_models_publish_every_parameter_named_by_adds_or_subtracts(
                 assert published_path is None, (name, attribute)
 
 
-def test_us_model_publishes_parameter_named_parts():
+def test_us_model_publishes_parameter_named_parts(us_country_model):
+    us_model = us_country_model.model_version
     adds_paths = [
-        variable for variable in us_latest.variables if variable.adds_parameter_path
+        variable for variable in us_model.variables if variable.adds_parameter_path
     ]
     subtracts_paths = [
-        variable
-        for variable in us_latest.variables
-        if variable.subtracts_parameter_path
+        variable for variable in us_model.variables if variable.subtracts_parameter_path
     ]
 
     assert len(adds_paths) >= 200
     assert len(subtracts_paths) >= 1
-    household_state_benefits = us_latest.get_variable("household_state_benefits")
+    household_state_benefits = us_model.get_variable("household_state_benefits")
     assert (
         household_state_benefits.adds_parameter_path
         == "gov.household.household_state_benefits"
@@ -580,41 +564,42 @@ def test_us_model_publishes_parameter_named_parts():
     assert isinstance(household_state_benefits.adds, list)
 
 
-def test_uk_model_publishes_pinned_variable_flags_and_parts():
-    assert uk_latest.get_variable("age").is_input_variable is True
-    assert uk_latest.get_variable("employment_income_before_lsr").is_input_variable
-    assert uk_latest.get_variable("income_tax").is_input_variable is False
-    assert uk_latest.get_variable("employment_income").hidden_input is False
+def test_uk_model_publishes_pinned_variable_flags_and_parts(uk_country_model):
+    uk_model = uk_country_model.model_version
+    assert uk_model.get_variable("age").is_input_variable is True
+    assert uk_model.get_variable("employment_income_before_lsr").is_input_variable
+    assert uk_model.get_variable("income_tax").is_input_variable is False
+    assert uk_model.get_variable("employment_income").hidden_input is False
     assert (
-        uk_latest.get_variable("pension_contributions").adds_parameter_path
+        uk_model.get_variable("pension_contributions").adds_parameter_path
         == "gov.hmrc.pensions.pensions_programs"
     )
     assert (
-        sum(1 for variable in uk_latest.variables if variable.adds_parameter_path) == 4
+        sum(1 for variable in uk_model.variables if variable.adds_parameter_path) == 4
     )
-    assert not any(
-        variable.subtracts_parameter_path for variable in uk_latest.variables
-    )
+    assert not any(variable.subtracts_parameter_path for variable in uk_model.variables)
 
 
-def test_us_model_publishes_pinned_variable_flags_modules_and_parts():
-    age = us_latest.get_variable("age")
-    income_tax = us_latest.get_variable("income_tax")
+def test_us_model_publishes_pinned_variable_flags_modules_and_parts(
+    us_country_model,
+):
+    us_model = us_country_model.model_version
+    age = us_model.get_variable("age")
+    income_tax = us_model.get_variable("income_tax")
     assert (age.is_input_variable, income_tax.is_input_variable) == (True, False)
     assert age.module_name == "household.demographic.age.age"
     assert income_tax.module_name == "gov.irs.tax.federal_income.income_tax"
-    assert us_latest.get_variable("medicaid_rating_area").hidden_input is True
-    assert us_latest.get_variable("employment_income").hidden_input is False
-    al_agi = us_latest.get_variable("al_agi")
+    assert us_model.get_variable("medicaid_rating_area").hidden_input is True
+    assert us_model.get_variable("employment_income").hidden_input is False
+    al_agi = us_model.get_variable("al_agi")
     assert al_agi.adds_parameter_path == (
         "gov.states.al.tax.income.agi.gross_income_sources"
     )
     assert al_agi.subtracts_parameter_path == "gov.states.al.tax.income.agi.deductions"
     assert (
-        sum(1 for variable in us_latest.variables if variable.adds_parameter_path)
-        == 237
+        sum(1 for variable in us_model.variables if variable.adds_parameter_path) == 237
     )
     assert (
-        sum(1 for variable in us_latest.variables if variable.subtracts_parameter_path)
+        sum(1 for variable in us_model.variables if variable.subtracts_parameter_path)
         == 2
     )

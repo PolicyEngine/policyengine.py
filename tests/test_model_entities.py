@@ -1,43 +1,13 @@
 """Tests for the entities and basic inputs a model version publishes."""
 
-import importlib
 import json
 from types import SimpleNamespace
 
-import pytest
-
-from policyengine.core import Entity, TaxBenefitModel, TaxBenefitModelVersion
+from policyengine.core import Entity
 from policyengine.tax_benefit_models.common.model_version import (
     MicrosimulationModelVersion,
 )
-
-
-def _model_version() -> TaxBenefitModelVersion:
-    return TaxBenefitModelVersion(
-        id="test@1",
-        model=TaxBenefitModel(id="test", name="Test"),
-        version="1",
-    )
-
-
-@pytest.fixture(params=["uk", "us"])
-def country(request) -> SimpleNamespace:
-    """The country's published model version and its core tax-benefit system.
-
-    Skips when the country package is not installed. The model is imported
-    here, after that check, because the country module defines it only when
-    the package is installed.
-    """
-    country_id = request.param
-    country_system = pytest.importorskip(f"policyengine_{country_id}.system").system
-    country_module = importlib.import_module(
-        f"policyengine.tax_benefit_models.{country_id}"
-    )
-    return SimpleNamespace(
-        id=country_id,
-        model=getattr(country_module, f"{country_id}_latest"),
-        system=country_system,
-    )
+from tests.fixtures.country_model_fixtures import make_empty_model_version
 
 
 def _core_entity(key: str, plural: str, is_person: bool) -> SimpleNamespace:
@@ -51,7 +21,7 @@ def _core_entity(key: str, plural: str, is_person: bool) -> SimpleNamespace:
 
 
 def test_populate_entities_records_key_plural_and_person_flag_in_order():
-    model = _model_version()
+    model = make_empty_model_version()
     system = SimpleNamespace(
         entities=[
             _core_entity("person", "people", True),
@@ -72,7 +42,7 @@ def test_populate_entities_records_key_plural_and_person_flag_in_order():
 
 
 def test_populate_entities_accepts_a_country_model_without_basic_inputs():
-    model = _model_version()
+    model = make_empty_model_version()
     system = SimpleNamespace(
         entities=[_core_entity("person", "people", True)],
         basic_inputs=None,
@@ -84,14 +54,14 @@ def test_populate_entities_accepts_a_country_model_without_basic_inputs():
 
 
 def test_model_version_defaults_to_no_entities_or_basic_inputs():
-    model = _model_version()
+    model = make_empty_model_version()
 
     assert model.entities == []
     assert model.basic_inputs == []
 
 
 def test_entities_and_basic_inputs_round_trip_through_json():
-    model = _model_version()
+    model = make_empty_model_version()
     model.entities = [Entity(key="person", plural="people", is_person=True)]
     model.basic_inputs = ["age"]
 
@@ -107,9 +77,9 @@ def test_entities_and_basic_inputs_round_trip_through_json():
     assert restored_entities == model.entities
 
 
-def test_country_models_publish_their_entities_and_basic_inputs(country):
-    model = country.model
-    country_system = country.system
+def test_country_models_publish_their_entities_and_basic_inputs(country_model):
+    model = country_model.model_version
+    country_system = country_model.core_system
 
     assert [
         (entity.key, entity.plural, entity.is_person) for entity in model.entities
@@ -144,9 +114,9 @@ PINNED_ENTITIES = {
 }
 
 
-def test_country_models_publish_their_pinned_entities(country):
+def test_country_models_publish_their_pinned_entities(country_model):
     assert [
         (entity.key, entity.plural, entity.is_person)
-        for entity in country.model.entities
-    ] == PINNED_ENTITIES[country.id]
-    assert {"employment_income", "age"} <= set(country.model.basic_inputs)
+        for entity in country_model.model_version.entities
+    ] == PINNED_ENTITIES[country_model.country_id]
+    assert {"employment_income", "age"} <= set(country_model.model_version.basic_inputs)

@@ -1,26 +1,19 @@
 """Tests for public parameter-node projection from country models."""
 
-import importlib
 from types import SimpleNamespace
 
 import pytest
 from policyengine_core.parameters import ParameterNode as CoreParameterNode
 from policyengine_core.parameters import ParameterScale as CoreParameterScale
 
-from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     MicrosimulationModelVersion,
 )
 from policyengine.tax_benefit_models.uk import uk_latest
 from policyengine.tax_benefit_models.us import us_latest
-
-
-def _model_version() -> TaxBenefitModelVersion:
-    return TaxBenefitModelVersion(
-        id="test@1",
-        model=TaxBenefitModel(id="test", name="Test"),
-        version="1",
-    )
+from tests.fixtures.country_model_fixtures import (
+    make_empty_model_version as _model_version,
+)
 
 
 def test_populate_parameters_excludes_empty_organizational_nodes():
@@ -143,13 +136,9 @@ def test_populate_parameters_leaves_out_bracket_schedules_without_brackets():
     assert "gov.tax.rates" in model.parameter_nodes_by_name
 
 
-@pytest.mark.parametrize(
-    ("model", "country_system_module"),
-    [(uk_latest, "policyengine_uk.system"), (us_latest, "policyengine_us.system")],
-    ids=["uk", "us"],
-)
-def test_country_models_publish_every_bracket_schedule(model, country_system_module):
-    country_system = importlib.import_module(country_system_module).system
+def test_country_models_publish_every_bracket_schedule(country_model):
+    model = country_model.model_version
+    country_system = country_model.core_system
 
     schedules = [
         core_parameter
@@ -163,26 +152,32 @@ def test_country_models_publish_every_bracket_schedule(model, country_system_mod
         assert schedule.description == core_schedule.description
 
 
-def test_uk_income_tax_schedule_is_a_labelled_node():
-    schedule = uk_latest.get_parameter_node("gov.hmrc.income_tax.rates.uk")
+def test_uk_income_tax_schedule_is_a_node_above_its_brackets(uk_country_model):
+    model = uk_country_model.model_version
 
-    assert schedule.label == "Income Tax main rates"
-    assert "gov.hmrc.income_tax.rates.uk[0]" in uk_latest.parameter_nodes_by_name
+    assert "gov.hmrc.income_tax.rates.uk" in model.parameter_nodes_by_name
+    assert "gov.hmrc.income_tax.rates.uk[0]" in model.parameter_nodes_by_name
 
 
-@pytest.mark.parametrize(
-    ("model", "schedule_name", "stored_label"),
-    [
-        (uk_latest, "gov.hmrc.income_tax.rates.uk", "Income Tax main rates"),
-        (uk_latest, "gov.hmrc.income_tax.rates.dividends", None),
-        (us_latest, "gov.irs.income.bracket.rates", "Individual income tax rates"),
-        (us_latest, "gov.contrib.ubi_center.basic_income.amount.person.by_age", None),
-    ],
-    ids=["uk-labelled", "uk-unlabelled", "us-labelled", "us-unlabelled"],
-)
-def test_country_schedules_publish_their_stored_label_or_none(
-    model, schedule_name, stored_label
-):
-    # A schedule without a stored label publishes None; consumers generate
-    # one from its name.
-    assert model.get_parameter_node(schedule_name).label == stored_label
+# Stored labels in the country packages pinned in pyproject.toml. A schedule
+# without one publishes None; consumers generate a label from its name.
+PINNED_SCHEDULE_LABELS = {
+    "uk": {
+        "gov.hmrc.income_tax.rates.uk": "Income Tax main rates",
+        "gov.hmrc.income_tax.rates.dividends": None,
+    },
+    "us": {
+        "gov.irs.income.bracket.rates": "Individual income tax rates",
+        "gov.contrib.ubi_center.basic_income.amount.person.by_age": None,
+    },
+}
+
+
+def test_country_schedules_publish_their_stored_label_or_none(country_model):
+    model = country_model.model_version
+    pinned_labels = PINNED_SCHEDULE_LABELS[country_model.country_id]
+
+    assert {
+        schedule_name: model.get_parameter_node(schedule_name).label
+        for schedule_name in pinned_labels
+    } == pinned_labels
