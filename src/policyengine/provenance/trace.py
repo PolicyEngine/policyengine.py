@@ -557,11 +557,14 @@ def _build_bundle_performance(
         if certification.certified_by is not None:
             performance["pe:certifiedBy"] = certification.certified_by
     if country_manifest.regional_certification is not None:
-        performance["pe:regionalCertification"] = (
-            country_manifest.regional_certification.model_dump(
+        # An explicit JSON literal preserves evidence member names through
+        # JSON-LD expansion; they are JSON contract keys, not RDF predicates.
+        performance["pe:regionalCertification"] = {
+            "@type": "@json",
+            "@value": country_manifest.regional_certification.model_dump(
                 mode="json", exclude_none=True
-            )
-        )
+            ),
+        }
     performance.update(dict(emission_context or _emission_context()))
     return performance
 

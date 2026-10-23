@@ -477,6 +477,9 @@ def _bundle_with_regional_acceptance(dataset_file):
                 "area_file": {
                     **artifact,
                     "columns": ["employment_income", "household_weight"],
+                    "columns_by_period": {
+                        "2025": ["employment_income", "household_weight"]
+                    },
                 }
             },
             "model_variables": sorted(
@@ -562,8 +565,9 @@ def test_trace_exposes_regional_acceptance_separately_from_national(dataset_file
     )
     performance = tro["@graph"][0]["trov:hasPerformance"]
 
-    assert performance[
-        "pe:regionalCertification"
+    assert performance["pe:regionalCertification"]["@type"] == "@json"
+    assert performance["pe:regionalCertification"][
+        "@value"
     ] == RegionalCertification.model_validate(
         record["regional_certification"]
     ).model_dump(mode="json", exclude_none=True)
@@ -571,7 +575,41 @@ def test_trace_exposes_regional_acceptance_separately_from_national(dataset_file
         performance["pe:compatibilityBasis"]
         == record["certification"]["compatibility_basis"]
     )
-    assert performance["pe:regionalCertification"]["area_receipts"] == "uncertified"
+    assert (
+        performance["pe:regionalCertification"]["@value"]["area_receipts"]
+        == "uncertified"
+    )
+
+
+def test_trace_regional_acceptance_survives_jsonld_expansion(dataset_file):
+    rdflib = pytest.importorskip("rdflib")
+    from policyengine.provenance.manifest import CountryReleaseManifest
+    from policyengine.provenance.trace import (
+        POLICYENGINE_TRACE_NAMESPACE,
+        build_trace_tro_from_release_bundle,
+    )
+
+    record = _bundle_with_regional_acceptance(dataset_file)["data_releases"]["uk"]
+    manifest = CountryReleaseManifest.model_validate(record)
+    tro = build_trace_tro_from_release_bundle(
+        manifest,
+        None,
+        fetch_pypi=lambda name, version: {},
+    )
+
+    graph = rdflib.Graph().parse(data=json.dumps(tro), format="json-ld")
+    values = list(
+        graph.objects(
+            None, rdflib.URIRef(POLICYENGINE_TRACE_NAMESPACE + "regionalCertification")
+        )
+    )
+
+    assert len(values) == 1
+    assert isinstance(values[0], rdflib.Literal)
+    assert values[0].datatype == rdflib.RDF.JSON
+    assert json.loads(str(values[0])) == manifest.regional_certification.model_dump(
+        mode="json", exclude_none=True
+    )
 
 
 def test_removing_regional_acceptance_removes_downstream_record(dataset_file):

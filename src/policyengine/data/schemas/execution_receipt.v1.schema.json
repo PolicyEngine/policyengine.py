@@ -552,22 +552,15 @@
           "type": "array"
         },
         "columns_by_period": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "type": "object"
+          "additionalProperties": {
+            "items": {
+              "type": "string"
             },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Columns By Period"
+            "type": "array"
+          },
+          "minProperties": 1,
+          "title": "Columns By Period",
+          "type": "object"
         },
         "path": {
           "minLength": 1,
@@ -611,7 +604,8 @@
         "path",
         "revision",
         "sha256",
-        "columns"
+        "columns",
+        "columns_by_period"
       ],
       "title": "RegionalInputArtifactEvidence",
       "type": "object"
