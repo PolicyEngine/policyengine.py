@@ -1,0 +1,562 @@
+From 2ffb565161a7f584206ced90750c5f39189ea403 Mon Sep 17 00:00:00 2001
+From: Budget rehearsal <budget-rehearsal@localhost>
+Date: Fri, 23 Oct 2026 07:32:37 -0400
+Subject: [PATCH] Make UK certification stackable, timed and fail closed on
+ operational errors
+
+---
+ .../test_certify_uk_cut_in_policyengine_py.py | 179 +++++++++++++++++
+ tools/certify_uk_cut_in_policyengine_py.py    | 188 ++++++++++++++----
+ 2 files changed, 329 insertions(+), 38 deletions(-)
+ create mode 100644 tests/test_certify_uk_cut_in_policyengine_py.py
+
+diff --git a/tests/test_certify_uk_cut_in_policyengine_py.py b/tests/test_certify_uk_cut_in_policyengine_py.py
+new file mode 100644
+index 0000000..d383721
+--- /dev/null
++++ b/tests/test_certify_uk_cut_in_policyengine_py.py
+@@ -0,0 +1,179 @@
++"""Offline regression tests for the certification orchestration safeguards."""
++
++import argparse
++import importlib.util
++import json
++import os
++from pathlib import Path
++import subprocess
++import sys
++import tempfile
++import types
++import unittest
++from unittest.mock import Mock, patch
++
++
++SPEC = importlib.util.spec_from_file_location(
++    "certify_runner",
++    Path(__file__).resolve().parents[1] / "tools/certify_uk_cut_in_policyengine_py.py",
++)
++runner = importlib.util.module_from_spec(SPEC)
++sys.modules[SPEC.name] = runner
++SPEC.loader.exec_module(runner)
++TAG = "microcosm-uk-2024-25-national-20261023T075039Z-a133f37a"
++
++
++class RunnerTests(unittest.TestCase):
++    def test_hugging_face_token_is_explicit_and_not_logged(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            manifest = Path(tmp) / "manifest.json"
++            manifest.write_text(json.dumps({"build": {
++                "cut_tag": TAG,
++                "built_with_model_package": {"version": "2.147.2"},
++                "built_with_core_package": {"version": "3.0"},
++            }}))
++            download = Mock(return_value=str(manifest))
++            with patch.dict(sys.modules, {"huggingface_hub": types.SimpleNamespace(
++                hf_hub_download=download
++            )}), patch.dict(os.environ, {"HUGGING_FACE_TOKEN": "private-value"}):
++                self.assertEqual(runner.read_cut(TAG, runner.NATIONAL_RELEASE).model,
++                                 "2.147.2")
++            self.assertEqual(download.call_args.kwargs["token"], "private-value")
++
++    def test_shell_records_failed_commands(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            shell = runner.Shell(root, root / "run.log")
++            with patch.object(runner, "resource_guard", return_value={"load1": 1}), \
++                 patch.object(runner.subprocess, "run", return_value=
++                              subprocess.CompletedProcess(["false"], 2, "bad")):
++                with self.assertRaisesRegex(runner.CertifyError, "exited 2"):
++                    shell(["false"], step="failure")
++            record = json.loads(shell.timings.read_text())
++            self.assertEqual(record["step"], "failure")
++            self.assertEqual(record["returncode"], 2)
++            self.assertGreaterEqual(record["elapsed_seconds"], 0)
++
++    def test_guard_prevents_process_and_records_refusal(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            shell = runner.Shell(Path(tmp), Path(tmp) / "run.log")
++            with patch.object(runner, "resource_guard", side_effect=
++                              runner.CertifyError("resource guard")), \
++                 patch.object(runner.subprocess, "run") as spawn:
++                with self.assertRaises(runner.CertifyError):
++                    shell(["heavy"])
++                spawn.assert_not_called()
++            self.assertIn("resource guard", json.loads(shell.timings.read_text())["error"])
++
++    def test_resource_thresholds_are_decimal(self):
++        with patch.object(runner.os, "getloadavg", return_value=(110, 1, 1)), \
++             patch.object(runner.shutil, "disk_usage", return_value=
++                          types.SimpleNamespace(free=55_000_000_000)):
++            runner.resource_guard(Path.cwd())
++        for load, free in ((110.1, 55_000_000_000), (1, 54_999_999_999)):
++            with patch.object(runner.os, "getloadavg", return_value=(load, 1, 1)), \
++                 patch.object(runner.shutil, "disk_usage", return_value=
++                              types.SimpleNamespace(free=free)):
++                with self.assertRaises(runner.CertifyError):
++                    runner.resource_guard(Path.cwd())
++
++    def test_model_surface_is_guarded(self):
++        with patch.object(runner, "resource_guard", side_effect=
++                          runner.CertifyError("resource guard")), \
++             patch.object(runner.subprocess, "run") as spawn:
++            with self.assertRaises(runner.CertifyError):
++                runner.model_surface("2.147.2")
++            spawn.assert_not_called()
++
++    def test_workers_are_limited(self):
++        for workers in (0, 5):
++            with self.assertRaises(SystemExit):
++                runner.parse(["--national-tag", TAG, "--drop-regional-release",
++                              "--test-workers", str(workers)])
++        self.assertEqual(runner.parse([
++            "--national-tag", TAG, "--drop-regional-release",
++            "--test-workers", "4"
++        ]).test_workers, 4)
++
++    def test_local_base_is_resolved_once_and_used_for_old_bundle(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            args = runner.parse([
++                "--national-tag", TAG, "--drop-regional-release", "--dry-run",
++                "--base-ref", "stack-local", "--pepy-repo", tmp,
++                "--skip-writer-check", "offline regression",
++            ])
++            old = {"data_releases": {"uk": {}}}
++            with patch.object(runner.subprocess, "check_output", side_effect=
++                              ["microcosm\n", "immutable-sha\n", json.dumps(old)]) as read, \
++                 patch.object(runner.subprocess, "run") as spawn, \
++                 patch.object(runner, "read_cut", return_value=
++                              runner.CutVersions(TAG, "2.147.2", "3.0", ())):
++                self.assertEqual(runner.certify(args), 0)
++            spawn.assert_not_called()
++            self.assertEqual(read.call_args_list[1].args[0],
++                             ["git", "rev-parse", "--verify", "stack-local^{commit}"])
++            self.assertEqual(read.call_args_list[2].args[0], ["git", "show",
++                "immutable-sha:src/policyengine/data/bundle/manifest.json"])
++
++    def run_mock_pipeline(self, *, pytest_code=0, uc_code=0, receipt=None):
++        tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(tmp.cleanup)
++        root = Path(tmp.name)
++        worktree = root / "certification"
++        bundle = {"data_releases": {"uk": {"default_dataset": "candidate"}}}
++        args = runner.parse([
++            "--national-tag", TAG, "--drop-regional-release", "--base-ref", "local",
++            "--pepy-repo", str(root), "--worktree", str(worktree),
++            "--skip-writer-check", "offline regression",
++        ])
++        calls = []
++        def command(argv, **kwargs):
++            calls.append(argv)
++            if argv[:3] == ["git", "worktree", "add"]:
++                manifest = worktree / "src/policyengine/data/bundle/manifest.json"
++                manifest.parent.mkdir(parents=True)
++                manifest.write_text(json.dumps(bundle))
++            return subprocess.CompletedProcess(argv, 0, "", "")
++        def shell(argv, **kwargs):
++            calls.append(argv)
++            if "constant-rewrite" == kwargs.get("step"):
++                return subprocess.CompletedProcess(argv, 0, "[]", "")
++            if "UC-floor" == kwargs.get("step"):
++                if receipt is not None:
++                    (root / "certification.uc_floor.json").write_text(json.dumps(receipt))
++                return subprocess.CompletedProcess(argv, uc_code, "traceback", "")
++            if "tests" == kwargs.get("step"):
++                return subprocess.CompletedProcess(argv, pytest_code,
++                                                    "ERROR: unrecognized arguments: -n", "")
++            return subprocess.CompletedProcess(argv, 0, "", "")
++        with patch.object(runner.subprocess, "check_output", side_effect=
++                          ["microcosm", "immutable-sha", json.dumps(bundle)]), \
++             patch.object(runner.subprocess, "run", side_effect=command), \
++             patch.object(runner, "read_cut", return_value=
++                          runner.CutVersions(TAG, "2.147.2", "3.0", ())), \
++             patch.object(runner.Shell, "__call__", side_effect=shell):
++            result = runner.certify(args)
++        return result, calls, root
++
++    def test_pytest_configuration_error_is_failure_without_failed_lines(self):
++        result, calls, root = self.run_mock_pipeline(pytest_code=4)
++        self.assertEqual(result, 1)
++        self.assertIn("pytest exited 4", (root / "certification.pr-body.md").read_text())
++        worktree_call = next(c for c in calls if c[:3] == ["git", "worktree", "add"])
++        self.assertEqual(worktree_call[-1], "immutable-sha")
++
++    def test_uc_operational_failure_refuses(self):
++        with self.assertRaisesRegex(runner.CertifyError, "failed operationally"):
++            self.run_mock_pipeline(uc_code=1)
++
++    def test_measured_uc_floor_failure_keeps_human_acceptance(self):
++        result, _, root = self.run_mock_pipeline(uc_code=1, receipt={
++            "check": "uk_uc_floor", "passed": False,
++            "measures": [{"name": "spend", "passed": False}],
++        })
++        self.assertEqual(result, 0)
++        self.assertIn("UC floor acceptance", (root / "certification.pr-body.md").read_text())
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tools/certify_uk_cut_in_policyengine_py.py b/tools/certify_uk_cut_in_policyengine_py.py
+index e185862..62689f9 100644
+--- a/tools/certify_uk_cut_in_policyengine_py.py
++++ b/tools/certify_uk_cut_in_policyengine_py.py
+@@ -47,8 +47,10 @@ import json
+ import os
+ import re
+ import shlex
++import shutil
+ import subprocess
+ import sys
++import time
+ from dataclasses import dataclass
+ from datetime import UTC, datetime
+ from pathlib import Path
+@@ -103,6 +105,7 @@ def read_cut(tag: str, release: str) -> CutVersions:
+         f"releases/{release}/release_manifest.json",
+         repo_type="dataset",
+         revision=tag,
++        token=os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN"),
+     )
+     manifest = json.loads(Path(path).read_text())
+     build = manifest.get("build") or {}
+@@ -157,36 +160,76 @@ def regional_tag(flags: list[str]) -> str | None:
+     )
+ 
+ 
++def resource_guard(root: Path) -> dict[str, float | int]:
++    """Refuse work before spawning a process on an overloaded or full host."""
++
++    load1 = os.getloadavg()[0]
++    while not root.exists():
++        root = root.parent
++    free = shutil.disk_usage(root).free
++    if load1 > 110 or free < 55_000_000_000:
++        raise CertifyError(
++            f"resource guard: load1={load1:.2f} (maximum 110), "
++            f"free={free / 1e9:.2f} GB (minimum 55 decimal GB)."
++        )
++    return {"load1": load1, "free_bytes": free}
++
++
++def record_timing(path: Path, record: dict[str, Any]) -> None:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    with path.open("a") as handle:
++        handle.write(json.dumps(record) + "\n")
++
++
+ class Shell:
+     """Runs commands in the policyengine.py worktree and records each one."""
+ 
+-    def __init__(self, cwd: Path, log: Path, *, dry_run: bool = False) -> None:
++    def __init__(
++        self, cwd: Path, log: Path, *, dry_run: bool = False,
++        timings: Path | None = None,
++    ) -> None:
+         self.cwd = cwd
+         self.log = log
+         self.dry_run = dry_run
++        self.timings = timings or log.with_suffix(".timings.jsonl")
+         self.commands: list[str] = []
+ 
+     def __call__(
+-        self, argv: list[str], *, env: dict[str, str] | None = None, check=True
++        self, argv: list[str], *, env: dict[str, str] | None = None, check=True,
++        step: str | None = None,
+     ) -> subprocess.CompletedProcess:
+         line = shlex.join(argv)
+         self.commands.append(line)
+         print(f"$ {line}", flush=True)
+         if self.dry_run:
+             return subprocess.CompletedProcess(argv, 0, "", "")
+-        with self.log.open("a") as handle:
+-            handle.write(f"\n# {datetime.now(UTC):%Y-%m-%dT%H:%M:%SZ} $ {line}\n")
+-            handle.flush()
+-            result = subprocess.run(
+-                argv,
+-                cwd=self.cwd,
+-                env={**os.environ, **(env or {})},
+-                stdout=subprocess.PIPE,
+-                stderr=subprocess.STDOUT,
+-                text=True,
+-                check=False,
+-            )
+-            handle.write(result.stdout)
++        started = time.monotonic()
++        timing = {
++            "step": step or line, "command": line,
++            "started_at": datetime.now(UTC).isoformat(), "returncode": None,
++        }
++        try:
++            timing.update(resource_guard(self.cwd))
++            with self.log.open("a") as handle:
++                handle.write(f"\n# {datetime.now(UTC):%Y-%m-%dT%H:%M:%SZ} $ {line}\n")
++                handle.flush()
++                result = subprocess.run(
++                    argv,
++                    cwd=self.cwd,
++                    env={**os.environ, **(env or {})},
++                    stdout=subprocess.PIPE,
++                    stderr=subprocess.STDOUT,
++                    text=True,
++                    check=False,
++                )
++                handle.write(result.stdout)
++            timing["returncode"] = result.returncode
++        except Exception as error:
++            timing["error"] = str(error)
++            raise
++        finally:
++            timing["elapsed_seconds"] = time.monotonic() - started
++            record_timing(self.timings, timing)
+         if check and result.returncode != 0:
+             tail = "\n".join(result.stdout.splitlines()[-25:])
+             raise CertifyError(f"{line} exited {result.returncode}:\n{tail}")
+@@ -252,10 +295,19 @@ _SURFACE_SCRIPT = (
+ )
+ 
+ 
+-def model_surface(version: str) -> dict[str, list[str]]:
++def model_surface(
++    version: str, *, timings: Path | None = None, resource_root: Path | None = None
++) -> dict[str, list[str]]:
+     """Every variable and every input variable of one policyengine-uk version."""
+ 
+-    result = subprocess.run(
++    started = time.monotonic()
++    timing = {
++        "step": f"model_surface:{version}",
++        "started_at": datetime.now(UTC).isoformat(), "returncode": None,
++    }
++    try:
++        timing.update(resource_guard(resource_root or Path.cwd()))
++        result = subprocess.run(
+         [
+             "uv", "run", "--no-project", "--python", PEPY_PYTHON,
+             "--with", f"policyengine-uk=={version}", "python", "-c", _SURFACE_SCRIPT,
+@@ -264,7 +316,16 @@ def model_surface(version: str) -> dict[str, list[str]]:
+         text=True,
+         check=True,
+         env={k: v for k, v in os.environ.items() if k not in {"UV_FROZEN", "VIRTUAL_ENV"}},
+-    )  # fmt: skip
++        )  # fmt: skip
++        timing["returncode"] = result.returncode
++    except Exception as error:
++        timing["returncode"] = getattr(error, "returncode", None)
++        timing["error"] = str(error)
++        raise
++    finally:
++        timing["elapsed_seconds"] = time.monotonic() - started
++        if timings:
++            record_timing(timings, timing)
+     return json.loads(result.stdout.strip().splitlines()[-1])
+ 
+ 
+@@ -385,6 +446,10 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
+         default=Path("~/PolicyEngine/policyengine.py").expanduser(),
+     )
+     parser.add_argument("--worktree", type=Path, help="default: beside the repo")
++    parser.add_argument(
++        "--base-ref", default="origin/main",
++        help="base branch/ref for both the old bundle and the new worktree",
++    )
+     parser.add_argument("--skip-writer-check", metavar="WHY")
+     parser.add_argument("--skip-tests", action="store_true")
+     parser.add_argument("--test-workers", type=int, default=4)
+@@ -394,6 +459,8 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
+     args = parser.parse_args(argv)
+     if args.open_pr and not args.push:
+         parser.error("--open-pr needs --push.")
++    if not 1 <= args.test_workers <= 4:
++        parser.error("--test-workers must be between 1 and 4.")
+     check_tag(args.national_tag, "national")
+     return args
+ 
+@@ -412,7 +479,23 @@ def certify(args: argparse.Namespace) -> int:
+         ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True
+     ).strip()
+     repo = args.pepy_repo
+-    subprocess.run(["git", "fetch", "--quiet", "origin", "main"], cwd=repo, check=True)
++    suffix = args.national_tag.rsplit("-", 1)[-1]
++    branch = f"certify-uk-{suffix}"
++    worktree = args.worktree or repo.parent / "_worktrees" / f"pepy-{branch}"
++    log = worktree.parent / f"{worktree.name}.certify.log"
++    timings = log.with_suffix(".timings.jsonl")
++    base_ref = args.base_ref
++    if base_ref.startswith("origin/"):
++        remote_branch = base_ref.removeprefix("origin/")
++        subprocess.run(
++            ["git", "fetch", "--quiet", "origin",
++             f"+refs/heads/{remote_branch}:refs/remotes/origin/{remote_branch}"],
++            cwd=repo, check=True,
++        )
++    base_commit = subprocess.check_output(
++        ["git", "rev-parse", "--verify", f"{base_ref}^{{commit}}"],
++        cwd=repo, text=True,
++    ).strip()
+ 
+     if args.skip_writer_check:
+         print(f"writer check skipped: {args.skip_writer_check}")
+@@ -435,7 +518,7 @@ def certify(args: argparse.Namespace) -> int:
+         )
+     old_bundle = json.loads(
+         subprocess.check_output(
+-            ["git", "show", "origin/main:src/policyengine/data/bundle/manifest.json"],
++            ["git", "show", f"{base_commit}:src/policyengine/data/bundle/manifest.json"],
+             cwd=repo,
+             text=True,
+         )
+@@ -459,7 +542,8 @@ def certify(args: argparse.Namespace) -> int:
+                     "where policyengine.py supports one."
+                 )
+             surface = input_surface_change(
+-                model_surface(dense.model), model_surface(model)
++                model_surface(dense.model, timings=timings, resource_root=repo),
++                model_surface(model, timings=timings, resource_root=repo),
+             )
+             if surface["dropped"] and not args.allow_dropped_columns:
+                 raise CertifyError(
+@@ -478,10 +562,9 @@ def certify(args: argparse.Namespace) -> int:
+         ["--regional-manifest-uri", record.get("regional_source_manifest_uri") or ""]
+     )
+ 
+-    suffix = args.national_tag.rsplit("-", 1)[-1]
+-    branch = f"certify-uk-{suffix}"
+-    worktree = args.worktree or repo.parent / "_worktrees" / f"pepy-{branch}"
+     plan = {
++        "base_ref": base_ref,
++        "base_commit": base_commit,
+         "national_tag": args.national_tag,
+         "model": model,
+         "core": core,
+@@ -503,17 +586,16 @@ def certify(args: argparse.Namespace) -> int:
+             "-b",
+             branch,
+             str(worktree),
+-            "origin/main",
++            base_commit,
+         ],
+         cwd=repo,
+         check=True,
+     )
+-    log = worktree.parent / f"{worktree.name}.certify.log"
+-    run = Shell(worktree, log)
++    run = Shell(worktree, log, timings=timings)
+     python = str(worktree / ".venv/bin/python")
+     sync = ["uv", "sync", "--frozen", "--extra", "uk", "--extra", "dev",
+             "--python", PEPY_PYTHON]  # fmt: skip
+-    run(sync)
++    run(sync, step="initial-sync")
+     certify_result = run(
+         [
+             python, "scripts/bundle.py", "certify-data", "--country", "uk",
+@@ -521,7 +603,7 @@ def certify(args: argparse.Namespace) -> int:
+             "--manifest-uri", manifest_uri(args.national_tag, NATIONAL_RELEASE),
+             *flags,
+             "--model-version", model, "--core-version", core,
+-        ]
++        ], step="certify-data",
+     )  # fmt: skip
+     warnings = [
+         line.strip()
+@@ -530,11 +612,11 @@ def certify(args: argparse.Namespace) -> int:
+     ]
+     run(
+         ["uv", "lock", "--no-config", "--no-sources", "--default-index",
+-         "https://pypi.org/simple", "--python", python]
++         "https://pypi.org/simple", "--python", python], step="lock",
+     )  # fmt: skip
+-    run(sync)
+-    run([python, "scripts/release_lock.py"])
+-    run([python, "scripts/bundle.py", "generate", "--include-tros"])
++    run(sync, step="certified-sync")
++    run([python, "scripts/release_lock.py"], step="release-lock")
++    run([python, "scripts/bundle.py", "generate", "--include-tros"], step="TROs")
+     new_bundle = json.loads(
+         (worktree / "src/policyengine/data/bundle/manifest.json").read_text()
+     )
+@@ -548,38 +630,69 @@ def certify(args: argparse.Namespace) -> int:
+             "old, new = json.loads(sys.argv[1]), json.loads(sys.argv[2]); "
+             "print(json.dumps(w(Path('.'), r(old, new))))",
+             json.dumps(record), json.dumps(new_record),
+-        ]
++        ], step="constant-rewrite",
+     )  # fmt: skip
+     constants = json.loads(rewrite.stdout.strip().splitlines()[-1] or "[]")
+     constants += rewrite_regional_constants(worktree, old_regional, new_regional)
+     run(
+         [python, "-m", "pytest", "tests/test_household_calculator_snapshot.py", "-q"],
+         env={"PE_UPDATE_SNAPSHOTS": "1"},
++        step="snapshots",
+     )
+     run(
+         [python, "scripts/bundle.py", "check", "--published-spm", "--include-tros",
+-         "--strict-tros"]
++         "--strict-tros"], step="strict-check",
+     )  # fmt: skip
+     uc_path = worktree.parent / f"{worktree.name}.uc_floor.json"
++    # An earlier attempt's receipt must not mask an operational failure.
++    uc_path.unlink(missing_ok=True)
+     uc = run(
+         [python, "scripts/check_uk_uc_floor.py", "--dataset",
+          new_record["default_dataset"], "--year", "2025", "--output", str(uc_path)],
+         check=False,
++        step="UC-floor",
+     )  # fmt: skip
++    if uc.returncode and not uc_path.exists():
++        raise CertifyError(
++            f"UC floor failed operationally (exit {uc.returncode}); no measured "
++            f"receipt was produced. See {log}."
++        )
++    if uc_path.exists():
++        receipt = json.loads(uc_path.read_text())
++        if uc.returncode and not (
++            uc.returncode == 1 and receipt.get("check") == "uk_uc_floor"
++            and receipt.get("passed") is False and receipt.get("measures")
++        ):
++            raise CertifyError(
++                f"UC floor failed operationally (exit {uc.returncode}); "
++                "the receipt is not a measured floor violation."
++            )
+     uc_summary = (
+         uc_path.read_text().strip()[:600]
+         if uc_path.exists()
+         else f"exit {uc.returncode}"
+     )
+-    tests_summary, tests_failed = "skipped", []
++    tests_summary, tests_failed, tests_returncode = "skipped", [], 0
+     if not args.skip_tests:
++        xdist = run(
++            [python, "-c", "import xdist"], check=False, step="check-pytest-xdist"
++        )
++        if xdist.returncode:
++            run(
++                ["uv", "pip", "install", "--python", python, "pytest-xdist"],
++                step="install-pytest-xdist",
++            )
+         tests = run(
+             [python, "-m", "pytest", "-n", str(args.test_workers), "-q",
+              "-p", "no:cacheprovider"],
+             check=False,
++            step="tests",
+         )  # fmt: skip
++        tests_returncode = tests.returncode
+         tests_failed = re.findall(r"^FAILED (\S+)", tests.stdout, flags=re.MULTILINE)
+         tests_summary = (tests.stdout.strip().splitlines() or ["?"])[-1]
++        if tests_returncode and not tests_failed:
++            tests_failed = [f"pytest exited {tests_returncode}: {tests_summary}"]
+     context = {
+         "national_tag": args.national_tag,
+         "model": model,
+@@ -614,9 +727,8 @@ def certify(args: argparse.Namespace) -> int:
+              "--head", branch, "--title",
+              f"Certify Microcosm UK cut {args.national_tag}", "--body-file", str(body)]
+         )  # fmt: skip
+-    return 0 if not tests_failed else 1
++    return 0 if not tests_returncode else 1
+ 
+ 
+ if __name__ == "__main__":
+     raise SystemExit(main())
+-
+-- 
+2.55.0
+

@@ -1,0 +1,108 @@
+diff --git a/tools/certify_uk_cut_in_policyengine_py.py b/tools/certify_uk_cut_in_policyengine_py.py
+index 7dcb9e36d..c6c51f34f 100644
+--- a/tools/certify_uk_cut_in_policyengine_py.py
++++ b/tools/certify_uk_cut_in_policyengine_py.py
+@@ -170,6 +170,20 @@ def regional_tag(flags: list[str]) -> str | None:
+ def resource_guard(root: Path) -> dict[str, float | int]:
+     """Refuse work before spawning a process on an overloaded or full host."""
+ 
++    reservation = os.environ.get("PE_CERTIFY_RESERVATION_SCRIPT")
++    if reservation:
++        result = subprocess.run(
++            [sys.executable, reservation, "allowed", "uk-hub"],
++            capture_output=True,
++            text=True,
++            timeout=30,
++            check=False,
++        )
++        if result.returncode:
++            raise CertifyError(
++                "UK hub reservation refused this step: "
++                + (result.stdout + result.stderr).strip()[-1000:]
++            )
+     load1 = os.getloadavg()[0]
+     while not root.exists():
+         root = root.parent
+@@ -362,6 +376,7 @@ def timed_step(name: str, path: Path):
+     record = {"step": name, "started_at": datetime.now(UTC).isoformat()}
+     print(f"[start] {name}", flush=True)
+     try:
++        record.update(resource_guard(path.parent))
+         yield record
+         record.setdefault("returncode", 0)
+     except Exception as error:
+@@ -464,7 +479,9 @@ class Shell:
+         return result
+ 
+ 
+-def writer_check(national_tag: str, pepy_repo: Path) -> list[str]:
++def writer_check(
++    national_tag: str, pepy_repo: Path, branch: str | None = None
++) -> list[str]:
+     """Open pull requests or branches already certifying this cut."""
+ 
+     found = []
+@@ -485,7 +502,7 @@ def writer_check(national_tag: str, pepy_repo: Path) -> list[str]:
+         )
+     for pr in json.loads(result.stdout or "[]"):
+         found.append(f"#{pr['number']} {pr['title']} ({pr['headRefName']})")
+-    branch = f"certify-uk-{national_tag.rsplit('-', 1)[-1]}"
++    branch = branch or f"certify-uk-{national_tag.rsplit('-', 1)[-1]}"
+     remote = subprocess.run(
+         ["git", "ls-remote", "--heads", "origin", branch],
+         cwd=pepy_repo,
+@@ -733,6 +750,7 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
+         default=Path("~/PolicyEngine/policyengine.py").expanduser(),
+     )
+     parser.add_argument("--worktree", type=Path, help="default: beside the repo")
++    parser.add_argument("--branch", help="default: certify-uk-<cut hash>")
+     parser.add_argument(
+         "--resume-worktree",
+         action="store_true",
+@@ -773,15 +791,33 @@ def main(argv: list[str] | None = None) -> int:
+ 
+ 
+ def certify(args: argparse.Namespace) -> int:
+-    microcosm_commit = subprocess.check_output(
+-        ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True
+-    ).strip()
+     repo = args.pepy_repo
++    resource_guard(repo)
++    microcosm_commit = os.environ.get("PE_CERTIFY_TOOL_SOURCE_COMMIT")
++    if microcosm_commit:
++        if not re.fullmatch(r"[0-9a-f]{40}", microcosm_commit):
++            raise CertifyError("PE_CERTIFY_TOOL_SOURCE_COMMIT must be a full Git SHA.")
++    else:
++        microcosm_commit = subprocess.check_output(
++            ["git", "rev-parse", "HEAD"],
++            cwd=Path(__file__).resolve().parents[1],
++            text=True,
++        ).strip()
+     suffix = args.national_tag.rsplit("-", 1)[-1]
+-    branch = f"certify-uk-{suffix}"
++    branch = args.branch or f"certify-uk-{suffix}"
+     worktree = args.worktree or repo.parent / "_worktrees" / f"pepy-{branch}"
+     log = worktree.parent / f"{worktree.name}.certify.log"
+     timings = log.with_suffix(".timings.jsonl")
++    with timed_step("branch-preflight", timings):
++        result = subprocess.run(
++            ["git", "check-ref-format", "--branch", branch],
++            cwd=repo,
++            capture_output=True,
++            text=True,
++            check=False,
++        )
++        if result.returncode or branch.startswith("-"):
++            raise CertifyError(f"Invalid certification branch: {branch!r}.")
+     if not args.skip_tests and not args.dry_run:
+         with timed_step("test-temp-preflight", timings) as timing:
+             timing["temporary_directory"] = str(check_test_temp_directory())
+@@ -824,7 +860,7 @@ def certify(args: argparse.Namespace) -> int:
+         print(f"writer check skipped: {args.skip_writer_check}")
+     else:
+         with timed_step("writer-check", timings):
+-            others = writer_check(args.national_tag, repo)
++            others = writer_check(args.national_tag, repo, branch)
+         if others:
+             raise CertifyError(
+                 "this cut is already being certified: "

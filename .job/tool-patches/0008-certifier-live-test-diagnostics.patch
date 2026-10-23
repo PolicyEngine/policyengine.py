@@ -1,0 +1,28 @@
+From 364f69090f851f97435c756271d980ee721ccdb6 Mon Sep 17 00:00:00 2001
+From: Budget rehearsal <budget-rehearsal@localhost>
+Date: Fri, 23 Oct 2026 08:33:51 -0400
+Subject: [PATCH] Expose full-suite test identities and slowest durations in
+ streamed logs
+
+---
+ tools/certify_uk_cut_in_policyengine_py.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tools/certify_uk_cut_in_policyengine_py.py b/tools/certify_uk_cut_in_policyengine_py.py
+index 8a93949..72a5b85 100644
+--- a/tools/certify_uk_cut_in_policyengine_py.py
++++ b/tools/certify_uk_cut_in_policyengine_py.py
+@@ -829,8 +829,8 @@ def certify(args: argparse.Namespace) -> int:
+                 step="install-pytest-xdist",
+             )
+         tests = run(
+-            [python, "-m", "pytest", "-n", str(args.test_workers), "-q",
+-             "-p", "no:cacheprovider"],
++            [python, "-m", "pytest", "-n", str(args.test_workers), "-vv",
++             "--durations=20", "-p", "no:cacheprovider"],
+             check=False,
+             step="tests",
+         )  # fmt: skip
+-- 
+2.55.0
+

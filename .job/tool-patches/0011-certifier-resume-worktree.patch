@@ -1,0 +1,412 @@
+From 7273b5f105275a1d383cb251aef88a5ed95053e3 Mon Sep 17 00:00:00 2001
+From: Budget rehearsal <budget-rehearsal@localhost>
+Date: Fri, 23 Oct 2026 09:49:09 -0400
+Subject: [PATCH] Resume unfinished certification worktrees and stage only
+ generated artifacts
+
+---
+ ...st_certify_uk_cut_rehearsal_regressions.py | 129 +++++++++++-
+ tools/certify_uk_cut_in_policyengine_py.py    | 186 ++++++++++++++++--
+ 2 files changed, 296 insertions(+), 19 deletions(-)
+
+diff --git a/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_rehearsal_regressions.py b/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_rehearsal_regressions.py
+index 15188f9..2b0e01b 100644
+--- a/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_rehearsal_regressions.py
++++ b/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_rehearsal_regressions.py
+@@ -370,8 +370,114 @@ class RunnerTests(unittest.TestCase):
+                 ],
+             )
+ 
++    def test_certification_changes_preserve_auxiliary_untracked_files(self):
++        manifest = "src/policyengine/data/bundle/manifest.json"
++        changelog = f"changelog.d/certify-uk-{TAG}.changed.md"
++        with patch.object(
++            runner.subprocess,
++            "check_output",
++            side_effect=[
++                f"pyproject.toml\0{manifest}\0",
++                f"{changelog}\0data\0operator-notes.md\0"
++                "src/policyengine/data/bundle/operator-private.json\0"
++                "tests/fixtures/household_calculator_snapshots/operator-helper.json\0",
++            ],
++        ):
++            paths = runner.certification_changes(Path.cwd(), TAG)
++        self.assertEqual(paths, sorted(["pyproject.toml", manifest, changelog]))
++
++    def test_certification_changes_refuse_unrelated_tracked_edits(self):
++        with patch.object(
++            runner.subprocess,
++            "check_output",
++            return_value="src/policyengine/core/simulation.py\0",
++        ):
++            with self.assertRaisesRegex(runner.CertifyError, "unrelated tracked"):
++                runner.certification_changes(Path.cwd(), TAG)
++
++    def test_resume_validates_identity_and_preserves_unfinished_generated_files(self):
++        for problem in (
++            None,
++            "branch",
++            "registration",
++            "owner",
++            "head",
++            "merge",
++            "tracked",
++            "cut",
++        ):
++            with self.subTest(problem=problem), tempfile.TemporaryDirectory() as tmp:
++                root = Path(tmp)
++                repo, worktree = root / "repo", root / "worktree"
++                repo.mkdir()
++                worktree.mkdir()
++                branch, base = "certify-uk-a133f37a", "b" * 40
++                relative = "src/policyengine/data/bundle/manifest.json"
++                path = worktree / relative
++                path.parent.mkdir(parents=True)
++                path.write_text(
++                    json.dumps(
++                        {
++                            "data_releases": {
++                                "uk": {
++                                    "data_package": {
++                                        "release_manifest_revision": "another-cut"
++                                        if problem == "cut"
++                                        else TAG
++                                    }
++                                }
++                            }
++                        }
++                    )
++                )
++                original = path.read_bytes()
++
++                def output(argv, *, cwd, **kwargs):
++                    if argv[1:3] == ["worktree", "list"]:
++                        location = (
++                            root / "elsewhere"
++                            if problem == "registration"
++                            else worktree
++                        )
++                        registered_branch = "other" if problem == "branch" else branch
++                        return f"worktree {location}\0HEAD {base}\0branch refs/heads/{registered_branch}\0\0"
++                    if argv[1:] == ["rev-parse", "--git-common-dir"]:
++                        if problem == "owner" and cwd == worktree:
++                            return str(root / "other/.git")
++                        return str(repo / ".git")
++                    if argv[1:] == ["rev-parse", "HEAD"]:
++                        return "c" * 40 if problem == "head" else base
++                    if argv[1:3] == ["ls-files", "--unmerged"]:
++                        return "unmerged" if problem == "merge" else ""
++                    if argv[1:3] == ["diff", "--name-only"]:
++                        return (
++                            "README.md\0" if problem == "tracked" else relative + "\0"
++                        )
++                    if argv[1:3] == ["ls-files", "--others"]:
++                        return "data\0operator-notes.md\0"
++                    self.fail(f"unexpected validation command: {argv}")
++
++                with (
++                    patch.object(runner.subprocess, "check_output", side_effect=output),
++                    patch.object(runner.subprocess, "run") as mutation,
++                ):
++                    if problem:
++                        with self.assertRaises(runner.CertifyError):
++                            runner.validate_resume_worktree(
++                                repo, worktree, branch, base, TAG
++                            )
++                    else:
++                        self.assertEqual(
++                            runner.validate_resume_worktree(
++                                repo, worktree, branch, base, TAG
++                            ),
++                            [relative],
++                        )
++                    mutation.assert_not_called()
++                self.assertEqual(path.read_bytes(), original)
++
+     def run_mock_pipeline(
+-        self, *, pytest_code=0, uc_code=0, receipt=None, call_details=None
++        self, *, pytest_code=0, uc_code=0, receipt=None, call_details=None, resume=False
+     ):
+         if receipt is None and uc_code == 0:
+             receipt = {
+@@ -387,6 +493,10 @@ class RunnerTests(unittest.TestCase):
+         root = Path(tmp.name)
+         worktree = root / "certification"
+         bundle = {"data_releases": {"uk": {"default_dataset": "candidate"}}}
++        if resume:
++            path = worktree / "src/policyengine/data/bundle/manifest.json"
++            path.parent.mkdir(parents=True)
++            path.write_text(json.dumps(bundle))
+         args = runner.parse(
+             [
+                 "--national-tag",
+@@ -400,6 +510,7 @@ class RunnerTests(unittest.TestCase):
+                 str(worktree),
+                 "--skip-writer-check",
+                 "offline regression",
++                *(["--resume-worktree"] if resume else []),
+             ]
+         )
+         calls = []
+@@ -448,6 +559,12 @@ class RunnerTests(unittest.TestCase):
+                 "check_test_temp_directory",
+                 return_value=root / "isolated-test-temp",
+             ),
++            patch.object(runner, "validate_resume_worktree", return_value=[]),
++            patch.object(
++                runner,
++                "certification_changes",
++                return_value=["src/policyengine/data/bundle/manifest.json"],
++            ),
+         ):
+             result = runner.certify(args)
+         return result, calls, root
+@@ -461,6 +578,16 @@ class RunnerTests(unittest.TestCase):
+         worktree_call = next(c for c in calls if c[:3] == ["git", "worktree", "add"])
+         self.assertEqual(worktree_call[-1], "immutable-sha")
+ 
++    def test_resume_replays_without_creating_or_resetting_worktree(self):
++        result, calls, _ = self.run_mock_pipeline(resume=True)
++        self.assertEqual(result, 0)
++        self.assertFalse(any(call[:3] == ["git", "worktree", "add"] for call in calls))
++        self.assertFalse(any(call[:2] == ["git", "reset"] for call in calls))
++        self.assertIn(
++            ["git", "add", "--", "src/policyengine/data/bundle/manifest.json"], calls
++        )
++        self.assertNotIn(["git", "add", "-A"], calls)
++
+     def test_uc_operational_failure_refuses(self):
+         with self.assertRaisesRegex(runner.CertifyError, "failed operationally"):
+             self.run_mock_pipeline(uc_code=1)
+diff --git a/tools/certify_uk_cut_in_policyengine_py.py b/tools/certify_uk_cut_in_policyengine_py.py
+index f169c37..6270ab4 100644
+--- a/tools/certify_uk_cut_in_policyengine_py.py
++++ b/tools/certify_uk_cut_in_policyengine_py.py
+@@ -199,6 +199,135 @@ def check_test_temp_directory(directory: Path | None = None) -> Path:
+     return directory
+ 
+ 
++def certification_path(relative: str, national_tag: str) -> bool:
++    """Files generated by this handoff, excluding local data and operator files."""
++    snapshots = {
++        "uk_couple_two_kids",
++        "uk_model_surface",
++        "uk_single_adult_employment_income",
++        "uk_single_adult_no_income",
++        "uk_single_parent_one_child",
++        "us_married_two_kids_high_income",
++        "us_model_surface",
++        "us_single_adult_employment_income",
++        "us_single_adult_no_income",
++        "us_single_parent_one_child",
++    }
++    return relative in {
++        "pyproject.toml",
++        "uv.lock",
++        *CONSTANT_FILES,
++        f"changelog.d/certify-uk-{national_tag}.changed.md",
++        "src/policyengine/data/bundle/manifest.json",
++        "src/policyengine/data/bundle/uk.trace.tro.jsonld",
++        "src/policyengine/data/bundle/us.trace.tro.jsonld",
++        *(
++            f"tests/fixtures/household_calculator_snapshots/{name}.json"
++            for name in snapshots
++        ),
++    }
++
++
++def certification_changes(worktree: Path, national_tag: str) -> list[str]:
++    """Preserve operator files and refuse unrelated tracked/index changes."""
++    tracked = subprocess.check_output(
++        ["git", "diff", "--name-only", "-z", "HEAD"], cwd=worktree, text=True
++    ).split("\0")
++    unexpected = [
++        path for path in tracked if path and not certification_path(path, national_tag)
++    ]
++    if unexpected:
++        raise CertifyError(
++            "unrelated tracked changes are preserved; refusing to replay or commit: "
++            + ", ".join(unexpected)
++        )
++    untracked = subprocess.check_output(
++        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
++        cwd=worktree,
++        text=True,
++    ).split("\0")
++    changelog = f"changelog.d/certify-uk-{national_tag}.changed.md"
++    return sorted(
++        {path for path in tracked if path}
++        | {path for path in untracked if path == changelog}
++    )
++
++
++def validate_resume_worktree(
++    repo: Path, worktree: Path, branch: str, base_commit: str, national_tag: str
++) -> list[str]:
++    """Adopt only an unfinished, registered handoff at the exact resolved base."""
++    if not worktree.is_dir():
++        raise CertifyError(f"resume worktree {worktree} does not exist.")
++    records, record = [], {}
++    output = subprocess.check_output(
++        ["git", "worktree", "list", "--porcelain", "-z"], cwd=repo, text=True
++    )
++    for field in output.split("\0"):
++        if not field:
++            if record:
++                records.append(record)
++                record = {}
++        else:
++            key, _, value = field.partition(" ")
++            record[key] = value
++    if record:
++        records.append(record)
++    entry = next(
++        (
++            item
++            for item in records
++            if "worktree" in item
++            and Path(item["worktree"]).resolve() == worktree.resolve()
++        ),
++        None,
++    )
++    if entry is None or entry.get("branch") != f"refs/heads/{branch}":
++        raise CertifyError(
++            "resume worktree is not registered on the expected certification branch."
++        )
++    common_dirs = []
++    for directory in (repo, worktree):
++        common = Path(
++            subprocess.check_output(
++                ["git", "rev-parse", "--git-common-dir"],
++                cwd=directory,
++                text=True,
++            ).strip()
++        )
++        common_dirs.append((directory / common).resolve())
++    if common_dirs[0] != common_dirs[1]:
++        raise CertifyError("resume worktree belongs to another Git repository.")
++    head = subprocess.check_output(
++        ["git", "rev-parse", "HEAD"],
++        cwd=worktree,
++        text=True,
++    ).strip()
++    if head != base_commit or entry.get("HEAD") != base_commit:
++        raise CertifyError(
++            "resume requires HEAD at the exact resolved base commit; committed "
++            "descendants/history are preserved. Use a fresh worktree for another run."
++        )
++    if subprocess.check_output(
++        ["git", "ls-files", "--unmerged", "-z"],
++        cwd=worktree,
++        text=True,
++    ):
++        raise CertifyError(
++            "resume worktree has unresolved merges; no files were changed."
++        )
++    paths = certification_changes(worktree, national_tag)
++    manifest_path = "src/policyengine/data/bundle/manifest.json"
++    if manifest_path in paths:
++        record = json.loads((worktree / manifest_path).read_text())["data_releases"][
++            "uk"
++        ]
++        revision = (record.get("data_package") or {}).get("release_manifest_revision")
++        if revision != national_tag:
++            raise CertifyError("resume worktree's modified manifest names another cut.")
++    return paths
++
++
+ def record_timing(path: Path, record: dict[str, Any]) -> None:
+     path.parent.mkdir(parents=True, exist_ok=True)
+     with path.open("a") as handle:
+@@ -583,6 +712,11 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
+         default=Path("~/PolicyEngine/policyengine.py").expanduser(),
+     )
+     parser.add_argument("--worktree", type=Path, help="default: beside the repo")
++    parser.add_argument(
++        "--resume-worktree",
++        action="store_true",
++        help="replay stages in an unfinished registered worktree at the exact base",
++    )
+     parser.add_argument(
+         "--base-ref",
+         default="origin/main",
+@@ -653,6 +787,18 @@ def certify(args: argparse.Namespace) -> int:
+             text=True,
+         ).strip()
+ 
++    replay_paths = []
++    if args.resume_worktree:
++        with timed_step("resume-worktree-validation", timings):
++            replay_paths = validate_resume_worktree(
++                repo, worktree, branch, base_commit, args.national_tag
++            )
++    elif worktree.exists():
++        raise CertifyError(
++            f"{worktree} exists; use --resume-worktree for an unfinished handoff "
++            "or choose a fresh --worktree."
++        )
++
+     if args.skip_writer_check:
+         print(f"writer check skipped: {args.skip_writer_check}")
+     else:
+@@ -737,27 +883,28 @@ def certify(args: argparse.Namespace) -> int:
+         "regional": regional_summary,
+         "branch": branch,
+         "worktree": str(worktree),
++        "resume_worktree": args.resume_worktree,
++        "replayed_generated_paths": replay_paths,
+     }
+     print(json.dumps(plan, indent=2))
+     if args.dry_run:
+         return 0
+-    if worktree.exists():
+-        raise CertifyError(f"{worktree} exists; remove it or pass --worktree.")
+-    with timed_step("git-worktree", timings):
+-        subprocess.run(
+-            [
+-                "git",
+-                "worktree",
+-                "add",
+-                "--quiet",
+-                "-b",
+-                branch,
+-                str(worktree),
+-                base_commit,
+-            ],
+-            cwd=repo,
+-            check=True,
+-        )
++    if not args.resume_worktree:
++        with timed_step("git-worktree", timings):
++            subprocess.run(
++                [
++                    "git",
++                    "worktree",
++                    "add",
++                    "--quiet",
++                    "-b",
++                    branch,
++                    str(worktree),
++                    base_commit,
++                ],
++                cwd=repo,
++                check=True,
++            )
+     run = Shell(worktree, log, timings=timings)
+     python = str(worktree / ".venv/bin/python")
+     sync = ["uv", "sync", "--frozen", "--extra", "uk", "--extra", "dev",
+@@ -881,7 +1028,10 @@ def certify(args: argparse.Namespace) -> int:
+     }
+     body = worktree.parent / f"{worktree.name}.pr-body.md"
+     body.write_text(pr_body(context))
+-    run(["git", "add", "-A"])
++    with timed_step("generated-file-validation", timings):
++        staged_paths = certification_changes(worktree, args.national_tag)
++    if staged_paths:
++        run(["git", "add", "--", *staged_paths], step="stage-certification")
+     run(
+         ["git", "commit", "-q", "-m",
+          f"Certify Microcosm UK cut {args.national_tag}\n\n"
+-- 
+2.55.0
+

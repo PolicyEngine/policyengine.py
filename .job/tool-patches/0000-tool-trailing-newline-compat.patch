@@ -1,0 +1,18 @@
+diff --git a/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_in_policyengine_py.py b/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_in_policyengine_py.py
+index 4cc57d991..2142351c0 100644
+--- a/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_in_policyengine_py.py
++++ b/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_in_policyengine_py.py
+@@ -260,3 +260,4 @@ def test_the_pr_body_lists_the_area_input_surface():
+     )
+     assert "built on 2.132.6" in body
+     assert "local_bus_uncapped_single_fare" in body
++
+diff --git a/tools/certify_uk_cut_in_policyengine_py.py b/tools/certify_uk_cut_in_policyengine_py.py
+index 16cdccef0..e185862fe 100644
+--- a/tools/certify_uk_cut_in_policyengine_py.py
++++ b/tools/certify_uk_cut_in_policyengine_py.py
+@@ -619,3 +619,4 @@ def certify(args: argparse.Namespace) -> int:
+ 
+ if __name__ == "__main__":
+     raise SystemExit(main())
++

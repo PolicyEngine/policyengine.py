@@ -1,0 +1,78 @@
+From 6f707cf925d8f3ec1017e3b46eb89a5df78d75b4 Mon Sep 17 00:00:00 2001
+From: Budget rehearsal <budget-rehearsal@localhost>
+Date: Fri, 23 Oct 2026 07:55:10 -0400
+Subject: [PATCH] Avoid unrelated country initialization in constant rewrite
+ and UC floor
+
+---
+ .../test_certify_uk_cut_in_policyengine_py.py | 19 ++++++++++++++++++-
+ tools/certify_uk_cut_in_policyengine_py.py    |  2 ++
+ 2 files changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/tests/test_certify_uk_cut_in_policyengine_py.py b/tests/test_certify_uk_cut_in_policyengine_py.py
+index 765be2a..66a6e4d 100644
+--- a/tests/test_certify_uk_cut_in_policyengine_py.py
++++ b/tests/test_certify_uk_cut_in_policyengine_py.py
+@@ -307,7 +307,9 @@ class RunnerTests(unittest.TestCase):
+                 ],
+             )
+ 
+-    def run_mock_pipeline(self, *, pytest_code=0, uc_code=0, receipt=None):
++    def run_mock_pipeline(
++        self, *, pytest_code=0, uc_code=0, receipt=None, call_details=None
++    ):
+         tmp = tempfile.TemporaryDirectory()
+         self.addCleanup(tmp.cleanup)
+         root = Path(tmp.name)
+@@ -340,6 +342,8 @@ class RunnerTests(unittest.TestCase):
+ 
+         def shell(argv, **kwargs):
+             calls.append(argv)
++            if call_details is not None:
++                call_details.append((argv, kwargs))
+             if "constant-rewrite" == kwargs.get("step"):
+                 return subprocess.CompletedProcess(argv, 0, "[]", "")
+             if "UC-floor" == kwargs.get("step"):
+@@ -412,6 +416,19 @@ class RunnerTests(unittest.TestCase):
+         ):
+             self.assertIn(expected, body)
+ 
++    def test_country_import_skip_is_scoped_to_constants_and_uc_floor(self):
++        details = []
++        self.run_mock_pipeline(call_details=details)
++        envs = {kwargs.get("step"): kwargs.get("env", {}) for _, kwargs in details}
++        skipped = {
++            step
++            for step, env in envs.items()
++            if env.get("POLICYENGINE_SKIP_COUNTRY_IMPORTS") == "1"
++        }
++        self.assertEqual(skipped, {"constant-rewrite", "UC-floor"})
++        self.assertEqual(envs["snapshots"], {"PE_UPDATE_SNAPSHOTS": "1"})
++        self.assertEqual(envs["tests"], {})
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tools/certify_uk_cut_in_policyengine_py.py b/tools/certify_uk_cut_in_policyengine_py.py
+index 57c0dc1..c2bc0fd 100644
+--- a/tools/certify_uk_cut_in_policyengine_py.py
++++ b/tools/certify_uk_cut_in_policyengine_py.py
+@@ -746,6 +746,7 @@ def certify(args: argparse.Namespace) -> int:
+             "print(json.dumps(w(Path('.'), r(old, new))))",
+             json.dumps(record), json.dumps(new_record),
+         ], step="constant-rewrite",
++        env={"POLICYENGINE_SKIP_COUNTRY_IMPORTS": "1"},
+     )  # fmt: skip
+     constants = json.loads(rewrite.stdout.strip().splitlines()[-1] or "[]")
+     with timed_step("regional-constant-rewrite", timings):
+@@ -767,6 +768,7 @@ def certify(args: argparse.Namespace) -> int:
+          new_record["default_dataset"], "--year", "2025", "--output", str(uc_path)],
+         check=False,
+         step="UC-floor",
++        env={"POLICYENGINE_SKIP_COUNTRY_IMPORTS": "1"},
+     )  # fmt: skip
+     if uc.returncode and not uc_path.exists():
+         raise CertifyError(
+-- 
+2.55.0
+

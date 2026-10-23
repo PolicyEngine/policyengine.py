@@ -1,0 +1,104 @@
+From 6cc73d5ac8ef350777609fad6f3e19e1e4255b77 Mon Sep 17 00:00:00 2001
+From: Budget rehearsal <budget-rehearsal@localhost>
+Date: Fri, 23 Oct 2026 07:43:40 -0400
+Subject: [PATCH] Label certification handoff qualification pending and allow
+ stacked PR target
+
+---
+ .../test_certify_uk_cut_in_policyengine_py.py | 22 +++++++++++++++++++
+ tools/certify_uk_cut_in_policyengine_py.py    | 18 ++++++++++++++-
+ 2 files changed, 39 insertions(+), 1 deletion(-)
+
+diff --git a/tests/test_certify_uk_cut_in_policyengine_py.py b/tests/test_certify_uk_cut_in_policyengine_py.py
+index 358f88f..04738fd 100644
+--- a/tests/test_certify_uk_cut_in_policyengine_py.py
++++ b/tests/test_certify_uk_cut_in_policyengine_py.py
+@@ -165,6 +165,14 @@ class RunnerTests(unittest.TestCase):
+             4,
+         )
+ 
++    def test_pr_base_accepts_explicit_stack_target(self):
++        common = ["--national-tag", TAG, "--drop-regional-release"]
++        self.assertEqual(runner.parse(common).pr_base, "main")
++        args = runner.parse(common + ["--pr-base", "budget-local-data-manifest"])
++        self.assertEqual(args.pr_base, "budget-local-data-manifest")
++        self.assertFalse(args.push)
++        self.assertFalse(args.open_pr)
++
+     def test_local_base_is_resolved_once_and_used_for_old_bundle(self):
+         with tempfile.TemporaryDirectory() as tmp:
+             args = runner.parse(
+@@ -301,6 +309,20 @@ class RunnerTests(unittest.TestCase):
+             "UC floor acceptance", (root / "certification.pr-body.md").read_text()
+         )
+ 
++    def test_handoff_marks_wrapper_qualification_pending(self):
++        _, _, root = self.run_mock_pipeline()
++        body = (root / "certification.pr-body.md").read_text()
++        for expected in (
++            "Mechanical handoff; wrapper qualification pending",
++            "19 producer release-cut gates and passing pytest do not establish",
++            "- [ ] **Wrapper qualification.**",
++            "full reform contract",
++            "metrics review and reform responsiveness",
++            "scorecard replay evidence",
++            "this script waives no gate",
++        ):
++            self.assertIn(expected, body)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tools/certify_uk_cut_in_policyengine_py.py b/tools/certify_uk_cut_in_policyengine_py.py
+index 76e819a..5f32fc2 100644
+--- a/tools/certify_uk_cut_in_policyengine_py.py
++++ b/tools/certify_uk_cut_in_policyengine_py.py
+@@ -428,6 +428,11 @@ def pr_body(context: dict[str, Any]) -> str:
+         f"Certifies Microcosm UK national cut `{context['national_tag']}` "
+         f"(policyengine-uk {context['model']}, core {context['core']}).",
+         "",
++        "**Mechanical handoff; wrapper qualification pending** unless reviewed "
++        "receipts cover this exact candidate pair, commit and bundle. Microcosm's "
++        "19 producer release-cut gates and passing pytest do not establish "
++        "wrapper qualification.",
++        "",
+         f"- **Regional route:** {context['regional_summary']}",
+         f"- **Compatibility basis:** `{context.get('basis')}`",
+         f"- **Made by** `tools/certify_uk_cut_in_policyengine_py.py` in "
+@@ -448,6 +453,12 @@ def pr_body(context: dict[str, Any]) -> str:
+         "",
+         "## Needs a person before this leaves draft",
+         "",
++        "- [ ] **Wrapper qualification.** Attach exact-pair receipts for every "
++        "required candidate gate, including the full reform contract, metrics "
++        "review and reform responsiveness; attach and review scorecard replay "
++        "evidence. Keep qualification pending until the evidence is reviewed. "
++        "Record any explicit reviewer-approved exception; this script waives "
++        "no gate.",
+         "- [ ] **UC floor acceptance.** A later Microcosm cut with the same gap "
+         "needs the same explicit acceptance in its pull request "
+         "(data-certification.md, recorded exceptions). Accepted by: ___",
+@@ -523,6 +534,11 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
+     parser.add_argument("--skip-tests", action="store_true")
+     parser.add_argument("--test-workers", type=int, default=4)
+     parser.add_argument("--push", action="store_true")
++    parser.add_argument(
++        "--pr-base",
++        default="main",
++        help="pull-request target branch (default: main), independent of --base-ref",
++    )
+     parser.add_argument("--open-pr", action="store_true", help="draft; needs --push")
+     parser.add_argument("--dry-run", action="store_true", help="print the plan only")
+     args = parser.parse_args(argv)
+@@ -814,7 +830,7 @@ def certify(args: argparse.Namespace) -> int:
+         run(["git", "push", "-u", "origin", branch])
+     if args.open_pr:
+         run(
+-            ["gh", "pr", "create", "--draft", "--repo", PEPY_REPO, "--base", "main",
++            ["gh", "pr", "create", "--draft", "--repo", PEPY_REPO, "--base", args.pr_base,
+              "--head", branch, "--title",
+              f"Certify Microcosm UK cut {args.national_tag}", "--body-file", str(body)]
+         )  # fmt: skip
+-- 
+2.55.0
+

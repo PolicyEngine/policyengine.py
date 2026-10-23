@@ -1,0 +1,7 @@
+For microcosm #1348's owner: fourth local-only rehearsal patch; apply after 0001–0003. No heavy probe or external action was run for this patch.
+
+The model-surface subprocess imported policyengine_uk, which initializes its module-level country system, then constructed another CountryTaxBenefitSystem. The second construction duplicates the expensive parameter-tree work. The probe now reads the country package's public `variables` registry established during import. Import itself can remain expensive; prewarm the two exact model/core environments before the Budget cut rather than assuming this removes the cold-start cost.
+
+The original probe pinned only policyengine-uk, allowing uv to resolve a newer compatible core (the rehearsal observed 3.33.12 rather than the cut's 3.33.3). `model_surface` now accepts an optional core version, pins it through a second --with requirement when supplied, and records the intended model/core in its timing record. Certification passes the regional cut's own core and the target certification core for the two probes. Standalone callers that omit core retain the previous optional behavior.
+
+Validation: 16 lightweight offline stdlib unittest regressions passed in 0.338 seconds. New tests check argv/core identity, country-registry reuse without constructor calls, and both manifest-derived core versions reaching their respective probes. Ruff check and Ruff format --check passed. The current live process loaded earlier code; exact-core live verification is separate evidence and is not claimed by this patch.

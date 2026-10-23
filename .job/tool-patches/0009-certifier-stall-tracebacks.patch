@@ -1,0 +1,53 @@
+From 86428c97bbb438c0a6fc27fc9a9aad2ae5d9a5e0 Mon Sep 17 00:00:00 2001
+From: Budget rehearsal <budget-rehearsal@localhost>
+Date: Fri, 23 Oct 2026 09:08:50 -0400
+Subject: [PATCH] Dump nonfatal worker tracebacks when full-suite tests exceed
+ five minutes
+
+---
+ .../test_certify_uk_cut_rehearsal_regressions.py   | 14 ++++++++++++++
+ tools/certify_uk_cut_in_policyengine_py.py         |  3 ++-
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_rehearsal_regressions.py b/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_rehearsal_regressions.py
+index c50999a..5b4fef5 100644
+--- a/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_rehearsal_regressions.py
++++ b/packages/microcosm-build/tests/engine_free/uk/test_certify_uk_cut_rehearsal_regressions.py
+@@ -466,6 +466,20 @@ class RunnerTests(unittest.TestCase):
+         self.assertEqual(envs["snapshots"], {"PE_UPDATE_SNAPSHOTS": "1"})
+         self.assertEqual(envs["tests"], {})
+ 
++    def test_stall_diagnostic_is_fullsuite_only_and_does_not_request_exit(self):
++        details = []
++        self.run_mock_pipeline(call_details=details)
++        steps = {kwargs.get("step"): argv for argv, kwargs in details}
++        fullsuite = steps["tests"]
++        overrides = [
++            fullsuite[index + 1]
++            for index, option in enumerate(fullsuite)
++            if option == "-o"
++        ]
++        self.assertIn("faulthandler_timeout=300", overrides)
++        self.assertFalse(any("exit_on_timeout" in option for option in fullsuite))
++        self.assertFalse(any("faulthandler" in option for option in steps["snapshots"]))
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tools/certify_uk_cut_in_policyengine_py.py b/tools/certify_uk_cut_in_policyengine_py.py
+index 72a5b85..346adba 100644
+--- a/tools/certify_uk_cut_in_policyengine_py.py
++++ b/tools/certify_uk_cut_in_policyengine_py.py
+@@ -830,7 +830,8 @@ def certify(args: argparse.Namespace) -> int:
+             )
+         tests = run(
+             [python, "-m", "pytest", "-n", str(args.test_workers), "-vv",
+-             "--durations=20", "-p", "no:cacheprovider"],
++             "--durations=20", "-o", "faulthandler_timeout=300",
++             "-p", "no:cacheprovider"],
+             check=False,
+             step="tests",
+         )  # fmt: skip
+-- 
+2.55.0
+
