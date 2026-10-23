@@ -30,7 +30,9 @@ jobs:
   # ── Phase 1 gates (skip on sentinel commit) ─────────────────
   Lint:
     if: github.event.head_commit.message != 'Update package version'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CI_RUNNER_X64 || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -43,7 +45,9 @@ jobs:
 
   Test:
     if: github.event.head_commit.message != 'Update package version'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CI_RUNNER_X64 || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     # Successful runs on main 2026-10-14..16: 3.11 33-54 min, 3.12 32-56,
     # 3.13 36-60, 3.14 23-42; at 60 minutes every push run on 16 Oct was
     # cancelled before Versioning, so nothing was released (#640). Matches

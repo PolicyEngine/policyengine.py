@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   Test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CI_RUNNER_X64 || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     name: Test documentation builds
     timeout-minutes: 30
     steps:
