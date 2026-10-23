@@ -154,6 +154,52 @@ def _response_with_json(payload: dict) -> MagicMock:
     return response
 
 
+def _legacy_us_country_manifest(
+    version: str = "1.73.0", package_name: str = "policyengine-us-data"
+) -> CountryReleaseManifest:
+    """Pin the legacy fixture independently of the installed Populace bundle."""
+    return CountryReleaseManifest.model_validate(
+        {
+            "country_id": "us",
+            "policyengine_version": POLICYENGINE_VERSION,
+            "model_package": {"name": "policyengine-us", "version": "1.653.3"},
+            "data_package": {
+                "name": package_name,
+                "version": version,
+                "repo_id": "policyengine/policyengine-us-data",
+            },
+            "default_dataset": "enhanced_cps_2024",
+            "datasets": {
+                "enhanced_cps_2024": {
+                    "path": "enhanced_cps_2024.h5",
+                    "revision": version,
+                    "sha256": "abc",
+                }
+            },
+            "certified_data_artifact": {
+                "dataset": "enhanced_cps_2024",
+                "uri": (
+                    "hf://policyengine/policyengine-us-data/"
+                    f"enhanced_cps_2024.h5@{version}"
+                ),
+                "sha256": "abc",
+            },
+        }
+    )
+
+
+def _legacy_us_artifacts(version: str = "1.73.0") -> dict:
+    return {
+        "enhanced_cps_2024": {
+            "kind": "microdata",
+            "path": "enhanced_cps_2024.h5",
+            "repo_id": "policyengine/policyengine-us-data",
+            "revision": version,
+            "sha256": "abc",
+        }
+    }
+
+
 def _country_modules_with_microsimulation(
     name: str,
     microsimulation: MagicMock,
@@ -535,10 +581,16 @@ class TestReleaseManifests:
             },
         }
 
-        with patch(
-            "policyengine.provenance.manifest.requests.get",
-            return_value=_response_with_json(payload),
-        ) as mock_get:
+        with (
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=_legacy_us_country_manifest("1.78.2"),
+            ),
+            patch(
+                "policyengine.provenance.manifest.requests.get",
+                return_value=_response_with_json(payload),
+            ) as mock_get,
+        ):
             manifest = get_data_release_manifest("us")
 
         assert manifest.schema_version == 1
@@ -561,8 +613,8 @@ class TestReleaseManifests:
         )
         mock_get.assert_called_once()
         assert mock_get.call_args.args[0] == (
-            "https://huggingface.co/datasets/policyengine/populace-us/resolve/"
-            f"{US_DATA_RELEASE_REVISION}/{US_DATA_RELEASE_PATH}"
+            "https://huggingface.co/policyengine/policyengine-us-data/resolve/"
+            "1.78.2/release_manifest.json"
         )
 
     def test__given_explicit_manifest_revision__then_builds_manifest_url(self):
@@ -589,7 +641,9 @@ class TestReleaseManifests:
                     "path": "populace_us_2024.h5",
                     "repo_id": "policyengine/populace-us",
                     "revision": US_DATA_RELEASE_VERSION,
-                    "sha256": "abc",
+                    "sha256": (
+                        "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84"
+                    ),
                     "size_bytes": 123,
                 }
             },
@@ -651,12 +705,18 @@ class TestReleaseManifests:
                 }
             ],
             "default_datasets": {"national": "enhanced_cps_2024"},
-            "artifacts": {},
+            "artifacts": _legacy_us_artifacts(),
         }
 
-        with patch(
-            "policyengine.provenance.manifest.requests.get",
-            return_value=_response_with_json(payload),
+        with (
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=_legacy_us_country_manifest(),
+            ),
+            patch(
+                "policyengine.provenance.manifest.requests.get",
+                return_value=_response_with_json(payload),
+            ),
         ):
             certification = certify_data_release_compatibility(
                 "us",
@@ -685,12 +745,18 @@ class TestReleaseManifests:
             },
             "compatible_model_packages": [],
             "default_datasets": {"national": "enhanced_cps_2024"},
-            "artifacts": {},
+            "artifacts": _legacy_us_artifacts(),
         }
 
-        with patch(
-            "policyengine.provenance.manifest.requests.get",
-            return_value=_response_with_json(payload),
+        with (
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=_legacy_us_country_manifest(),
+            ),
+            patch(
+                "policyengine.provenance.manifest.requests.get",
+                return_value=_response_with_json(payload),
+            ),
         ):
             certification = certify_data_release_compatibility(
                 "us",
@@ -720,12 +786,18 @@ class TestReleaseManifests:
             },
             "compatible_model_packages": [],
             "default_datasets": {"national": "enhanced_cps_2024"},
-            "artifacts": {},
+            "artifacts": _legacy_us_artifacts("0.1.0"),
         }
 
-        with patch(
-            "policyengine.provenance.manifest.requests.get",
-            return_value=_response_with_json(payload),
+        with (
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=_legacy_us_country_manifest("0.1.0", "microcosm-data"),
+            ),
+            patch(
+                "policyengine.provenance.manifest.requests.get",
+                return_value=_response_with_json(payload),
+            ),
         ):
             certification = certify_data_release_compatibility(
                 "us",
@@ -914,12 +986,18 @@ class TestReleaseManifests:
             },
             "compatible_model_packages": [],
             "default_datasets": {"national": "enhanced_cps_2024"},
-            "artifacts": {},
+            "artifacts": _legacy_us_artifacts(),
         }
 
-        with patch(
-            "policyengine.provenance.manifest.requests.get",
-            return_value=_response_with_json(payload),
+        with (
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=_legacy_us_country_manifest(),
+            ),
+            patch(
+                "policyengine.provenance.manifest.requests.get",
+                return_value=_response_with_json(payload),
+            ),
         ):
             try:
                 certify_data_release_compatibility(

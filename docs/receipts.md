@@ -47,6 +47,25 @@ receipt_json = receipt.to_canonical_json()
 
 For a country `Microsimulation` built with `managed_microsimulation()`, call `build_execution_receipt_for_microsimulation(sim, years=..., reform=..., baseline=...)`. It reads the dataset that was loaded from `sim.policyengine_bundle`. The file must still hash to the SHA-256 verified when it was loaded, and the receipt must name the dataset, URI, revision and package recorded then; otherwise it is refused, because it would describe bytes that did not run. A simulation loaded from an unmanaged file or URI recorded no load-time hash, so it cannot be receipted. The microsimulation does not record its reform, so pass the reform you built it with.
 
+With `POLICYENGINE_UK_DATA_MANIFEST_FILE` enabled, a packaged-bundle receipt
+rechecks runtime certification using the local file and records its distinct
+`*_local_manifest` basis in `runtime.data_certification_basis`. Local-file
+verification errors stop receipt creation. The certificate's
+`compatibility_basis` stays the published bundle's assertion, which
+`verify_certificate` can reproduce. Like the other runtime context, this source
+annotation is excluded from execution and receipt digests. Caller-supplied
+bundles do not claim this packaged-bundle runtime annotation.
+
+The execution-receipt schema accepts the annotation as an optional string;
+compatibility bases in the certificate and TRACE TRO are also strings. The UK
+Budget dashboard's receipt adapter uses this package's receipt model and
+`verify_certificate`, so it needs no basis allowlist change. When adopting this
+release, refresh the dashboard's vendored
+`tests/fixtures/w4/execution_receipt.v1.schema.json`: its
+`tests/test_released_receipt.py` checks exact equality against the installed
+schema. Older consumers that forbid extra runtime fields need the updated
+schema before reading these receipts.
+
 There are two ways to bind a policyengine-uk `Scenario`:
 - A scenario built from `parameter_changes` is bound by content with `scenario_reform_identity(scenario)`.
 - `Scenario.from_reform(d)` wraps `d` in a closure that cannot be bound by its code, so bind `d` itself with `reform_identity(d, "policyengine-uk.reform_dict/v1")`.

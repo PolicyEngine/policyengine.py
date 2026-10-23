@@ -473,6 +473,19 @@
           "default": null,
           "title": "Ci Run Url"
         },
+        "data_certification_basis": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Runtime certification basis when an opt-in local data manifest was verified against the packaged bundle TRACE TRO. The certificate's compatibility_basis remains the published bundle's assertion.",
+          "title": "Data Certification Basis"
+        },
         "platform": {
           "title": "Platform",
           "type": "string"
