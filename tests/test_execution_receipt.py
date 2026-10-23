@@ -433,6 +433,168 @@ def test_a_regional_release_dataset_keeps_its_own_identity(dataset_file):
     assert receipt.data.release_manifest_revision is None
 
 
+def _bundle_with_regional_acceptance(dataset_file):
+    """A synthetic, audited area exception beside a national certificate."""
+
+    bundle = _bundle_for(dataset_file.read_bytes())
+    record = bundle["data_releases"]["uk"]
+    artifact = {
+        "path": "area_file.h5",
+        "repo_id": record["data_package"]["repo_id"],
+        "revision": "regional-release-cut",
+        "sha256": hashlib.sha256(dataset_file.read_bytes()).hexdigest(),
+    }
+    record["datasets"]["area_file"] = artifact
+    manifest_uri = (
+        "hf://dataset/policyengine/populace-uk-private@regional-release-cut/"
+        "releases/dense/release_manifest.json"
+    )
+    defaulted = [
+        "local_bus_uncapped_single_fare",
+        "salary_sacrifice_returned_to_income",
+    ]
+    limitations = [
+        "The dense cut's VAT predates the policyengine-uk VAT factor fix "
+        "(#2187, 2.135.7); the dashboard holds a VAT limit."
+    ]
+    record["regional_certification"] = {
+        "compatibility_basis": "accepted_model_mismatch",
+        "certified_for_model_version": INSTALLED_UK,
+        "built_with_model_version": "2.132.6",
+        "accepted_reason": "UK hub accepted this measured input surface.",
+        "area_receipts": "uncertified",
+        "regional_manifest_uri": manifest_uri,
+        "regional_manifest_sha256": "b" * 64,
+        "defaulted_inputs": defaulted,
+        "dropped_columns": [],
+        "limitations": limitations,
+        "evidence": {
+            "model_package": "policyengine-uk",
+            "model_version": INSTALLED_UK,
+            "regional_manifest_uri": manifest_uri,
+            "regional_manifest_sha256": "b" * 64,
+            "artifacts": {
+                "area_file": {
+                    **artifact,
+                    "columns": ["employment_income", "household_weight"],
+                }
+            },
+            "model_variables": sorted(
+                ["employment_income", "household_weight", *defaulted]
+            ),
+            "model_inputs": sorted(
+                ["employment_income", "household_weight", *defaulted]
+            ),
+            "dropped_columns": [],
+            "defaulted_inputs": defaulted,
+            "audited_by": "UK hub review",
+            "limitations": limitations,
+        },
+    }
+    return bundle
+
+
+@pytest.mark.parametrize("area", [False, True], ids=["national", "area"])
+def test_receipt_exposes_regional_acceptance_without_widening_certification(
+    dataset_file, schema_validator, area
+):
+    from policyengine.provenance.manifest import RegionalCertification
+
+    bundle = _bundle_with_regional_acceptance(dataset_file)
+    record = bundle["data_releases"]["uk"]
+
+    receipt = _build(dataset_file, bundle, dataset="area_file" if area else None)
+
+    payload = json.loads(receipt.model_dump_json(exclude_none=True))
+    assert payload["regional_certification"] == RegionalCertification.model_validate(
+        record["regional_certification"]
+    ).model_dump(mode="json", exclude_none=True)
+    assert receipt.certification_status == ("uncertified" if area else "certified")
+    assert (receipt.certificate is None) is area
+    assert receipt.data.build_model_version == (
+        "2.132.6" if area else record["certification"]["built_with_model_version"]
+    )
+    schema_validator.validate(payload)
+    restored = ExecutionReceipt.model_validate_json(receipt.model_dump_json())
+    assert restored.regional_certification == receipt.regional_certification
+    assert restored.receipt_sha256 == receipt.receipt_sha256
+
+
+def test_regional_limitations_are_bound_to_receipt_identity(dataset_file):
+    bundle = _bundle_with_regional_acceptance(dataset_file)
+    receipt = _build(dataset_file, bundle, dataset="area_file")
+    changed_bundle = copy.deepcopy(bundle)
+    record = changed_bundle["data_releases"]["uk"]["regional_certification"]
+    record["limitations"].append("Additional accepted area limitation.")
+    record["evidence"]["limitations"].append("Additional accepted area limitation.")
+
+    changed = _build(dataset_file, changed_bundle, dataset="area_file")
+
+    assert changed.execution_identity_sha256 != receipt.execution_identity_sha256
+    assert changed.receipt_sha256 != receipt.receipt_sha256
+
+
+def test_certificate_verification_checks_the_exposed_regional_record(dataset_file):
+    bundle = _bundle_with_regional_acceptance(dataset_file)
+    receipt = _build(dataset_file, bundle)
+    payload = receipt.model_dump(mode="json")
+    payload["regional_certification"]["accepted_reason"] = "A different acceptance."
+    changed = ExecutionReceipt.model_validate(payload)
+
+    assert any(
+        "regional_certification" in issue
+        for issue in verify_certificate(changed, bundle)
+    )
+
+
+def test_trace_exposes_regional_acceptance_separately_from_national(dataset_file):
+    from policyengine.provenance.manifest import (
+        CountryReleaseManifest,
+        RegionalCertification,
+    )
+    from policyengine.provenance.trace import build_trace_tro_from_release_bundle
+
+    record = _bundle_with_regional_acceptance(dataset_file)["data_releases"]["uk"]
+    tro = build_trace_tro_from_release_bundle(
+        CountryReleaseManifest.model_validate(record),
+        None,
+        fetch_pypi=lambda name, version: {},
+    )
+    performance = tro["@graph"][0]["trov:hasPerformance"]
+
+    assert performance[
+        "pe:regionalCertification"
+    ] == RegionalCertification.model_validate(
+        record["regional_certification"]
+    ).model_dump(mode="json", exclude_none=True)
+    assert (
+        performance["pe:compatibilityBasis"]
+        == record["certification"]["compatibility_basis"]
+    )
+    assert performance["pe:regionalCertification"]["area_receipts"] == "uncertified"
+
+
+def test_removing_regional_acceptance_removes_downstream_record(dataset_file):
+    from policyengine.provenance.manifest import CountryReleaseManifest
+    from policyengine.provenance.trace import build_trace_tro_from_release_bundle
+
+    bundle = _bundle_with_regional_acceptance(dataset_file)
+    record = bundle["data_releases"]["uk"]
+    del record["regional_certification"]
+    del record["datasets"]["area_file"]
+
+    receipt = _build(dataset_file, bundle)
+    tro = build_trace_tro_from_release_bundle(
+        CountryReleaseManifest.model_validate(record),
+        None,
+        fetch_pypi=lambda name, version: {},
+    )
+
+    assert "regional_certification" not in receipt.canonical_payload()
+    assert "pe:regionalCertification" not in tro["@graph"][0]["trov:hasPerformance"]
+    assert receipt.certification_status == "certified"
+
+
 def test_an_omitted_artifact_revision_is_the_release_manifest_revision(dataset_file):
     """Round-4 review M5: the receipt names what the materializer downloads."""
 
