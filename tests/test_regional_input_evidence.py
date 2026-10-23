@@ -54,7 +54,10 @@ def input_evidence(dense: dict | None = None) -> dict:
             name: {
                 key: artifact[key] for key in ("repo_id", "path", "revision", "sha256")
             }
-            | {"columns": ["employment_income"]}
+            | {
+                "columns": ["employment_income"],
+                "columns_by_period": {"2025": ["employment_income"]},
+            }
         },
         "model_variables": ["employment_income", *DEFAULTED_INPUTS],
         "model_inputs": ["employment_income", *DEFAULTED_INPUTS],
@@ -126,6 +129,9 @@ def test_a_dropped_column_refuses_even_with_an_acceptance_reason(tmp_path):
     evidence["artifacts"]["microcosm_uk_2024_25_dense"]["columns"].append(
         "removed_model_variable"
     )
+    evidence["artifacts"]["microcosm_uk_2024_25_dense"]["columns_by_period"][
+        "2025"
+    ].append("removed_model_variable")
     evidence["dropped_columns"] = ["removed_model_variable"]
     with pytest.raises(CertificationError, match="[Dd]ropped|removed_model_variable"):
         certify_with_evidence(_tmp_bundle(tmp_path), evidence)
@@ -154,7 +160,7 @@ def test_every_default_and_limitation_survives_validation_and_roundtrip(tmp_path
     release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
     manifest = CountryReleaseManifest.model_validate(release)
     assert manifest.regional_certification is not None
-    record = manifest.regional_certification.model_dump(mode="json")
+    record = manifest.regional_certification.model_dump(mode="json", exclude_none=True)
     assert record["defaulted_inputs"] == DEFAULTED_INPUTS
     assert record["dropped_columns"] == []
     assert record["limitations"] == [VAT_LIMIT]
@@ -235,3 +241,45 @@ def test_limitations_and_evidence_are_in_hashed_bundle_material(tmp_path):
         return canonical_sha256(manifest.model_dump(mode="json"))
 
     assert digest(before) != digest(after)
+
+
+def test_missing_period_measurements_refuse(tmp_path):
+    evidence = input_evidence()
+    del evidence["artifacts"]["microcosm_uk_2024_25_dense"]["columns_by_period"]
+    with pytest.raises(CertificationError):
+        certify_with_evidence(_tmp_bundle(tmp_path), evidence)
+
+
+def test_budget_target_records_vat_limit_and_both_named_defaults(tmp_path, monkeypatch):
+    from tests import test_certify_data_release as fixtures
+
+    monkeypatch.setattr(fixtures, "UK_MODEL_VERSION", "2.147.2")
+    dense = older_dense()
+    dense["build"]["built_with_model_package"]["version"] = "2.132.6"
+    dense["compatible_model_packages"][0]["specifier"] = "==2.132.6"
+    audit = input_evidence(dense)
+    audit["model_version"] = "2.147.2"
+    audit["limitations"] = ["The dense cut was calibrated under an older model."]
+    path = _tmp_bundle(tmp_path)
+    certify_with_evidence(path, audit, dense)
+    release = json.loads(path.read_text())["data_releases"]["uk"]
+    record = release["regional_certification"]
+    assert record["certified_for_model_version"] == "2.147.2"
+    assert record["built_with_model_version"] == "2.132.6"
+    assert VAT_LIMIT in record["limitations"]
+    assert set(DEFAULTED_INPUTS) <= set(record["defaulted_inputs"])
+    assert release["certification"]["compatibility_basis"] == "built_with_model_package"
+
+
+def test_regional_acceptance_never_widens_national_coverage(tmp_path):
+    national = _microcosm_uk_national_payload()
+    national["build"]["built_with_model_package"]["version"] = "2.120.0"
+    national["compatible_model_packages"][0]["specifier"] = "==2.120.0"
+    with pytest.raises(CertificationError, match="new data build|compatibility claim"):
+        _certify_uk(
+            _tmp_bundle(tmp_path),
+            [_response(national), _response(older_dense())],
+            regional_manifest_uri=UK_DENSE_URI,
+            regional_model_mismatch_reason=REASON,
+            regional_input_surface_evidence=input_evidence(),
+        )

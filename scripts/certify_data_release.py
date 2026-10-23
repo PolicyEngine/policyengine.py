@@ -24,6 +24,7 @@ the exact pinned pair.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -121,10 +122,16 @@ def main(argv=None) -> int:
         help=(
             "UK only: route regions to a regional release that does not cover "
             "the pinned model, recording this reviewed reason in the bundle "
-            "instead of refusing. The core must still be covered."
+            "instead of refusing. Requires --regional-input-surface-evidence; "
+            "dropped columns refuse. The core must still be covered."
         ),
     )
     parser.add_argument("--no-generate", action="store_true")
+    parser.add_argument(
+        "--regional-input-surface-evidence",
+        type=Path,
+        help="Audited JSON evidence bound to the regional bytes and exact target model.",
+    )
     parser.add_argument("--no-changelog", action="store_true")
     parser.add_argument(
         "--skip-artifact-check",
@@ -159,6 +166,11 @@ def main(argv=None) -> int:
         core_version=args.core_version,
         qualified_pair_id=args.qualified_pair_id,
         regional_model_mismatch_reason=args.accept_regional_model_mismatch,
+        regional_input_surface_evidence=(
+            json.loads(args.regional_input_surface_evidence.read_text())
+            if args.regional_input_surface_evidence is not None
+            else None
+        ),
     )
     print(result.summary())
 

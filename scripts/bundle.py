@@ -52,6 +52,10 @@ def _certify_data(args: argparse.Namespace) -> int:
         argv.extend(
             ["--accept-regional-model-mismatch", args.accept_regional_model_mismatch]
         )
+    if args.regional_input_surface_evidence:
+        argv.extend(
+            ["--regional-input-surface-evidence", args.regional_input_surface_evidence]
+        )
     if args.no_generate:
         argv.append("--no-generate")
     if args.no_changelog:
@@ -238,6 +242,10 @@ def _parser() -> argparse.ArgumentParser:
             "version, recording this reviewed reason; forwarded to "
             "scripts/certify_data_release.py."
         ),
+    )
+    certify.add_argument(
+        "--regional-input-surface-evidence",
+        help="Audited regional input-surface JSON; required for an accepted mismatch.",
     )
     certify.add_argument(
         "--regional-artifact-prefix",

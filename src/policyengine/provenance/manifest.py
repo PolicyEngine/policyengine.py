@@ -211,6 +211,45 @@ class CertifiedDataArtifact(BaseModel):
 RegionalReleaseKind = Literal["local_area", "area_coded_national"]
 
 
+class RegionalInputArtifactEvidence(BaseModel):
+    """Measured columns of one byte-verified regional H5 artifact."""
+
+    model_config = {"extra": "forbid"}
+
+    repo_id: str = Field(min_length=1)
+    path: str = Field(min_length=1)
+    revision: str = Field(min_length=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    repo_type: Optional[Literal["model", "dataset"]] = None
+    columns: list[str] = Field(min_length=1)
+    columns_by_period: dict[str, list[str]] = Field(min_length=1)
+
+
+class RegionalInputSurfaceEvidence(BaseModel):
+    """An operator's audit of actual regional columns against an exact model.
+
+    Surfaces are retained so certification recomputes the comparison rather
+    than trusting a declared zero-loss result. The artifact hashes identify
+    the bytes inspected by the auditor, not merely a model's possible inputs.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    schema_version: Literal[1] = 1
+    regional_manifest_uri: str = Field(min_length=1)
+    regional_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_package: str = Field(min_length=1)
+    model_version: str = Field(min_length=1)
+    artifacts: dict[str, RegionalInputArtifactEvidence] = Field(min_length=1)
+    model_variables: list[str] = Field(min_length=1)
+    model_inputs: list[str] = Field(min_length=1)
+    input_aliases: Optional[dict[str, str]] = None
+    dropped_columns: list[str]
+    defaulted_inputs: list[str]
+    audited_by: str = Field(min_length=1, pattern=r"\S")
+    limitations: list[str] = Field(min_length=1)
+
+
 class RegionalCertification(BaseModel):
     """A reviewer's acceptance of a regional release on another model version.
 
@@ -224,6 +263,12 @@ class RegionalCertification(BaseModel):
     built_with_model_version: Optional[str] = None
     accepted_reason: str
     area_receipts: Literal["uncertified"] = "uncertified"
+    regional_manifest_uri: str
+    regional_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    defaulted_inputs: list[str]
+    dropped_columns: list[str]
+    limitations: list[str]
+    evidence: RegionalInputSurfaceEvidence
 
 
 class CountryReleaseManifest(BaseModel):
@@ -245,6 +290,8 @@ class CountryReleaseManifest(BaseModel):
     regional_certification: Optional[RegionalCertification] = None
     """Present only when the regional release was routed on an accepted
     model mismatch rather than its own build or claims."""
+    regional_source_manifest_sha256: Optional[str] = None
+    """SHA-256 of the original regional release manifest bytes."""
     certified_data_artifact: Optional[CertifiedDataArtifact] = None
     certification: Optional[DataCertification] = None
     source_sha256: Optional[str] = Field(default=None, exclude=True)

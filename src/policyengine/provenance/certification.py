@@ -47,6 +47,8 @@ from pathlib import Path
 from typing import Literal, Optional, cast, get_args
 
 import requests
+from packaging.version import InvalidVersion, Version
+from pydantic import ValidationError
 
 from policyengine.data.uk_geography_assets import (
     CONSTITUENCY_ASSET_SPEC,
@@ -57,6 +59,7 @@ from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
     DataReleaseArtifact,
     DataReleaseManifest,
+    RegionalInputSurfaceEvidence,
     RegionalReleaseKind,
     _specifier_matches,
     fetch_pypi_wheel_metadata,
@@ -416,6 +419,10 @@ def model_compatibility_basis(
 #: A regional release's model coverage accepted by a reviewer, not by the
 #: release's own build or claims (``--accept-regional-model-mismatch``).
 REGIONAL_BASIS_ACCEPTED_MISMATCH = "accepted_model_mismatch"
+REGIONAL_VAT_LIMITATION = (
+    "the dense cut's VAT predates the policyengine-uk VAT factor fix "
+    "(#2187, 2.135.7); the dashboard holds a VAT limit"
+)
 
 
 def accepted_regional_mismatch(
@@ -423,6 +430,10 @@ def accepted_regional_mismatch(
     model_package: str,
     model_version: str,
     reason: str,
+    *,
+    regional_manifest_uri: str,
+    regional_manifest_sha256: str,
+    evidence: Optional[RegionalInputSurfaceEvidence],
 ) -> tuple[dict, str]:
     """Record a reviewed decision to route regions to a release on another model.
 
@@ -438,6 +449,99 @@ def accepted_regional_mismatch(
         raise CertificationError(
             "--accept-regional-model-mismatch needs a reason a reviewer can read."
         )
+    if evidence is None:
+        raise CertificationError(
+            "An accepted regional model mismatch requires audited input-surface "
+            "evidence (--regional-input-surface-evidence)."
+        )
+    try:
+        audit = RegionalInputSurfaceEvidence.model_validate(evidence)
+    except ValidationError as exc:
+        raise CertificationError(
+            f"Invalid regional input-surface evidence: {exc}"
+        ) from exc
+    if (
+        audit.regional_manifest_uri != regional_manifest_uri
+        or audit.regional_manifest_sha256 != regional_manifest_sha256
+        or audit.model_package != model_package
+        or audit.model_version != model_version
+    ):
+        raise CertificationError(
+            "Regional input-surface evidence must bind the exact regional cut, "
+            "raw manifest bytes and target model package/version."
+        )
+    expected_artifacts = {
+        name: artifact
+        for name, artifact in regional_manifest.artifacts.items()
+        if artifact.kind == "microdata" and artifact.path.endswith(".h5")
+    }
+    if not expected_artifacts or set(audit.artifacts) != set(expected_artifacts):
+        raise CertificationError(
+            "Evidence must measure every regional microdata artifact."
+        )
+    for name, artifact in expected_artifacts.items():
+        measured = audit.artifacts[name]
+        if any(
+            getattr(measured, key) != getattr(artifact, key)
+            for key in ("repo_id", "path", "revision", "sha256")
+        ) or (
+            measured.repo_type is not None
+            and measured.repo_type
+            != (
+                artifact.repo_type
+                or parse_manifest_uri(regional_manifest_uri)["repo_type"]
+            )
+        ):
+            raise CertificationError(
+                f"Regional evidence artifact {name!r} does not match its identity/bytes."
+            )
+        if not all(column.strip() for column in measured.columns):
+            raise CertificationError("Regional evidence has an empty column name.")
+        if measured.columns_by_period is not None:
+            if (
+                not measured.columns_by_period
+                or any(not columns for columns in measured.columns_by_period.values())
+                or set(measured.columns)
+                != {
+                    column
+                    for columns in measured.columns_by_period.values()
+                    for column in columns
+                }
+            ):
+                raise CertificationError(
+                    "Regional evidence has inconsistent period columns."
+                )
+    if not set(audit.model_inputs).issubset(audit.model_variables):
+        raise CertificationError(
+            "Evidence model inputs must belong to its variable surface."
+        )
+    if not all(item.strip() for item in audit.limitations):
+        raise CertificationError("Regional evidence limitations must not be blank.")
+    from policyengine.provenance.regional_input_surface import compare_input_surface
+
+    try:
+        comparison = compare_input_surface(
+            audit.artifacts,
+            audit.model_variables,
+            audit.model_inputs,
+            audit.input_aliases,
+        )
+    except ValueError as exc:
+        raise CertificationError(
+            f"Invalid regional input-surface evidence: {exc}"
+        ) from exc
+    if (
+        audit.dropped_columns != comparison["dropped_columns"]
+        or audit.defaulted_inputs != comparison["defaulted_inputs"]
+    ):
+        raise CertificationError(
+            "Regional evidence comparison disagrees with its measured surfaces."
+        )
+    if comparison["dropped_columns"]:
+        raise CertificationError(
+            "Dropped regional input columns are refused: "
+            + ", ".join(comparison["dropped_columns"])
+        )
     built = (
         regional_manifest.build.built_with_model_package
         if (regional_manifest.build is not None)
@@ -446,19 +550,37 @@ def accepted_regional_mismatch(
     built_with = (
         built.version if built is not None and built.name == model_package else None
     )
+    limitations = list(audit.limitations)
+    try:
+        predates_vat_fix = built_with is not None and Version(built_with) < Version(
+            "2.135.7"
+        ) <= Version(model_version)
+    except InvalidVersion as exc:
+        raise CertificationError(
+            "Regional model versions must be valid versions."
+        ) from exc
+    if predates_vat_fix and REGIONAL_VAT_LIMITATION not in limitations:
+        limitations.append(REGIONAL_VAT_LIMITATION)
     record = {
         "compatibility_basis": REGIONAL_BASIS_ACCEPTED_MISMATCH,
         "certified_for_model_version": model_version,
         "built_with_model_version": built_with,
         "accepted_reason": reason,
         "area_receipts": "uncertified",
+        "regional_manifest_uri": regional_manifest_uri,
+        "regional_manifest_sha256": regional_manifest_sha256,
+        "defaulted_inputs": comparison["defaulted_inputs"],
+        "dropped_columns": comparison["dropped_columns"],
+        "limitations": limitations,
+        "evidence": audit.model_dump(mode="json", exclude_none=True),
     }
     warning = (
         f"regional release: built with {model_package} "
         f"{built_with or 'an unrecorded version'} and routed under "
         f"{model_version} on an accepted mismatch ({reason}); area runs are "
-        "uncertified, inputs the newer model added take their defaults there, "
-        "and columns it dropped are ignored on load"
+        f"uncertified; audited dropped columns: none; defaulted inputs: "
+        f"{', '.join(comparison['defaulted_inputs']) or 'none'}. "
+        + " ".join(limitations)
     )
     return record, warning
 
@@ -1148,6 +1270,7 @@ def build_bundle_data_release_payload(
     regional_uri_parts: Optional[dict] = None,
     regional_release_kind: Optional[RegionalReleaseKind] = None,
     regional_certification: Optional[dict] = None,
+    regional_manifest_sha256: Optional[str] = None,
 ) -> dict:
     """Map the country certification payload into bundle ``data_releases``."""
     payload = copy.deepcopy(country_payload)
@@ -1161,6 +1284,8 @@ def build_bundle_data_release_payload(
     payload["release_manifest_uri"] = https_manifest_url(uri_parts)
     if regional_manifest_uri is not None:
         payload["regional_source_manifest_uri"] = regional_manifest_uri
+    if regional_manifest_sha256 is not None:
+        payload["regional_source_manifest_sha256"] = regional_manifest_sha256
     if regional_uri_parts is not None:
         payload["regional_release_manifest_uri"] = https_manifest_url(
             regional_uri_parts
@@ -1193,6 +1318,7 @@ class DataProducerCertificationStrategy:
         qualified_pair_id: Optional[str] = None,
         bundle_core_version: Optional[str] = None,
         regional_model_mismatch_reason: Optional[str] = None,
+        regional_input_surface_evidence: Optional[RegionalInputSurfaceEvidence] = None,
     ) -> tuple[dict, str, list[str]]:
         raise NotImplementedError
 
@@ -1217,6 +1343,7 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
         qualified_pair_id: Optional[str] = None,
         bundle_core_version: Optional[str] = None,
         regional_model_mismatch_reason: Optional[str] = None,
+        regional_input_surface_evidence: Optional[RegionalInputSurfaceEvidence] = None,
     ) -> tuple[dict, str, list[str]]:
         raise CertificationError(
             "Legacy data-producer certification updates are not implemented in "
@@ -1244,12 +1371,14 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         qualified_pair_id: Optional[str] = None,
         bundle_core_version: Optional[str] = None,
         regional_model_mismatch_reason: Optional[str] = None,
+        regional_input_surface_evidence: Optional[RegionalInputSurfaceEvidence] = None,
     ) -> tuple[dict, str, list[str]]:
         manifest, manifest_sha256, uri_parts = fetch_release_manifest(
             manifest_uri, token=token
         )
         primary_manifest = manifest
         regional_manifest = None
+        regional_manifest_sha256 = None
         regional_uri_parts = None
         recorded_release_kind = None
         regional_artifacts: dict[str, DataReleaseArtifact] = {}
@@ -1267,8 +1396,8 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                 "whose area receipts are uncertified."
             )
         if regional_manifest_uri is not None:
-            regional_manifest, _, regional_uri_parts = fetch_release_manifest(
-                regional_manifest_uri, token=token
+            regional_manifest, regional_manifest_sha256, regional_uri_parts = (
+                fetch_release_manifest(regional_manifest_uri, token=token)
             )
             # The regional release runs on the same model and core, so it must
             # cover the pinned versions by its own build or claims. A qualified
@@ -1287,6 +1416,9 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                     model_package,
                     model_version,
                     regional_model_mismatch_reason,
+                    regional_manifest_uri=regional_manifest_uri,
+                    regional_manifest_sha256=regional_manifest_sha256,
+                    evidence=regional_input_surface_evidence,
                 )
                 regional_warnings = []
             else:
@@ -1405,6 +1537,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                 regional_uri_parts=regional_uri_parts,
                 regional_release_kind=recorded_release_kind,
                 regional_certification=regional_certification,
+                regional_manifest_sha256=regional_manifest_sha256,
             ),
             manifest_sha256,
             warnings,
@@ -1451,6 +1584,7 @@ def certify_data_release(
     core_version: Optional[str] = None,
     qualified_pair_id: Optional[str] = None,
     regional_model_mismatch_reason: Optional[str] = None,
+    regional_input_surface_evidence: Optional[RegionalInputSurfaceEvidence] = None,
 ) -> CertificationResult:
     """Certify a data release into the bundle manifest.
 
@@ -1467,13 +1601,21 @@ def certify_data_release(
     release only. While the bundle routes regions, a run without
     ``regional_manifest_uri`` is refused unless ``drop_regional_release``.
 
-    ``regional_model_mismatch_reason`` (UK only) records a reviewer's
-    acceptance of a regional release that does not cover the pinned model,
-    instead of refusing it. The core must still be covered. The bundle then
-    carries ``regional_certification`` naming both model versions and the
-    reason; area receipts are uncertified either way.
+    ``regional_model_mismatch_reason`` (UK only) requires
+    ``regional_input_surface_evidence`` audited against the exact target model
+    and regional manifest/artifact bytes. Dropped columns are always refused;
+    every defaulted input and limitation is recorded in
+    ``regional_certification`` alongside the reason and both model versions.
+    The core must still be covered; area receipts remain uncertified.
     """
     certified_country = _certified_country(country)
+    if (
+        regional_input_surface_evidence is not None
+        and regional_model_mismatch_reason is None
+    ):
+        raise CertificationError(
+            "Regional input-surface evidence requires an accepted mismatch reason."
+        )
     if drop_regional_release and regional_manifest_uri is not None:
         raise CertificationError(
             "--drop-regional-release removes the bundle's regional routing, so it "
@@ -1519,6 +1661,7 @@ def certify_data_release(
             (bundle.get("packages") or {}).get("policyengine-core") or {}
         ).get("version"),
         regional_model_mismatch_reason=regional_model_mismatch_reason,
+        regional_input_surface_evidence=regional_input_surface_evidence,
     )
     previous_release = (bundle.get("data_releases") or {}).get(country) or {}
     bundle.setdefault("data_releases", {})[country] = data_release

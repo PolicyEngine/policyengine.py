@@ -1436,6 +1436,9 @@ class TestUKRegionalCertification:
     def test__given_accepted_mismatch__then_routes_and_records_it(self, tmp_path):
         bundle_path = _tmp_bundle(tmp_path)
         reason = "area receipts are uncertified; the dense cut lags one release"
+        from tests.test_regional_input_evidence import input_evidence
+
+        evidence = input_evidence(self._older_dense())
 
         result = _certify_uk(
             bundle_path,
@@ -1445,6 +1448,7 @@ class TestUKRegionalCertification:
             ],
             regional_manifest_uri=UK_DENSE_URI,
             regional_model_mismatch_reason=reason,
+            regional_input_surface_evidence=evidence,
         )
 
         release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
@@ -1455,6 +1459,12 @@ class TestUKRegionalCertification:
             "built_with_model_version": "2.120.0",
             "accepted_reason": reason,
             "area_receipts": "uncertified",
+            "regional_manifest_uri": UK_DENSE_URI,
+            "regional_manifest_sha256": evidence["regional_manifest_sha256"],
+            "defaulted_inputs": evidence["defaulted_inputs"],
+            "dropped_columns": [],
+            "limitations": evidence["limitations"],
+            "evidence": evidence,
         }
         # The national certificate itself is untouched by the regional record.
         assert release["certification"]["compatibility_basis"] == (
@@ -1497,6 +1507,8 @@ class TestUKRegionalCertification:
     def test__given_an_accepted_mismatch__then_the_core_must_still_be_covered(
         self, tmp_path
     ):
+        from tests.test_regional_input_evidence import input_evidence
+
         national = _microcosm_uk_national_payload()
         national["compatible_core_packages"] = [
             {"name": "policyengine-core", "specifier": "==3.33.0"}
@@ -1509,6 +1521,7 @@ class TestUKRegionalCertification:
                 [_response(national), _response(self._older_dense())],
                 regional_manifest_uri=UK_DENSE_URI,
                 regional_model_mismatch_reason="area receipts are uncertified",
+                regional_input_surface_evidence=input_evidence(self._older_dense()),
                 core_version="3.33.0",
             )
 
@@ -1549,12 +1562,18 @@ class TestUKRegionalCertification:
                     UK_DENSE_URI,
                     "--accept-regional-model-mismatch",
                     reason,
+                    "--regional-input-surface-evidence",
+                    "regional-audit.json",
                 ]
             )
             == 0
         )
         argv = captured["argv"]
         assert argv[argv.index("--accept-regional-model-mismatch") + 1] == reason
+        assert (
+            argv[argv.index("--regional-input-surface-evidence") + 1]
+            == "regional-audit.json"
+        )
 
     def test__given_pinned_core__then_the_regional_release_must_cover_it(
         self, tmp_path
