@@ -457,6 +457,273 @@
       "title": "ReformIdentity",
       "type": "object"
     },
+    "RegionalCertification": {
+      "description": "A reviewer's acceptance of a regional release on another model version.\n\nWritten only by ``certify-data --accept-regional-model-mismatch``: the\nregional release neither was built with nor claims the certified model,\nand area runs on it are uncertified.",
+      "properties": {
+        "accepted_reason": {
+          "title": "Accepted Reason",
+          "type": "string"
+        },
+        "area_receipts": {
+          "const": "uncertified",
+          "default": "uncertified",
+          "title": "Area Receipts",
+          "type": "string"
+        },
+        "built_with_model_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Built With Model Version"
+        },
+        "certified_for_model_version": {
+          "title": "Certified For Model Version",
+          "type": "string"
+        },
+        "compatibility_basis": {
+          "const": "accepted_model_mismatch",
+          "title": "Compatibility Basis",
+          "type": "string"
+        },
+        "defaulted_inputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Defaulted Inputs",
+          "type": "array"
+        },
+        "dropped_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dropped Columns",
+          "type": "array"
+        },
+        "evidence": {
+          "$ref": "#/$defs/RegionalInputSurfaceEvidence"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "regional_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Regional Manifest Sha256",
+          "type": "string"
+        },
+        "regional_manifest_uri": {
+          "title": "Regional Manifest Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "compatibility_basis",
+        "certified_for_model_version",
+        "accepted_reason",
+        "regional_manifest_uri",
+        "regional_manifest_sha256",
+        "defaulted_inputs",
+        "dropped_columns",
+        "limitations",
+        "evidence"
+      ],
+      "title": "RegionalCertification",
+      "type": "object"
+    },
+    "RegionalInputArtifactEvidence": {
+      "additionalProperties": false,
+      "description": "Measured columns of one byte-verified regional H5 artifact.",
+      "properties": {
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "columns_by_period": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minProperties": 1,
+          "title": "Columns By Period",
+          "type": "object"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "repo_id": {
+          "minLength": 1,
+          "title": "Repo Id",
+          "type": "string"
+        },
+        "repo_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "model",
+                "dataset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repo Type"
+        },
+        "revision": {
+          "minLength": 1,
+          "title": "Revision",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo_id",
+        "path",
+        "revision",
+        "sha256",
+        "columns",
+        "columns_by_period"
+      ],
+      "title": "RegionalInputArtifactEvidence",
+      "type": "object"
+    },
+    "RegionalInputSurfaceEvidence": {
+      "additionalProperties": false,
+      "description": "An operator's audit of actual regional columns against an exact model.\n\nSurfaces are retained so certification recomputes the comparison rather\nthan trusting a declared zero-loss result. The artifact hashes identify\nthe bytes inspected by the auditor, not merely a model's possible inputs.",
+      "properties": {
+        "artifacts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RegionalInputArtifactEvidence"
+          },
+          "minProperties": 1,
+          "title": "Artifacts",
+          "type": "object"
+        },
+        "audited_by": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Audited By",
+          "type": "string"
+        },
+        "defaulted_inputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Defaulted Inputs",
+          "type": "array"
+        },
+        "dropped_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dropped Columns",
+          "type": "array"
+        },
+        "input_aliases": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Aliases"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Limitations",
+          "type": "array"
+        },
+        "model_inputs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Model Inputs",
+          "type": "array"
+        },
+        "model_package": {
+          "minLength": 1,
+          "title": "Model Package",
+          "type": "string"
+        },
+        "model_variables": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Model Variables",
+          "type": "array"
+        },
+        "model_version": {
+          "minLength": 1,
+          "title": "Model Version",
+          "type": "string"
+        },
+        "regional_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Regional Manifest Sha256",
+          "type": "string"
+        },
+        "regional_manifest_uri": {
+          "minLength": 1,
+          "title": "Regional Manifest Uri",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "regional_manifest_uri",
+        "regional_manifest_sha256",
+        "model_package",
+        "model_version",
+        "artifacts",
+        "model_variables",
+        "model_inputs",
+        "dropped_columns",
+        "defaulted_inputs",
+        "audited_by",
+        "limitations"
+      ],
+      "title": "RegionalInputSurfaceEvidence",
+      "type": "object"
+    },
     "RuntimeContext": {
       "additionalProperties": false,
       "description": "Where the execution ran. Part of no digest.",
@@ -472,6 +739,19 @@
           ],
           "default": null,
           "title": "Ci Run Url"
+        },
+        "data_certification_basis": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Runtime certification basis when an opt-in local data manifest was verified against the packaged bundle TRACE TRO. The certificate's compatibility_basis remains the published bundle's assertion.",
+          "title": "Data Certification Basis"
         },
         "platform": {
           "title": "Platform",
@@ -642,6 +922,18 @@
     "reform": {
       "$ref": "#/$defs/ReformIdentity"
     },
+    "regional_certification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RegionalCertification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The bundle's accepted regional model mismatch, including its exact regional manifest and artifact identity, measured input surface, acceptance reason and limitations. This records an exception for uncertified area runs and does not widen the national certificate."
+    },
     "runtime": {
       "anyOf": [
         {
@@ -698,7 +990,7 @@
   "x-policyengine-digests": {
     "canonicalization": "RFC 8785 (JSON Canonicalization Scheme) over the stated value after removing object members whose value is null (array elements are kept). Numbers are IEEE 754 doubles; integers must lie within +/-(2**53 - 1).",
     "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
-    "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
+    "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?, regional_certification?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "outputs_sha256": "the canonical output payload the receipt binds",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
     "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {\"$nonfinite\": \"Infinity\"} or {\"$nonfinite\": \"-Infinity\"}, and a payload may not use the key $nonfinite itself"

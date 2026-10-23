@@ -76,6 +76,7 @@ import io
 import json
 import math
 import operator
+import os
 import platform
 import re
 import struct
@@ -113,7 +114,14 @@ from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 import psutil
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from policyengine.provenance.bytecode import code_shape as _code_shape
 from policyengine.provenance.bytecode import compile_source
@@ -125,6 +133,7 @@ from policyengine.provenance.canonical import (
     drop_null_members,
 )
 from policyengine.provenance.loaded import loaded_versions
+from policyengine.provenance.manifest import RegionalCertification
 from policyengine.utils.hashing import sha256_file
 
 __all__ = [
@@ -215,7 +224,7 @@ CROSS_FIELD_RULES: tuple[str, ...] = (
 #: How each digest is computed.
 DIGEST_RULES: dict[str, str] = {
     "canonicalization": "RFC 8785 (JSON Canonicalization Scheme) over the stated value after removing object members whose value is null (array elements are kept). Numbers are IEEE 754 doubles; integers must lie within +/-(2**53 - 1).",
-    "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
+    "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?, regional_certification?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
     "certificate.certificate_sha256": "the bundle manifest's data_releases.<country_id> record",
     "reform.reform_sha256": 'RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {"$nonfinite": "Infinity"} or {"$nonfinite": "-Infinity"}, and a payload may not use the key $nonfinite itself',
@@ -488,6 +497,21 @@ class RuntimeContext(_Contract):
     python_version: str
     platform: str
     ci_run_url: Optional[str] = None
+    data_certification_basis: Optional[str] = Field(
+        default=None,
+        description=(
+            "Runtime certification basis when an opt-in local data manifest was "
+            "verified against the packaged bundle TRACE TRO. The certificate's "
+            "compatibility_basis remains the published bundle's assertion."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_local_basis(self, handler):
+        payload = handler(self)
+        if self.data_certification_basis is None:
+            payload.pop("data_certification_basis", None)
+        return payload
 
 
 class ExecutionReceipt(_Contract):
@@ -506,6 +530,15 @@ class ExecutionReceipt(_Contract):
     data: DataIdentity
     certification_status: Literal["certified", "uncertified"]
     certificate: Optional[CertificateIdentity] = None
+    regional_certification: Optional[RegionalCertification] = Field(
+        default=None,
+        description=(
+            "The bundle's accepted regional model mismatch, including its exact "
+            "regional manifest and artifact identity, measured input surface, "
+            "acceptance reason and limitations. This records an exception for "
+            "uncertified area runs and does not widen the national certificate."
+        ),
+    )
     reform: ReformIdentity
     baseline: ReformIdentity
     fiscal_year: FiscalYearConvention
@@ -525,6 +558,13 @@ class ExecutionReceipt(_Contract):
         description="content_sha256 of the canonical output payload this receipt binds.",
     )
     runtime: Optional[RuntimeContext] = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_regional_certification(self, handler):
+        payload = handler(self)
+        if self.regional_certification is None:
+            payload.pop("regional_certification", None)
+        return payload
 
     @field_validator("schema_version", mode="before")
     @classmethod
@@ -604,6 +644,10 @@ class ExecutionReceipt(_Contract):
                 for key in CertificateIdentity.IDENTITY_FIELDS
                 if key in payload
             }
+        if self.regional_certification is not None:
+            identity["regional_certification"] = self.regional_certification.model_dump(
+                mode="json", exclude_none=True
+            )
         return identity
 
     @property
@@ -3788,12 +3832,25 @@ def _data_identity(
     datasets = record.get("datasets") or {}
     entry = datasets.get(dataset_name)
     primary = datasets.get(record.get("default_dataset")) or {}
-    # A regional release's artifacts are certified beside the primary release
-    # but are not part of it, so only entries at the primary release's own
-    # revision take its build and manifest identity.
-    release = entry is not None and entry.get("revision") in (
-        None,
-        primary.get("revision"),
+    # A regional release's artifacts keep their own build provenance, even
+    # when acceptance allows them to run beside another national model.
+    regional_certification = manifest.regional_certification
+    regional = regional_certification is not None and any(
+        artifact.repo_id == spec.repo_id
+        and artifact.path == spec.path
+        and artifact.revision == spec.revision
+        and artifact.sha256 == spec.sha256
+        and artifact.repo_type in (None, spec.repo_type)
+        for artifact in regional_certification.evidence.artifacts.values()
+    )
+    release = (
+        not regional
+        and entry is not None
+        and entry.get("revision")
+        in (
+            None,
+            primary.get("revision"),
+        )
     )
     data_package = record["data_package"]
     certified_artifact = record.get("certified_data_artifact") or {}
@@ -3809,9 +3866,13 @@ def _data_identity(
         build_fingerprint=certification.get("data_build_fingerprint")
         if release
         else None,
-        build_model_version=certification.get("built_with_model_version")
-        if release
-        else None,
+        build_model_version=(
+            regional_certification.built_with_model_version
+            if regional and regional_certification is not None
+            else certification.get("built_with_model_version")
+            if release
+            else None
+        ),
         release_manifest_revision=data_package.get("release_manifest_revision")
         if release
         else None,
@@ -3871,6 +3932,21 @@ def _build(
     actual_sha256 = sha256_file(dataset_path)
     data = _data_identity(country_id, record, bundle, dataset_name, actual_sha256)
 
+    runtime_basis = None
+    if source == "packaged" and (
+        f"POLICYENGINE_{country_id.upper()}_DATA_MANIFEST_FILE" in os.environ
+    ):
+        from policyengine.provenance.manifest import (
+            certify_data_release_compatibility,
+        )
+
+        runtime_basis = certify_data_release_compatibility(
+            country_id,
+            model.version,
+            runtime_data_build_fingerprint=data.build_fingerprint,
+            runtime_core_version=core.version,
+        ).compatibility_basis
+
     fields = _certificate_fields(country_id, record, bundle)
     certified_artifact = record.get("certified_data_artifact") or {}
     certificate = None
@@ -3908,6 +3984,7 @@ def _build(
         data=data,
         certification_status=status,
         certificate=certificate,
+        regional_certification=record.get("regional_certification"),
         reform=reform,
         baseline=baseline,
         fiscal_year=uk_fiscal_year_convention(),
@@ -3920,6 +3997,7 @@ def _build(
             python_version=platform.python_version(),
             platform=sys.platform,
             ci_run_url=ci_run_url,
+            data_certification_basis=runtime_basis,
         ),
     )
 
@@ -3954,6 +4032,25 @@ def verify_certificate(
     if not isinstance(record, Mapping):
         return [f"the bundle has no {receipt.country_id} data release"]
     problems = []
+    regional_record = record.get("regional_certification")
+    try:
+        expected_regional = (
+            RegionalCertification.model_validate(regional_record).model_dump(
+                mode="json", exclude_none=True
+            )
+            if regional_record is not None
+            else None
+        )
+    except ValueError as exc:
+        problems.append(f"the bundle cannot determine regional_certification: {exc}")
+    else:
+        claimed_regional = (
+            receipt.regional_certification.model_dump(mode="json", exclude_none=True)
+            if receipt.regional_certification is not None
+            else None
+        )
+        if claimed_regional != expected_regional:
+            problems.append("regional_certification differs from the bundle's record")
     for package in (receipt.wrapper, receipt.model, receipt.core):
         if not _package_can_be_certified(package):
             problems.append(

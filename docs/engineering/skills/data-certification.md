@@ -79,6 +79,80 @@ Microcosm national release with one of:
   claim first. Its `frs_2024_25` is not carried, so keep it loadable with a
   `dataset_overlays.uk` entry.
 
+- **An older local-area release, on an accepted mismatch.** When the national
+  cut moves to a new policyengine-uk before a local-area cut on that version
+  exists, a reviewer can accept retaining the older regional route. A reason
+  and a byte-bound input-surface audit are both required. First audit the
+  actual local H5 with the exact target model installed:
+
+  ```bash
+  .venv/bin/python scripts/audit_regional_input_surface.py \
+    --regional-manifest-uri "<the routed local-area release_manifest.json URI>" \
+    --artifact "microcosm_uk_2024_25_dense=/local/dense.h5" \
+    --model-version 2.147.2 \
+    --audited-by "<reviewer>" \
+    --limitation "the dense cut's VAT predates the policyengine-uk VAT factor fix (#2187, 2.135.7); the dashboard holds a VAT limit" \
+    --output regional-input-surface.json
+
+  .venv/bin/python scripts/bundle.py certify-data --country uk --data-producer populace \
+    --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
+    --regional-manifest-uri "<the routed local-area release_manifest.json URI>" \
+    --accept-regional-model-mismatch "<who accepted it and why>" \
+    --regional-input-surface-evidence regional-input-surface.json \
+    --model-version 2.147.2
+  ```
+
+  The comparison is ported from Microcosm #1348's
+  `tools/certify_uk_cut_in_policyengine_py.py`, and strengthened to inspect the
+  persisted entity-table columns, including each period and country-loader
+  aliases. Comparing the old model's input inventory alone cannot prove which
+  columns the file carries. The audit binds the regional release identity,
+  original manifest bytes, actual H5 bytes and exact target model version.
+  Certification refuses missing or mismatched evidence and **any dropped
+  column**. It records every defaulted input and the free-text limitations in
+  the validated `regional_certification`; the bundle hash binds that record.
+
+  The policyengine-uk 2.147.2 dataset loaders silently skip columns absent
+  from the model's variables: both the
+  [generic dataset loader](https://github.com/PolicyEngine/policyengine-uk/blob/fe0b99a36bd309a722b19937345e34290cb6dd73/policyengine_uk/simulation.py#L1113-L1127)
+  and the
+  [UK multi-year loader](https://github.com/PolicyEngine/policyengine-uk/blob/fe0b99a36bd309a722b19937345e34290cb6dd73/policyengine_uk/simulation.py#L1186-L1196)
+  use `continue` without warning. A removed or renamed input can therefore
+  disappear silently at runtime; the audit must catch that column loss before
+  certification.
+
+  The national certificate never widens. Area status remains `uncertified`:
+  the certificate still covers the national dataset only (#685). TRACE and
+  execution receipts expose the regional identity, build model, acceptance,
+  reason, input-surface result and limitations separately from the national
+  certification. The flag remains UK only; an empty reason, a release that
+  already covers the target model, or a missing regional release refuses.
+  The regional core checks still apply. Re-certifying with
+  `--drop-regional-release` removes the regional record, routes and artifact.
+
+  For the Budget route, the measured **model-inventory comparison** from
+  2.132.6 to 2.147.2 has no dropped names and these 16 new pure inputs:
+  `additional_residential_property_purchased`, `defined_benefit_pension_share`,
+  `directly_held_shares`, `early_years_school_start_deferred`,
+  `is_full_year_category_a_director`, `local_bus_uncapped_single_fare`,
+  `non_residential_property_purchased`, `non_residential_property_secured_debt`,
+  `other_residential_property_secured_debt`,
+  `pension_annual_allowance_taxable_lump_sum_death_benefits`,
+  `pension_contributions_via_salary_sacrifice_pre_2015`, `pip_dl_points`,
+  `pip_m_points`, `salary_sacrifice_returned_to_income`,
+  `unit_and_investment_trusts`, and `war_widows_pension_reported`.
+  Both `salary_sacrifice_returned_to_income` and
+  `local_bus_uncapped_single_fare` default in that comparison. This is not an
+  audit of cut `microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe`:
+  its private H5 was unavailable to this implementation job without
+  authentication. Certification must use the complete list measured from the
+  actual cut by the audit above, including any further missing stored inputs.
+  Record the pre-fix VAT limitation shown above for this dense cut.
+
+  After the receipt schema changes, refresh the Budget dashboard's vendored
+  `tests/fixtures/w4/execution_receipt.v1.schema.json` from
+  `src/policyengine/data/schemas/execution_receipt.v1.schema.json`.
+
 Either way, certification checks that the regional release serves the pinned
 model by its own build or compatibility claims (a `--qualified-pair-id` names
 the primary release only), checks its core claims as for the primary release
