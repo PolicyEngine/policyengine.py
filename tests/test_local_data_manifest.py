@@ -556,6 +556,44 @@ def test_every_overlapping_managed_artifact_must_match(
                 _certify()
 
 
+@pytest.mark.parametrize("transport", ["local", "fetched"])
+@pytest.mark.parametrize("record", ["certified", "managed"])
+def test_artifact_repository_and_path_are_distinct_identity_fields(
+    tmp_path, monkeypatch, transport, record
+):
+    payload = _payload()
+    name = "test_dataset" if record == "certified" else "supplement"
+    payload["artifacts"][name] = {
+        "kind": "microdata",
+        "repo_id": "policyengine/test-data/nested",
+        "path": "test_dataset.h5",
+        "revision": "f" * 40,
+        "sha256": "d" * 64,
+    }
+    local_path, trace_path, raw_bytes = _install_bundle(tmp_path, monkeypatch, payload)
+
+    def edit(country):
+        if record == "certified":
+            country["datasets"].clear()
+            country["certified_data_artifact"]["uri"] = (
+                f"hf://policyengine/test-data/nested/test_dataset.h5@{'f' * 40}"
+            )
+        else:
+            country["datasets"][name] = {
+                "path": "nested/test_dataset.h5",
+                "revision": "f" * 40,
+                "sha256": "d" * 64,
+            }
+
+    _edit_bundle(trace_path, edit)
+    if transport == "local":
+        monkeypatch.setenv(ENVIRONMENT_VARIABLE, str(local_path))
+    with patch.object(manifests.requests, "get", return_value=_response(raw_bytes)):
+        # Concatenated URI strings agree, but the asserted repo/path do not.
+        with pytest.raises(ValueError, match="artifact.*installed bundle"):
+            _certify()
+
+
 @pytest.mark.parametrize("kind", ["diagnostics", "evidence"])
 @pytest.mark.parametrize("prefixed", [False, True])
 def test_release_relative_paths_match_certification_normalization(

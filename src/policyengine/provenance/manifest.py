@@ -582,8 +582,21 @@ def _validate_bundle_artifacts(
         artifact = manifest.artifacts.get(certified.dataset)
         if artifact is None:
             refuse(certified.dataset, "missing certified dataset artifact")
-        if artifact.uri != certified.uri:
-            refuse(certified.dataset, f"expected {certified.uri}, got {artifact.uri}")
+        try:
+            location, revision = certified.uri.removeprefix("hf://").rsplit("@", 1)
+            owner, repo, path = location.split("/", 2)
+        except ValueError:
+            refuse(certified.dataset, "invalid bundled certified artifact URI")
+        expected_identity = (f"{owner}/{repo}", path, revision)
+        actual_identity = (artifact.repo_id, artifact.path, artifact.revision)
+        if (
+            not certified.uri.startswith("hf://")
+            or actual_identity != expected_identity
+        ):
+            refuse(
+                certified.dataset,
+                f"expected {expected_identity!r}, got {actual_identity!r}",
+            )
         if certified.sha256 is not None and artifact.sha256 != certified.sha256:
             refuse(certified.dataset, "certified SHA-256 pin differs")
     if default not in country.datasets and (
@@ -600,18 +613,18 @@ def _validate_bundle_artifacts(
         reference = country.datasets.get(name)
         if reference is None:
             continue
-        expected_uri = build_hf_uri(
-            repo_id=reference.repo_id or country.data_package.repo_id,
-            path_in_repo=reference.path,
-            revision=reference.revision or _artifact_revision(country.data_package),
+        expected_identity = (
+            reference.repo_id or country.data_package.repo_id,
+            reference.path,
+            reference.revision or _artifact_revision(country.data_package),
         )
-        actual_uri = build_hf_uri(
-            repo_id=artifact.repo_id,
-            path_in_repo=artifact_path_for_country_manifest(artifact, uri_parts),
-            revision=artifact.revision,
+        actual_identity = (
+            artifact.repo_id,
+            artifact_path_for_country_manifest(artifact, uri_parts),
+            artifact.revision,
         )
-        if actual_uri != expected_uri:
-            refuse(name, f"expected {expected_uri}, got {actual_uri}")
+        if actual_identity != expected_identity:
+            refuse(name, f"expected {expected_identity!r}, got {actual_identity!r}")
         if (artifact.repo_type or country.data_package.repo_type) != (
             reference.repo_type or country.data_package.repo_type
         ):
