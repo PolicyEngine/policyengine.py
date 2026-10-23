@@ -8,20 +8,24 @@
 # pr_code_changes.yaml has a path filter, so a pull request that adds only
 # such files runs none of its jobs. This workflow has no path or branch
 # filter. It checks the pull request's head commit, fetched as data, not the
-# merge with the base, so retargeting a stacked pull request cannot change
-# the result. Main has none of these paths, so a pull request based on main
-# fails exactly when it adds one.
+# merge with the base, so the base cannot change the result. Main has none
+# of these paths, so a pull request based on main fails exactly when it adds
+# one. "edited" covers a retarget: a stacked pull request whose old base had
+# no guard first gets one when it is retargeted to main. Every edit runs the
+# full check, so a title edit cannot replace a failure with a skipped run.
 #
-# A "[skip ci]" in a pull request's head commit skips pull_request runs, and
-# a direct push can reach main without one. So it also checks main on every
-# push and every day: a schedule is never skipped. It uses pull_request, not
-# pull_request_target, like the other pull request workflows here
-# (docs/release-bundles.md): GitHub blocks pull_request_target in public
-# repositories without an event policy from 2 December 2026.
+# A skip instruction in a pushed commit's message skips pull_request and
+# push runs, and so can a merge that carries one to main. The daily schedule
+# is never skipped, so a note that reaches main that way is found within a
+# day. It uses pull_request, not pull_request_target, like the other pull
+# request workflows here (docs/release-bundles.md): GitHub blocks
+# pull_request_target in public repositories without an event policy from
+# 2 December 2026.
 
 name: Agent notes
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches:
       - main
@@ -45,15 +49,34 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Fetch the pull request's head commit
+      - name: Fetch the pull request's head and the default branch
         if: github.event_name == 'pull_request'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: git fetch --no-tags --depth=1 origin "$HEAD_SHA"
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: >-
+          git fetch --no-tags --depth=1 origin "$HEAD_SHA"
+          "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
       - name: No agent or job notes in the tree
         # An explicit bash shell adds pipefail, so a git failure fails the
         # step instead of passing it. The script sets it too.
         shell: bash
         env:
+          EVENT: ${{ github.event_name }}
           COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: .github/check-agent-notes.sh "$COMMIT"
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        # On a pull request, run the default branch's guard, so a pull
+        # request cannot pass by editing the script. Only while the default
+        # branch has none, on the pull request that adds it, does the
+        # checked-out copy run. Other events check out the commit they check.
+        run: |
+          guard=.github/check-agent-notes.sh
+          if [ "$EVENT" = pull_request ]; then
+            main="refs/remotes/origin/$DEFAULT_BRANCH"
+            git rev-parse --verify --quiet "$main^{commit}" >/dev/null
+            if git cat-file -e "$main:$guard" 2>/dev/null; then
+              git show "$main:$guard" >"$RUNNER_TEMP/check-agent-notes.sh"
+              guard="$RUNNER_TEMP/check-agent-notes.sh"
+            fi
+          fi
+          bash "$guard" "$COMMIT"

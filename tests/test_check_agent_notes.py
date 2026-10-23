@@ -13,8 +13,12 @@ Invariants:
 4. The runner reads no path it prints as a workflow command: the only
    commands are its own stop-commands, the matching resume and one error.
 5. The workflow checks every pull request's head, with no path or branch
-   filter, and checks main on every push and on a schedule, which "[skip ci]"
-   cannot skip. It holds a read-only token and no pull_request_target.
+   filter, on every push, retarget or other edit, and checks main on every
+   push and on a schedule, which no commit message can skip. It holds a
+   read-only token and no pull_request_target.
+6. On a pull request it runs the default branch's guard, so editing the
+   script cannot pass the pull request; only while the default branch has no
+   guard does the checked-out copy run.
 
 Invariant 1 is checked on examples and, against a Python reference, on
 generated trees, where invariant 2 is checked against the index mode. The
@@ -370,16 +374,23 @@ def test_gitignore_keeps_the_folders_out(path):
     assert result.returncode == 0, path
 
 
+def _workflow():
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+
+
 def test_the_workflow_checks_every_pull_request_head_and_main():
     """Invariant 5."""
     text = WORKFLOW.read_text(encoding="utf-8")
-    workflow = yaml.safe_load(text)
+    workflow = _workflow()
     # PyYAML reads the bare key "on" as True.
     triggers = workflow.get("on", workflow.get(True))
     # No pull_request_target: pull request workflows here never use it
     # (docs/release-bundles.md).
     assert set(triggers) == {"pull_request", "push", "schedule", "workflow_dispatch"}
-    assert triggers["pull_request"] is None, "no filters or types"
+    # No path or branch filter; "edited" catches a retarget.
+    assert triggers["pull_request"] == {
+        "types": ["opened", "synchronize", "reopened", "edited"]
+    }
     assert triggers["push"] == {"branches": ["main"]}
     assert len(triggers["schedule"]) == 1
     assert workflow["permissions"] == {"contents": "read"}
@@ -389,15 +400,108 @@ def test_the_workflow_checks_every_pull_request_head_and_main():
     checkout, fetch, guard = job["steps"]
     assert checkout == {"uses": "actions/checkout@v6"}
     assert fetch["if"] == "github.event_name == 'pull_request'"
-    assert fetch["env"] == {"HEAD_SHA": "${{ github.event.pull_request.head.sha }}"}
-    assert fetch["run"] == 'git fetch --no-tags --depth=1 origin "$HEAD_SHA"'
-    assert guard["run"] == '.github/check-agent-notes.sh "$COMMIT"'
+    assert fetch["env"] == {
+        "HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+        "DEFAULT_BRANCH": "${{ github.event.repository.default_branch }}",
+    }
+    assert fetch["run"] == (
+        'git fetch --no-tags --depth=1 origin "$HEAD_SHA" '
+        '"+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"'
+    )
     assert guard["env"] == {
-        "COMMIT": "${{ github.event.pull_request.head.sha || github.sha }}"
+        "EVENT": "${{ github.event_name }}",
+        "COMMIT": "${{ github.event.pull_request.head.sha || github.sha }}",
+        "DEFAULT_BRANCH": "${{ github.event.repository.default_branch }}",
     }
     assert guard["shell"] == "bash"
     assert "if" not in guard and "continue-on-error" not in guard
     assert os.access(SCRIPT, os.X_OK)
+
+
+# Invariant 6: the workflow's guard step, run as GitHub runs a bash step, in
+# a repository laid out as the job leaves it. The default branch is at
+# refs/remotes/origin/main, and the pull request's head is checked out (its
+# merge with a base it descends from has the same tree).
+
+PASS_ALWAYS = "#!/usr/bin/env bash\necho 'No agent or job notes in the tree.'\n"
+
+
+def _step_repo(tmp_path, main_guard, head_guard):
+    repo = tmp_path / "repo"
+    (repo / ".github").mkdir(parents=True)
+    _git("init", "--quiet", cwd=repo)
+    (repo / "README.md").write_text("x\n")
+    if main_guard is not None:
+        (repo / ".github" / "check-agent-notes.sh").write_text(main_guard)
+    _git("add", "-A", cwd=repo)
+    _git("commit", "--quiet", "-m", "main", cwd=repo)
+    _git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=repo)
+    (repo / ".github" / "check-agent-notes.sh").write_text(head_guard)
+    (repo / ".job").mkdir()
+    (repo / ".job" / "HANDOFF.md").write_text("note\n")
+    _git("add", "-A", cwd=repo)
+    _git("commit", "--quiet", "-m", "head", cwd=repo)
+    return repo, _git("rev-parse", "HEAD", cwd=repo).stdout.decode().strip()
+
+
+def _run_step(repo, event, commit):
+    (*_, guard) = next(iter(_workflow()["jobs"].values()))["steps"]
+    step = repo.parent / "step.sh"
+    step.write_text(guard["run"])
+    runner_temp = repo.parent / "runner-temp"
+    runner_temp.mkdir(exist_ok=True)
+    env = {
+        **ISOLATED_GIT,
+        "EVENT": event,
+        "COMMIT": commit,
+        "DEFAULT_BRANCH": "main",
+        "RUNNER_TEMP": str(runner_temp),
+    }
+    return subprocess.run(
+        ["bash", "--noprofile", "--norc", "-eo", "pipefail", str(step)],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+
+def test_a_pull_request_cannot_pass_by_editing_the_guard(tmp_path):
+    """Round 3 of the review of #713 reproduced this pass on the PR's copy."""
+    guard = SCRIPT.read_text(encoding="utf-8")
+    repo, head = _step_repo(tmp_path, main_guard=guard, head_guard=PASS_ALWAYS)
+    result = _run_step(repo, "pull_request", head)
+    assert result.returncode == 1, result.stdout
+    assert _reported(result) == {".job/HANDOFF.md"}
+
+
+def test_until_main_has_a_guard_the_checked_out_copy_runs(tmp_path):
+    guard = SCRIPT.read_text(encoding="utf-8")
+    repo, head = _step_repo(tmp_path, main_guard=None, head_guard=guard)
+    result = _run_step(repo, "pull_request", head)
+    assert result.returncode == 1, result.stdout
+    assert _reported(result) == {".job/HANDOFF.md"}
+
+
+def test_a_pull_request_run_without_the_default_branch_fails(tmp_path):
+    """Fails closed, rather than falling back to the pull request's copy."""
+    guard = SCRIPT.read_text(encoding="utf-8")
+    repo, head = _step_repo(tmp_path, main_guard=guard, head_guard=PASS_ALWAYS)
+    _git("update-ref", "-d", "refs/remotes/origin/main", cwd=repo)
+    result = _run_step(repo, "pull_request", head)
+    assert result.returncode != 0
+    assert "No agent or job notes in the tree." not in result.stdout
+
+
+@pytest.mark.parametrize("event", ["push", "schedule", "workflow_dispatch"])
+def test_other_events_run_the_checked_out_guard_on_their_commit(tmp_path, event):
+    guard = SCRIPT.read_text(encoding="utf-8")
+    repo, head = _step_repo(tmp_path, main_guard=None, head_guard=guard)
+    result = _run_step(repo, event, head)
+    assert result.returncode == 1, result.stdout
+    assert _reported(result) == {".job/HANDOFF.md"}
+    assert _run_step(repo, event, f"{head}~1").returncode == 0
 
 
 # Invariants 1 and 2 on generated trees. Segments mix the note names, in any

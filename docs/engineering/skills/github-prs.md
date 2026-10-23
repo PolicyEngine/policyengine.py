@@ -58,7 +58,8 @@ on every PR and fails when the PR's head commit contains:
 Put their content in the PR description or a PR comment instead. `.gitignore`
 ignores the three folders, so `git add -A` leaves them out.
 
-The workflow checks the PR's head commit, so the PR's base does not change
-the result. A `[skip ci]` in the head commit skips it, so it also checks main
-on every push and once a day. To check a commit yourself, run
-`.github/check-agent-notes.sh <commit>`.
+The workflow checks the PR's head commit with the default branch's copy of the
+script, so neither the PR's base nor an edit to the script changes the
+result. A skip instruction in a commit message skips the PR and push runs, so
+it also checks main once a day, which nothing skips. To check a commit
+yourself, run `.github/check-agent-notes.sh <commit>`.
