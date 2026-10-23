@@ -1,0 +1,37 @@
+# Workflow that fails a pull request that adds agent or job notes.
+#
+# Subfleet build jobs keep their state in .job/ at the root of their
+# worktree, and #704 and #699 committed .job/HANDOFF.md and .job/PR_BODY.md
+# on 23 October 2026. .github/check-agent-notes.sh lists the paths it
+# rejects. pr_code_changes.yaml has a path filter, so a pull request that
+# adds only such files runs none of its jobs. This workflow has no path
+# filter and runs on every pull request, whatever it changes and whatever
+# its base: a stacked pull request carries its notes to main when its base
+# merges.
+
+name: Agent notes
+on:
+  pull_request:
+  workflow_dispatch:
+
+# A new push to a pull request supersedes the run on its previous head, so
+# cancel that run. Manual dispatches are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  AgentNotes:
+    name: No agent or job notes in the tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: No agent or job notes in the tree
+        # An explicit bash shell adds pipefail, so a git failure fails the
+        # step instead of passing it. The script sets it too.
+        shell: bash
+        run: .github/check-agent-notes.sh
