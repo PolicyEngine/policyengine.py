@@ -128,7 +128,11 @@ The trust anchor is the `trov:sha256` on
 `composition/1/artifact/data_release_manifest` in the installed country's
 `data/bundle/{country}.trace.tro.jsonld`. The file's **raw bytes** must match that
 pin. A missing pin, unreadable file, altered bytes, or certification mismatch
-stops the process. The model, core, build ID and fingerprint checks still apply;
+stops the process. Every definition of the artifact ID in the TRO must agree on
+one digest. After revision normalization, the manifest's certified/default
+artifact and all artifacts shared with the bundle must agree with the bundle's
+locations and pinned hashes. This artifact check also applies to fetched
+manifests. The model, core, build ID and fingerprint checks still apply;
 selecting a local file cannot extend the bundle's certification.
 
 At G0 each morning, while Hugging Face is available, use the exact installed
@@ -137,7 +141,7 @@ enabling the setting. Keep the Hugging Face token in `HUGGING_FACE_TOKEN`,
 `HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN`:
 
 ```bash
-env -u POLICYENGINE_UK_DATA_MANIFEST_FILE POLICYENGINE_SKIP_COUNTRY_IMPORTS=1 python - <<'PY'
+env -u POLICYENGINE_UK_DATA_MANIFEST_FILE POLICYENGINE_SKIP_COUNTRY_IMPORTS=1 python - <<'PY' &&
 import hashlib
 from pathlib import Path
 
@@ -173,11 +177,6 @@ execution receipts record it as `runtime.data_certification_basis`. The
 receipt's certificate keeps the bundle's published basis so certificate
 verification remains reproducible. See [execution receipts](receipts.md).
 Refresh and verify the file whenever the installed certified release changes.
-
-For Autumn Budget deployment, ship this support in the same `policyengine`
-release as María's weekend Microcosm cut certification. Fetch the manifest for
-that released bundle at G0; an earlier cut's manifest will fail its new pin.
-Use the normal changelog-fragment release workflow for both changes.
 
 ## Bundle-only PRs
 
