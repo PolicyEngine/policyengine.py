@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Literal, Optional
 from urllib.parse import quote
 
 import requests
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from policyengine.provenance.bundle_validation import (
     shadowed_dataset_overlays,
@@ -140,6 +141,7 @@ class DataReleaseArtifact(BaseModel):
 
 
 class DataReleaseManifest(BaseModel):
+    _source_is_local: bool = PrivateAttr(default=False)
     schema_version: int
     data_package: PackageVersion
     dataset_role: Optional[str] = None
@@ -187,7 +189,12 @@ class DataCertification(BaseModel):
 #: Bases whose runtime model legitimately differs from the data's build-time
 #: model, so the build fingerprint is not expected to match.
 CLAIM_BASED_COMPATIBILITY = frozenset(
-    {"legacy_compatible_model_package", "qualified_exact_pair"}
+    {
+        "legacy_compatible_model_package",
+        "qualified_exact_pair",
+        "legacy_compatible_model_package_local_manifest",
+        "qualified_exact_pair_local_manifest",
+    }
 )
 
 
@@ -367,8 +374,84 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     return manifest
 
 
-@lru_cache
+def bundled_data_release_manifest_sha256(country_id: str) -> str:
+    """Read the manifest's byte digest from the installed country bundle TRO.
+
+    The artifact and its arrangement must describe the release this bundle
+    serves. A missing or stale sidecar cannot authorise a local manifest.
+    """
+    country_manifest = get_release_manifest(country_id)
+    tro_path = files("policyengine").joinpath(
+        "data", "bundle", f"{country_id}.trace.tro.jsonld"
+    )
+    artifact_id = "composition/1/artifact/data_release_manifest"
+    try:
+        tro = json.loads(tro_path.read_bytes())
+        artifacts = [
+            artifact
+            for node in tro["@graph"]
+            for artifact in node.get("trov:hasComposition", {}).get(
+                "trov:hasArtifact", []
+            )
+            if artifact.get("@id") == artifact_id
+        ]
+        locations = [
+            location.get("trov:hasLocation")
+            for node in tro["@graph"]
+            for arrangement in node.get("trov:hasArrangement", [])
+            for location in arrangement.get("trov:hasArtifactLocation", [])
+            if location.get("trov:hasArtifact", {}).get("@id") == artifact_id
+        ]
+        digest = artifacts[0].get("trov:sha256") if len(artifacts) == 1 else None
+        if (
+            not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-fA-F]{64}", digest) is None
+            or locations != [https_release_manifest_uri(country_manifest.data_package)]
+        ):
+            raise ValueError("missing, ambiguous, malformed, or stale manifest pin")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(
+            f"Cannot use a local data release manifest for country '{country_id}': "
+            f"no valid SHA-256 pin in the installed bundle TRO {tro_path}. "
+            "Expected SHA-256: unavailable; actual SHA-256: unavailable."
+        ) from exc
+    return digest.lower()
+
+
 def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
+    """Load an explicitly configured, bundle-pinned file or the cached fetch.
+
+    Local files are read and verified on every call, including after a remote
+    manifest was cached. Configure the setting before importing country models.
+    """
+    env_name = f"POLICYENGINE_{country_id.upper()}_DATA_MANIFEST_FILE"
+    local_file = os.environ.get(env_name)
+    if local_file is None:
+        return _fetch_data_release_manifest(country_id)
+
+    expected = bundled_data_release_manifest_sha256(country_id)
+    try:
+        source_bytes = Path(local_file).expanduser().read_bytes()
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise ValueError(
+            f"Cannot read {env_name}={local_file!r}: {exc}. "
+            f"Expected SHA-256: {expected}; actual SHA-256: unavailable."
+        ) from exc
+    actual = hashlib.sha256(source_bytes).hexdigest()
+    if actual != expected:
+        raise ValueError(
+            f"Local data release manifest {env_name}={local_file!r} "
+            f"does not match the installed bundle. Expected SHA-256: {expected}; "
+            f"actual SHA-256: {actual}."
+        )
+    manifest = DataReleaseManifest.model_validate_json(source_bytes)
+    manifest.source_sha256 = actual
+    manifest._source_is_local = True
+    return _apply_release_revision(manifest, get_release_manifest(country_id))
+
+
+@lru_cache
+def _fetch_data_release_manifest(country_id: str) -> DataReleaseManifest:
     country_manifest = get_release_manifest(country_id)
 
     try:
@@ -402,6 +485,13 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     if not isinstance(source_bytes, bytes):
         source_bytes = response.text.encode("utf-8")
     data_release_manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    return _apply_release_revision(data_release_manifest, country_manifest)
+
+
+def _apply_release_revision(
+    data_release_manifest: DataReleaseManifest,
+    country_manifest: CountryReleaseManifest,
+) -> DataReleaseManifest:
     release_revision = country_manifest.data_package.release_manifest_revision
     if release_revision is not None:
         for artifact in data_release_manifest.artifacts.values():
@@ -411,6 +501,11 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
             ):
                 artifact.revision = release_revision
     return data_release_manifest
+
+
+# Preserve the existing cache controls for callers and tests of fetched manifests.
+get_data_release_manifest.cache_clear = _fetch_data_release_manifest.cache_clear
+get_data_release_manifest.cache_info = _fetch_data_release_manifest.cache_info
 
 
 def _specifier_matches(version: str, specifier: str) -> bool:
@@ -433,7 +528,10 @@ def _runtime_core_is_certified(
     tested with one core, so it holds only for that core.
     """
 
-    if certification.compatibility_basis != "qualified_exact_pair":
+    if certification.compatibility_basis not in {
+        "qualified_exact_pair",
+        "qualified_exact_pair_local_manifest",
+    }:
         return True
     if runtime_core_version is None:
         from importlib import metadata
@@ -492,6 +590,33 @@ def certify_data_release_compatibility(
             )
         raise exc
 
+    certification = _certify_available_data_release(
+        country_id,
+        country_manifest,
+        data_release_manifest,
+        runtime_model_version,
+        runtime_data_build_fingerprint,
+        runtime_core_version,
+    )
+    if data_release_manifest._source_is_local:
+        return certification.model_copy(
+            update={
+                "compatibility_basis": (
+                    f"{certification.compatibility_basis}_local_manifest"
+                )
+            }
+        )
+    return certification
+
+
+def _certify_available_data_release(
+    country_id: str,
+    country_manifest: CountryReleaseManifest,
+    data_release_manifest: DataReleaseManifest,
+    runtime_model_version: str,
+    runtime_data_build_fingerprint: Optional[str],
+    runtime_core_version: Optional[str],
+) -> DataCertification:
     # A remote build-model, fingerprint or publisher claim cannot broaden an
     # exact-pair certificate beyond the model, core and recorded data build
     # that qualification tested. Check them before any acceptance path returns.
