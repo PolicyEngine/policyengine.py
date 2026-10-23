@@ -1,47 +1,44 @@
-# Local manifest fallback handoff
+# PR #704 review-fix handoff
 
 - Draft PR: https://github.com/PolicyEngine/policyengine.py/pull/704
-- Issue: https://github.com/PolicyEngine/policyengine.py/issues/703
-- Branch: `budget-local-data-manifest`, based on `origin/main` `485dc23302ec4abc6a5f7df5c6c03b8525f64c4d`.
-- Reviewed implementation head: `78e09ed63c3805b8739bc9ea229a0d393c213e46` (this handoff is committed immediately afterwards).
-- Commits: `0bb58755` local manifest/certification/tests; `78e09ed6` receipt/schema/docs/tests.
+- Branch: `budget-local-data-manifest`; confirmed reviewed remote head `fd4e099ed3ff768041f3a537e6e38527c07b0bbf`.
+- Validated implementation head SHA: `0d7bf1a641d61b8951f47ab12d8d4867f57df140`.
+- The following commit updates only this handoff. Its exact final head is recorded in `.job/HEAD` and `.job/local-data-manifest.bundle`.
 
-## Design
+## Fixes
 
-`POLICYENGINE_<COUNTRY>_DATA_MANIFEST_FILE` always selects the local file when present. This avoids outage latency and gives deterministic behavior. Unset keeps the original cached network fetch and certification results.
-
-The pin is the raw-byte `trov:sha256` for `composition/1/artifact/data_release_manifest` in the installed country TRACE TRO. Its arrangement must name the installed release's manifest URI. Missing, malformed, duplicate, or stale pins refuse. The current installed UK pin was checked as `49f9fa820db2e6544ff5cdceeb2d868a504843a6a1c1c06b37188621e700066f`. No environment digest is accepted. Local bytes are re-read and hashed on every call, before JSON parsing/revision rewriting, so cached remote/local loads cannot bypass verification. Invalid paths and digest errors fail closed with digest context.
-
-Local bytes run through the unchanged certification acceptance logic. All four successful runtime bases gain `_local_manifest`; the claim-based set includes the corresponding local variants. Exact-pair model/core/build restrictions and fingerprint acceptance remain the same. TRACE accepts the basis as a string. Packaged receipts recheck local certification and record it in optional `runtime.data_certification_basis`, keeping the published bundle certificate basis and both digest domains unchanged. Unset receipts omit the new annotation. The schema is regenerated and checked. Caller-supplied bundles do not claim packaged provenance.
+- Scan every TRO definition of the manifest artifact ID, including direct graph nodes, nested definitions and artifact references; require one distinct valid SHA-256 assertion. Preserve canonical inline/location checks.
+- Validate both local and fetched manifest artifacts after revision rewriting. The certified/default artifact must be present and anchored; every overlapping managed artifact must agree with bundled repo/path/revision, repository type and pinned SHA-256. Compare identity fields separately to prevent ambiguous URI concatenation. Primary manifests may omit separately pinned regional artifacts and overlays.
+- Share the existing release-relative diagnostics/evidence normalization with certification. Exact-pair model/core/build and fingerprint acceptance logic remains unchanged; unset fetch/cache/offline behavior is preserved for consistent bundles.
+- Replace function attributes with a typed callable cache facade.
+- Make the documented export conditional on successful download/verification/atomic replacement; remove release coordination from permanent public docs.
+- PR body records the invariants and both downstream actions. No other repository was edited.
 
 ## Validation
 
-- 38 local-manifest tests passed, including 80 Hypothesis byte mutations and 10 direct main-snapshot differential scenarios.
-- 146 existing certification tests passed.
-- 96 bundle/bootstrap/tooling tests passed.
-- Broad provenance suite: 2,337 passed, 6 skipped, including all 6 new receipt tests.
-- Wheel/package-pin tests: 96 passed.
-- Total across these final focused runs: **2,713 passed, 6 skipped**. Skips cover private data, Python/model-version-specific cases, and disabled top-level country imports in the broad run.
-- `make format`, `make lint`, `git diff --check`, and `scripts/generate_receipt_schemas.py --check` passed.
-- Every pytest invocation checked load1 <=110 and `os.statvfs` available bytes >=55,000,000,000. Observed load was below 37 and free disk above 132 GB. No pytest workers were used.
-- Local fixtures are synthetic; no private manifest or microdata is committed.
+**3,322 unique cases passed; five skipped.**
 
-Detailed parent-run logs are local files under `.job/*tests.log`.
+- Initial local/TRO-pin run: 88 passed, including two 80-example Hypothesis properties (byte mutation and duplicate placement).
+- Broad 56-module provenance/certification/disclosure run: 3,256 passed, five skipped, one failure from the old missing-default error-message assertion. It now refuses earlier in the shared validator; the corrected complete TRO regeneration module passed all 40 cases on rerun.
+- Release/bootstrap-focused run: 189 passed, including 59 cases outside the broad selection and two new default-anchor cases.
+- Final affected manifest/certification run: 280 passed, including all 82 local-manifest cases, all 12 TRO-pin cases and four new repo/path-boundary cases. No failures remain in pytest's failure cache.
+- `make format`, `make lint`, focused `mypy --follow-imports=silent src/policyengine/provenance/manifest.py`, `git diff --check`, and generated receipt schema checks passed. Documentation shell block passes `bash -n`.
+- Every pytest invocation checked load1 <=110 and available disk >=55,000,000,000 bytes; no pytest workers. Observed load1 9.04–19.02; available disk 144.3–146.9 GB decimal. Tests used Python 3.13.9.
+- Detailed logs and selected modules remain under `.job/`. No private manifests or microdata were committed.
 
-## Coordination and remaining work
+## Downstream actions
 
-- Leave PR draft; the hub reviews and merges it.
-- Ship in the same policyengine.py release as María's weekend Microcosm cut certification. No versions or country/data pins were changed. `changelog.d/703.added.md` follows the release workflow.
-- The G0 morning fetch/verify/atomic-refresh instructions are in `docs/bundles.md`. Refresh the local manifest after adopting the newly certified release.
-- Dashboard follow-up: refresh `tests/fixtures/w4/execution_receipt.v1.schema.json` in `PolicyEngine/uk-autumn-budget-dashboard-2026` when upgrading; its receipt adapter has no basis allowlist, but its schema equality test requires the new schema. See `docs/receipts.md`.
+- Dashboard: refresh vendored `tests/fixtures/w4/execution_receipt.v1.schema.json` when upgrading.
+- Scorecard: `pipeline/uk_replay_variants.py:730` retains the setting in offline isolation, while `:750` requires exact runtime bundle equality. Clear `POLICYENGINE_*_DATA_MANIFEST_FILE` during isolation.
+- Leave the PR draft; do not merge. No versions, country pins, data or certified releases changed.
 
-## Workspace Git metadata
+## Workspace Git metadata and delivery
 
-The assigned worktree's protected `.git` points into the caller's repository, where metadata writes are sandbox-blocked. All work and independent Git metadata stayed in this workspace. To inspect the actual branch here:
+The protected workspace `.git` points into the caller's repository. All mutable Git metadata is instead inside this workspace:
 
 ```bash
 GIT_DIR="$PWD/.job/git-copy/.git" GIT_WORK_TREE="$PWD" git status
-GIT_DIR="$PWD/.job/git-copy/.git" GIT_WORK_TREE="$PWD" git log -3 --oneline
+GIT_DIR="$PWD/.job/git-copy/.git" GIT_WORK_TREE="$PWD" git log -4 --oneline
 ```
 
-The branch is pushed to the canonical repository. A portable `.job/local-data-manifest.bundle` is also left for harvesting; it contains `budget-local-data-manifest` relative to the main base. The original protected `.git` pointer was not changed. No caller files were written.
+The original pointer and caller checkout were not changed. `.job/local-data-manifest.bundle` is portable relative to main `485dc23302ec4abc6a5f7df5c6c03b8525f64c4d`. The single final push is attempted after committing this handoff; its outcome is recorded in `.job/PUSH_RESULT.txt`. `.job/HEAD` contains the final branch SHA. No history was rewritten and nothing was pushed to main or master.
