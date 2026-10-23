@@ -1,0 +1,66 @@
+{
+  "scope": "Light preparation only; no certification/evidence heavy command executed",
+  "branch": "certify-uk-a133f37a-national",
+  "base_704": "da2ae8fb8e97145093e35366686df99c1e38449e",
+  "syntax_parsed": [
+    ".job/run-attribution.py",
+    ".job/certification-evidence.py",
+    ".job/index-evidence.py",
+    ".job/prepare-tool.py",
+    ".job/certify_uk_cut_in_policyengine_py.py"
+  ],
+  "checks": [
+    {
+      "command": [
+        "bash",
+        "-n",
+        "run-heavy.sh"
+      ],
+      "returncode": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "ruff",
+        "check",
+        ".job/run-attribution.py",
+        ".job/certification-evidence.py",
+        ".job/index-evidence.py",
+        ".job/prepare-tool.py"
+      ],
+      "returncode": 0,
+      "output": "All checks passed!"
+    },
+    {
+      "command": [
+        "ruff",
+        "format",
+        "--check",
+        ".job/run-attribution.py",
+        ".job/certification-evidence.py",
+        ".job/index-evidence.py",
+        ".job/prepare-tool.py"
+      ],
+      "returncode": 0,
+      "output": "4 files already formatted"
+    }
+  ],
+  "attribution_fixture_receipt": ".job/attribution-light-checks.json",
+  "patch_application_receipt": ".job/tool-patches.json",
+  "metadata_reads": "Two pinned release manifests and producer receipt schemas only; no H5 download or load",
+  "source_sha256": {
+    ".job/run-attribution.py": "249f33898a6b07a869b269d55cca75438ccd0a5f1df7589e0e75142195b35eba",
+    ".job/certification-evidence.py": "c12754ad420014f9b7aa00041997fe616303264fc05a022e10188e3c0349c9ea",
+    ".job/index-evidence.py": "11ff31fb0a13cd2c4470992f4711138d727992fe06530b69e27f7078e09ad0cf",
+    ".job/prepare-tool.py": "9db9eabe5502194d2623f342bb4c05653c7cfb5ecbe9f564b3b55ee7370a0808",
+    ".job/certify_uk_cut_in_policyengine_py.py": "941df515c0609cfcb27af3143ccb3e09fb089975843ea510b4e2022f7733d5ae"
+  },
+  "simulations": 0,
+  "national_data_loads": 0,
+  "test_suites": 0,
+  "snapshot_steps": 0,
+  "uc_floor_steps": 0,
+  "heavy_runner_executed": false,
+  "pushed": false,
+  "pr_opened": false
+}
