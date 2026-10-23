@@ -5,34 +5,35 @@
 # on 23 October 2026. .github/check-agent-notes.sh lists the paths it
 # rejects.
 #
-# It runs on pull_request_target, not pull_request, so that:
-# - a "[skip ci]" in the head commit cannot skip it (skip instructions apply
-#   to push and pull_request only);
-# - it runs on a pull request with a merge conflict, which pull_request skips;
-# - it runs main's guard, so a pull request cannot turn it off by editing
-#   this file or the script. A change to either takes effect when it merges;
-#   tests/test_check_agent_notes.py tests it before then.
-# It checks the head commit's whole tree, not the merge with the base, so
-# retargeting a stacked pull request cannot change the result. Main has
-# none of these paths, so a pull request based on main fails exactly when
-# it adds one. pull_request_target has no path filter here and runs for
-# every base branch.
+# pr_code_changes.yaml has a path filter, so a pull request that adds only
+# such files runs none of its jobs. This workflow has no path or branch
+# filter. It checks the pull request's head commit, fetched as data, not the
+# merge with the base, so retargeting a stacked pull request cannot change
+# the result. Main has none of these paths, so a pull request based on main
+# fails exactly when it adds one.
 #
-# pull_request_target runs with this repository's token, so the job must
-# never run code from the pull request: it checks out main, fetches the head
-# commit as data, and reads its tree into a temporary index. The token can
-# only read, and no secret is used.
+# A "[skip ci]" in a pull request's head commit skips pull_request runs, and
+# a direct push can reach main without one. So it also checks main on every
+# push and every day: a schedule is never skipped. It uses pull_request, not
+# pull_request_target, like the other pull request workflows here
+# (docs/release-bundles.md): GitHub blocks pull_request_target in public
+# repositories without an event policy from 2 December 2026.
 
 name: Agent notes
 on:
-  pull_request_target:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 6 * * *"
   workflow_dispatch:
 
 # A new push to a pull request supersedes the run on its previous head, so
-# cancel that run. Manual dispatches are never cancelled.
+# cancel that run. Runs on main are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -43,11 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # Main (the commit that triggered a manual run), never the pull
-      # request's code.
       - uses: actions/checkout@v6
-      - name: Fetch the pull request's head commit as data
-        if: github.event_name == 'pull_request_target'
+      - name: Fetch the pull request's head commit
+        if: github.event_name == 'pull_request'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: git fetch --no-tags --depth=1 origin "$HEAD_SHA"

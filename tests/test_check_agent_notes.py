@@ -12,8 +12,9 @@ Invariants:
 3. A git failure fails the guard instead of passing it.
 4. The runner reads no path it prints as a workflow command: the only
    commands are its own stop-commands, the matching resume and one error.
-5. The workflow runs main's guard on every pull request's head, on an event
-   that "[skip ci]" cannot skip, without running code from the pull request.
+5. The workflow checks every pull request's head, with no path or branch
+   filter, and checks main on every push and on a schedule, which "[skip ci]"
+   cannot skip. It holds a read-only token and no pull_request_target.
 
 Invariant 1 is checked on examples and, against a Python reference, on
 generated trees, where invariant 2 is checked against the index mode. The
@@ -369,23 +370,25 @@ def test_gitignore_keeps_the_folders_out(path):
     assert result.returncode == 0, path
 
 
-def test_the_workflow_runs_mains_guard_on_every_pull_request_head():
+def test_the_workflow_checks_every_pull_request_head_and_main():
     """Invariant 5."""
     text = WORKFLOW.read_text(encoding="utf-8")
     workflow = yaml.safe_load(text)
     # PyYAML reads the bare key "on" as True.
     triggers = workflow.get("on", workflow.get(True))
-    # "[skip ci]" skips push and pull_request runs only.
-    assert set(triggers) == {"pull_request_target", "workflow_dispatch"}
-    assert triggers["pull_request_target"] is None, "no filters or types"
+    # No pull_request_target: pull request workflows here never use it
+    # (docs/release-bundles.md).
+    assert set(triggers) == {"pull_request", "push", "schedule", "workflow_dispatch"}
+    assert triggers["pull_request"] is None, "no filters or types"
+    assert triggers["push"] == {"branches": ["main"]}
+    assert len(triggers["schedule"]) == 1
     assert workflow["permissions"] == {"contents": "read"}
     assert "secrets." not in text
     (job,) = workflow["jobs"].values()
     assert "continue-on-error" not in job
     checkout, fetch, guard = job["steps"]
-    # Main's code, never the pull request's: no ref, so the default branch.
     assert checkout == {"uses": "actions/checkout@v6"}
-    assert fetch["if"] == "github.event_name == 'pull_request_target'"
+    assert fetch["if"] == "github.event_name == 'pull_request'"
     assert fetch["env"] == {"HEAD_SHA": "${{ github.event.pull_request.head.sha }}"}
     assert fetch["run"] == 'git fetch --no-tags --depth=1 origin "$HEAD_SHA"'
     assert guard["run"] == '.github/check-agent-notes.sh "$COMMIT"'

@@ -6,7 +6,7 @@
 # With no argument it lists the index, which a fresh checkout fills from the
 # commit it checks out. With a commit, it lists that commit's tree through a
 # temporary index, without checking it out: CI fetches a pull request's head
-# as data and never runs anything from it.
+# commit and checks it, whatever the pull request's base.
 #
 # Subfleet build jobs keep their state in a .job/ folder at the root of
 # their worktree: HANDOFF.md, PR_BODY.md, env, a git bundle and sometimes a
