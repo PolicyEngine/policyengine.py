@@ -92,6 +92,36 @@ def test_accepted_mismatch_without_audited_evidence_refuses(tmp_path):
         )
 
 
+@pytest.mark.parametrize("model_package", ["policyengine-us", "another-model"])
+@pytest.mark.parametrize("accept_mismatch", [False, True])
+def test_regional_release_built_with_another_model_package_refuses(
+    tmp_path, model_package, accept_mismatch
+):
+    dense = older_dense()
+    dense["build"]["built_with_model_package"]["name"] = model_package
+    if not accept_mismatch:
+        dense["compatible_model_packages"] = [
+            {"name": "policyengine-uk", "specifier": f"=={UK_MODEL_VERSION}"}
+        ]
+    bundle_path = _tmp_bundle(tmp_path)
+    before = bundle_path.read_bytes()
+
+    with pytest.raises(
+        CertificationError,
+        match=f"built with {model_package}, not policyengine-uk",
+    ):
+        if accept_mismatch:
+            certify_with_evidence(bundle_path, input_evidence(dense), dense)
+        else:
+            _certify_uk(
+                bundle_path,
+                [_response(_microcosm_uk_national_payload()), _response(dense)],
+                regional_manifest_uri=UK_DENSE_URI,
+            )
+
+    assert bundle_path.read_bytes() == before
+
+
 @pytest.mark.parametrize(
     ("field", "wrong"),
     [

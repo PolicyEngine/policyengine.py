@@ -425,6 +425,23 @@ REGIONAL_VAT_LIMITATION = (
 )
 
 
+def _regional_build_model_version(
+    regional_manifest: DataReleaseManifest, model_package: str
+) -> Optional[str]:
+    """Return the recorded regional build version; refuse a different package."""
+    built = (
+        regional_manifest.build.built_with_model_package
+        if regional_manifest.build is not None
+        else None
+    )
+    if built is not None and built.name != model_package:
+        raise CertificationError(
+            f"Regional release was built with {built.name}, not {model_package}; "
+            "regional releases must use the target model package."
+        )
+    return built.version if built is not None else None
+
+
 def accepted_regional_mismatch(
     regional_manifest: DataReleaseManifest,
     model_package: str,
@@ -449,6 +466,7 @@ def accepted_regional_mismatch(
         raise CertificationError(
             "--accept-regional-model-mismatch needs a reason a reviewer can read."
         )
+    built_with = _regional_build_model_version(regional_manifest, model_package)
     if evidence is None:
         raise CertificationError(
             "An accepted regional model mismatch requires audited input-surface "
@@ -542,14 +560,6 @@ def accepted_regional_mismatch(
             "Dropped regional input columns are refused: "
             + ", ".join(comparison["dropped_columns"])
         )
-    built = (
-        regional_manifest.build.built_with_model_package
-        if (regional_manifest.build is not None)
-        else None
-    )
-    built_with = (
-        built.version if built is not None and built.name == model_package else None
-    )
     limitations = list(audit.limitations)
     try:
         predates_vat_fix = built_with is not None and Version(built_with) < Version(
@@ -1399,6 +1409,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             regional_manifest, regional_manifest_sha256, regional_uri_parts = (
                 fetch_release_manifest(regional_manifest_uri, token=token)
             )
+            _regional_build_model_version(regional_manifest, model_package)
             # The regional release runs on the same model and core, so it must
             # cover the pinned versions by its own build or claims. A qualified
             # pair names the primary release only, so it does not extend here.

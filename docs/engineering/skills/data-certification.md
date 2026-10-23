@@ -112,6 +112,15 @@ Microcosm national release with one of:
   column**. It records every defaulted input and the free-text limitations in
   the validated `regional_certification`; the bundle hash binds that record.
 
+  The policyengine-uk 2.147.2 dataset loaders silently skip columns absent
+  from the model's variables: both the
+  [generic dataset loader](https://github.com/PolicyEngine/policyengine-uk/blob/fe0b99a36bd309a722b19937345e34290cb6dd73/policyengine_uk/simulation.py#L1113-L1127)
+  and the
+  [UK multi-year loader](https://github.com/PolicyEngine/policyengine-uk/blob/fe0b99a36bd309a722b19937345e34290cb6dd73/policyengine_uk/simulation.py#L1186-L1196)
+  use `continue` without warning. A removed or renamed input can therefore
+  disappear silently at runtime; the audit must catch that column loss before
+  certification.
+
   The national certificate never widens. Area status remains `uncertified`:
   the certificate still covers the national dataset only (#685). TRACE and
   execution receipts expose the regional identity, build model, acceptance,

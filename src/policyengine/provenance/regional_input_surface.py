@@ -5,6 +5,12 @@ its older-model inventory proxy with the columns actually stored in every
 artifact and period. Country-model input moves are read from that installed
 model's constructor, so an alias cannot make a supplied input look defaulted.
 No household values are included in the resulting audit.
+
+policyengine-uk 2.147.2 silently skips unknown columns in both dataset loaders;
+the audit must detect that loss before certification. See the ``continue``
+branches in ``build_from_dataset`` and ``build_from_multi_year_dataset``:
+https://github.com/PolicyEngine/policyengine-uk/blob/fe0b99a36bd309a722b19937345e34290cb6dd73/policyengine_uk/simulation.py#L1113-L1127
+https://github.com/PolicyEngine/policyengine-uk/blob/fe0b99a36bd309a722b19937345e34290cb6dd73/policyengine_uk/simulation.py#L1186-L1196
 """
 
 from __future__ import annotations

@@ -48,7 +48,7 @@ def _certify_data(args: argparse.Namespace) -> int:
         argv.extend(["--regional-release-kind", args.regional_release_kind])
     if args.drop_regional_release:
         argv.append("--drop-regional-release")
-    if args.accept_regional_model_mismatch:
+    if args.accept_regional_model_mismatch is not None:
         argv.extend(
             ["--accept-regional-model-mismatch", args.accept_regional_model_mismatch]
         )

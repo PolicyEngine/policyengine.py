@@ -1575,6 +1575,59 @@ class TestUKRegionalCertification:
             == "regional-audit.json"
         )
 
+    def test__given_bundle_wrapper_empty_reason__then_certifier_refuses_it(
+        self, monkeypatch, tmp_path
+    ):
+        bundle_script = _load_bundle_script(monkeypatch)
+        spec = importlib.util.spec_from_file_location(
+            "certify_data_release",
+            Path(__file__).resolve().parents[1] / "scripts" / "certify_data_release.py",
+        )
+        certifier = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(certifier)
+        monkeypatch.setitem(sys.modules, "certify_data_release", certifier)
+        bundle_path = _tmp_bundle(tmp_path)
+        original_bundle = bundle_path.read_bytes()
+        captured = {}
+
+        def certify_temporary_bundle(**kwargs):
+            captured.update(kwargs)
+            kwargs["bundle_path"] = bundle_path
+            return certify_data_release(**kwargs)
+
+        monkeypatch.setattr(certifier, "certify_data_release", certify_temporary_bundle)
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                side_effect=[
+                    _response(_microcosm_uk_national_payload()),
+                    _response(self._older_dense()),
+                ],
+            ),
+            pytest.raises(CertificationError, match="needs a reason"),
+        ):
+            bundle_script.main(
+                [
+                    "certify-data",
+                    "--country",
+                    "uk",
+                    "--manifest-uri",
+                    UK_NATIONAL_URI,
+                    "--model-version",
+                    UK_MODEL_VERSION,
+                    "--regional-manifest-uri",
+                    UK_DENSE_URI,
+                    "--accept-regional-model-mismatch",
+                    "",
+                    "--no-generate",
+                    "--no-changelog",
+                    "--skip-artifact-check",
+                ]
+            )
+        assert captured["regional_model_mismatch_reason"] == ""
+        assert bundle_path.read_bytes() == original_bundle
+
     def test__given_pinned_core__then_the_regional_release_must_cover_it(
         self, tmp_path
     ):
