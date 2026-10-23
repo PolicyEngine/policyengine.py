@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "instructions": "After reading flagged movements and pinned git histories, add reviewed mappings. Never infer causation from a PR title or changed path alone. Unmapped moves remain explicitly unattributed. A mapping needs metric (fnmatch pattern), component (model or data), prs and/or commits, reason, reviewer; optionally effect (fnmatch pattern) and years (fiscal-year start integers). Both components must be covered to attribute a total_change edge.",
+  "example_only_do_not_copy_as_evidence": {
+    "metric": "tax.some_variable",
+    "component": "model",
+    "prs": [1234],
+    "commits": [],
+    "reason": "Explain the changed formula/input and direction, with reviewed evidence.",
+    "reviewer": "Named reviewer",
+    "effect": "model_*",
+    "years": [2026, 2027, 2028, 2029, 2030]
+  },
+  "mappings": []
+}
