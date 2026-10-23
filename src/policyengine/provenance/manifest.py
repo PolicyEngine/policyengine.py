@@ -252,15 +252,53 @@ def https_dataset_uri(
     )
 
 
+def _cached_hugging_face_token() -> Optional[str]:
+    """Return the token saved by ``hf auth login``, if there is one."""
+
+    try:
+        from huggingface_hub import get_token
+    except ImportError:
+        return None
+    try:
+        return get_token()
+    except Exception:
+        return None
+
+
 def hugging_face_auth_headers() -> dict[str, str]:
-    """Return authentication headers for Hugging Face requests."""
+    """Return authentication headers for Hugging Face requests.
+
+    The environment variables take precedence. Without them, the token saved
+    by ``hf auth login`` (``huggingface-cli login``) is used, as
+    ``huggingface_hub`` itself does.
+    """
 
     token = (
         os.environ.get("HUGGING_FACE_TOKEN")
         or os.environ.get("HF_TOKEN")
         or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        or _cached_hugging_face_token()
     )
     return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+HUGGING_FACE_ACCESS_HINT = (
+    "Set HUGGING_FACE_TOKEN, or run `hf auth login`, with a token from a "
+    "Hugging Face account that has been granted access to the repository. "
+    "UK datasets are private because they derive from licensed UK Data "
+    "Service surveys. To request access, email contact@policyengine.org with "
+    "your Hugging Face username and evidence of your UK Data Service access."
+)
+
+
+def hugging_face_auth_failure(description: str) -> str:
+    """Explain a 401/403 from Hugging Face, saying whether a token was sent."""
+
+    if hugging_face_auth_headers():
+        reason = "Hugging Face rejected the configured credentials"
+    else:
+        reason = "no Hugging Face credentials were found"
+    return f"Could not download {description}: {reason}. {HUGGING_FACE_ACCESS_HINT}"
 
 
 def _artifact_revision(data_package: "DataPackageVersion") -> str:
