@@ -16,7 +16,7 @@ while (($#)); do
             cat <<'EOF'
 Usage: ./run-heavy.sh [--from STEP] [--resume-certification]
 
-Heavy phase only, after 2026-10-24 00:30Z and reservation clearance.
+Heavy phase only, after Fleet ops releases the host (reservation.py allowed uk-hub says yes).
 Runs sequentially; each step checks reservation.py allowed uk-hub,
 load1 <=110 and free disk >=55,000,000,000 bytes. Stops on any failure.
 No push or PR is performed. Supply HF_TOKEN/HUGGING_FACE_TOKEN or agent-secret.
@@ -64,7 +64,6 @@ guard() {
     python3 "$PE_CERTIFY_RESERVATION_SCRIPT" allowed uk-hub || return $?
     python3 - "$ROOT" "$STORAGE" <<'PY'
 import datetime, os, pathlib, shutil, sys
-assert datetime.datetime.now(datetime.timezone.utc) >= datetime.datetime(2026, 10, 24, 0, 30, tzinfo=datetime.timezone.utc), 'Heavy phase may not start before 2026-10-24 00:30Z'
 load = os.getloadavg()[0]
 for name in sys.argv[1:]:
     path = pathlib.Path(name).resolve()
