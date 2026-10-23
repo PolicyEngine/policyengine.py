@@ -245,6 +245,36 @@ differencing.
   withholds a standard reform's figures, so the gate cannot recompute that
   reform's verdict. Accepted by María Juaristi in #685.
 
+### Same-line re-cut exception
+
+The Budget coordinator's **23 October 2026 decision under d1682 and d1344**
+permits a same-line re-cut exception for the Budget week: the data must stay on
+the same producer line, and the model must be pinned to the cut's build-time
+version. For Saturday's national cut
+`microcosm-uk-2024-25-national-20261023T075039Z-a133f37a`, that is
+`policyengine-uk==2.147.2` (Microcosm build `829c1bc26`, on main via
+[microcosm#1338](https://github.com/PolicyEngine/microcosm/pull/1338)).
+Certify national-only with `--drop-regional-release`, stacked on
+policyengine.py#704 (`budget-local-data-manifest`, `da2ae8fb` or a reviewed later
+head). Constituency and local-authority outputs are absent until Monday's cut;
+María Juaristi (`juaristi22`) can override this routing decision.
+
+The exception's evidence package is: all release-cut gates; the UC floor;
+snapshots; the #574 reform contract and Budget-inputs gates on the exact cut,
+with the coverage used by #685; the strict check; and a same-line 2×2
+attribution against the previously certified `6cba5d71` national cut on pe-uk
+2.132.6. For FY2026-27 through FY2030-31, compare both data cuts under both
+model versions, separating model effects on fixed data from data effects on a
+fixed model. Map moves above the aggregate-impact report's thresholds to
+pe-uk PRs or Microcosm changes, label unmapped moves **unattributed**, and list
+limitations. Record incompatible cells as **not computable** with their error
+and use the computable cells. Record scorecard replay as **unavailable** until
+the Microcosm replay fix lands; unavailable is not a pass.
+
+This scoped decision does not inherit #685's cross-data-line comparison
+exception or accept a new UC-floor gap, missing input or failed gate. Any such
+acceptance needs an explicit decision and evidence in the certification PR.
+
 ## Release runbooks
 
 Concrete, fill-in-the-id runbooks that replay a specific certification live
