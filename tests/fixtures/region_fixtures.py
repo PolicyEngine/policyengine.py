@@ -9,7 +9,9 @@ from policyengine.core.scoping_strategy import RowFilterStrategy
 def create_national_region(
     country_code: str = "us",
     label: str = "United States",
-    dataset_path: str = "gs://policyengine-us-data/enhanced_cps_2024.h5",
+    dataset_path: str = (
+        "hf://policyengine/populace-us/populace_us_2024.h5@certified-release"
+    ),
 ) -> Region:
     """Create a national region."""
     return Region(
@@ -24,7 +26,7 @@ def create_state_region(
     state_code: str,
     state_name: str,
     parent_code: str = "us",
-    bucket: str = "gs://policyengine-us-data",
+    repository: str = "hf://policyengine/policyengine-us-data",
 ) -> Region:
     """Create a state region with dedicated dataset."""
     return Region(
@@ -32,7 +34,7 @@ def create_state_region(
         label=state_name,
         region_type="state",
         parent_code=parent_code,
-        dataset_path=f"{bucket}/states/{state_code}.h5",
+        dataset_path=f"{repository}/states/{state_code}.h5@certified-release",
         state_code=state_code,
         state_name=state_name,
     )
@@ -99,7 +101,9 @@ REGION_WITH_DATASET = Region(
     label="California",
     region_type="state",
     parent_code="us",
-    dataset_path="gs://policyengine-us-data/states/CA.h5",
+    dataset_path=(
+        "hf://policyengine/policyengine-us-data/states/CA.h5@certified-release"
+    ),
     state_code="CA",
     state_name="California",
 )

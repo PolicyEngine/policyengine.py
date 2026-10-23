@@ -29,7 +29,19 @@ reform = {
 }
 ```
 
-Dates that haven't passed become "from this date onward." Earlier dates replace the baseline schedule.
+A `YYYY-MM-DD` key is an effective date: its value applies from that date until the next date in the same parameter's reform schedule. If no later value follows, the wrapper emits an interval ending on December 31, 2100.
+
+Use `YYYY-MM-DD.YYYY-MM-DD` for an inclusive interval. For example, this UK reform applies for fiscal year 2027 only:
+
+```python
+reform = {
+    "gov.hmrc.income_tax.rates.uk[0].rate": {
+        "2027-04-06.2028-04-05": 0.21,
+    },
+}
+```
+
+`Simulation(policy=...)`, `Simulation(dynamic=...)`, and UK `calculate_household(reform=...)` accept these two date formats and reject an interval whose end precedes its start. They reject bare years such as `"2027"` or `2027`, because a bare year means different things in different places. policyengine-uk reads it as fiscal year 2027 only for most parameters, but as calendar year 2027 for the economic growth rates, the indices built from them and the household parameters (from policyengine-uk 2.131.1). policyengine-core's `Reform.from_dict` reads it as from 2027 onward. Use `"2027-04-06.2028-04-05"` for one UK fiscal year or `"2027-01-01"` for an effective date. The US household route retains its country package's period-key handling.
 
 ### Multiple changes
 
@@ -49,8 +61,8 @@ Scale parameters (brackets with thresholds and amounts) are addressed by bracket
 
 ```python
 reform = {
-    "gov.irs.income.tax.rate[0]": 0.12,               # first bracket rate
-    "gov.irs.income.tax.threshold[1]": 50_000,        # second bracket threshold
+    "gov.irs.income.tax.rate[0]": 0.12,  # first bracket rate
+    "gov.irs.income.tax.threshold[1]": 50_000,  # second bracket threshold
     "gov.irs.credits.ctc.amount.base[0].amount": 3_000,
 }
 ```
@@ -79,6 +91,81 @@ reformed = Simulation(
 )
 ```
 
+## Behavioural responses: UK capital gains
+
+policyengine-uk realises capital gains in response to any reform that changes
+a person's marginal rate on gains. From policyengine-uk 2.134.0 the default
+is a retention-rate elasticity of 1.0, so policyengine.py has it from the
+first release that pins 2.134.0 or later. Each person's realised gains scale by $((1 - t_1) / (1 - t_0))^{e}$, where $t_0$
+and $t_1$ are their marginal rates on gains without and with the reform. Gains
+qualifying for Business Asset Disposal Relief take the same 1.0. Before, the
+elasticity was 0, so a CGT reform was costed statically unless the caller set
+an elasticity.
+
+For a marginal rate on gains rising from 24% to 45%, realised gains scale by
+$0.55 / 0.76 \approx 0.7237$. A marginal tax rate elasticity of $-0.7$, a
+different convention, gives $(0.45 / 0.24)^{-0.7} \approx 0.6440$: the two
+are not interchangeable.
+
+- **Who is affected.** Any reform that moves someone's marginal rate on gains
+  is affected. That includes CGT rates, and also income tax bands and
+  allowances, because gains are taxed on top of income. The default leaves
+  results without a reform unchanged.
+- **The static costing.** Set the elasticities to zero for the years you run,
+  as below:
+  - on `Simulation`, pass them as `dynamic=`;
+  - on `calculate_household`, merge them into `reform=`;
+  - on `managed_microsimulation`, merge them into `reform=`, whose keys
+    policyengine-uk reads itself.
+- **Sensitivities.** The elasticity can be 0.5 or 2.0, the range CenTax
+  consider. policyengine-uk applies it as a power to each person's marginal
+  retention rate, where CenTax apply one aggregate elasticity to the whole
+  base, so these don't reproduce CenTax's own sensitivities. For the OBR's elasticities, set it to 3.6 and
+  `separate_badr_elasticity` to true; `badr_elasticity` stays 1.4. That
+  compares elasticities, not the OBR's full costing.
+- **The marginal tax rate convention.** An `mtr_elasticity` set on its own
+  applies alone in its periods, with a `CapitalGainsResponseWarning`. Setting
+  `elasticity` to 0 for the same periods silences it. Setting both to nonzero
+  values raises an error.
+- **Precedence.** A dynamic's settings win over a policy's. With a policy
+  modifier, the dynamic's values are written after the modifier, onto the
+  annualised parameters, where a value dated after 1 January misses that year.
+  Date them from 1 January.
+- **Both sides of a comparison.** Set the same `dynamic` on the baseline and
+  the reform. A response set on the reform side only also answers the
+  baseline's policy, since each simulation's response is measured against
+  current law.
+- **The assumption's limits.** CenTax's 1.0 is a medium-term value for a
+  package that also reforms the base and adjusts for income shifted between
+  taxes. For a change to rates alone their reasoning points higher, and a
+  first-year response is likely larger, so the default can overstate what a
+  rate rise raises. Income tax on shifted income is not added back. See
+  [the methodology page](methodology/uk-capital-gains-responses.md).
+
+```python
+RESPONSES = "gov.simulation.capital_gains_responses"
+EVERY_YEAR = "2000-01-01.2100-12-31"
+static = {
+    f"{RESPONSES}.elasticity": {EVERY_YEAR: 0},
+    f"{RESPONSES}.mtr_elasticity": {EVERY_YEAR: 0},
+    f"{RESPONSES}.separate_badr_elasticity": {EVERY_YEAR: False},
+}
+static_costing = Simulation(
+    dataset=dataset,
+    tax_benefit_model_version=pe.uk.model,
+    policy={
+        "gov.hmrc.cgt.higher_rate": {"2027-04-06": 0.45},
+        "gov.hmrc.cgt.additional_rate": {"2027-04-06": 0.45},
+    },
+    dynamic=static,
+)
+```
+
+Every UK run records the response it applied (see
+[The UK capital gains realisation response](microsim.md#the-uk-capital-gains-realisation-response)),
+and [the methodology page](methodology/uk-capital-gains-responses.md)
+explains how the response is measured.
+
 ## Structural reforms
 
 For rule changes that can't be expressed as a parameter change — swapping a formula, adding a variable, neutralising a program — drop down to the underlying country package. Both `policyengine_us` and `policyengine_uk` expose `Reform.from_dict(...)` and class-based reforms with overridable formulas; use them directly and run the simulation via `managed_microsimulation` (or by constructing a country-package `Microsimulation` yourself).
@@ -87,9 +174,11 @@ For rule changes that can't be expressed as a parameter change — swapping a fo
 from policyengine_us import Microsimulation
 from policyengine_us.model_api import Reform
 
+
 class NeutralizeEITC(Reform):
     def apply(self):
         self.neutralize_variable("eitc")
+
 
 sim = Microsimulation(reform=NeutralizeEITC)
 ```

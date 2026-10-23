@@ -17,6 +17,7 @@ handful of thin hooks (``_load_system``, ``_load_region_registry``,
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import tempfile
 import warnings
@@ -25,16 +26,19 @@ from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Optional
 
+import h5py
 import pandas as pd
 
 from policyengine.core import (
     Parameter,
     ParameterNode,
+    StaleOutputError,
     TaxBenefitModelVersion,
     Variable,
 )
 from policyengine.provenance.manifest import (
     certify_data_release_compatibility,
+    dataset_logical_name,
     get_release_manifest,
 )
 from policyengine.utils.entity_utils import build_entity_relationships
@@ -45,6 +49,7 @@ from policyengine.utils.parameter_labels import (
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
+    from policyengine.provenance.dataset_materialization import MaterializedDataset
 
 
 def output_dataset_filepath(simulation: Simulation) -> Path:
@@ -58,7 +63,34 @@ def output_dataset_filepath(simulation: Simulation) -> Path:
     parent = (
         Path(input_filepath).parent if input_filepath else Path(tempfile.gettempdir())
     )
-    return parent / (simulation.id + ".h5")
+    return parent / (simulation.storage_id + ".h5")
+
+
+def build_runtime_dataset_provenance(
+    source_uri: str,
+    local_path: str,
+    materialized: Optional[MaterializedDataset],
+    *,
+    logical_name: Optional[str] = None,
+) -> dict[str, object]:
+    """Return the dataset fields recorded with a managed simulation."""
+
+    provenance: dict[str, object] = {
+        "managed_by": "policyengine.py",
+        "runtime_dataset": logical_name or dataset_logical_name(source_uri),
+        "runtime_dataset_uri": source_uri,
+        "runtime_dataset_source": local_path,
+    }
+    if materialized is not None:
+        provenance.update(
+            {
+                "runtime_dataset_data_package": materialized.data_package_name,
+                "runtime_dataset_repo_type": materialized.repo_type,
+                "runtime_dataset_revision": materialized.revision,
+                "runtime_dataset_sha256": materialized.sha256,
+            }
+        )
+    return provenance
 
 
 class MicrosimulationModelVersion(TaxBenefitModelVersion):
@@ -97,6 +129,11 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             kwargs["version"] = manifest.model_package.version
 
         installed_model_version = metadata.version(self.package_name)
+        # What this process loads: a receipt refuses a run whose installed
+        # versions change afterwards.
+        from policyengine.provenance.loaded import record_loaded_versions
+
+        record_loaded_versions((self.package_name, "policyengine-core", "policyengine"))
         if installed_model_version != manifest.model_package.version:
             warnings.warn(
                 f"Installed {self.package_name} version "
@@ -177,6 +214,17 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 ),
                 default_value=default_val,
                 value_type=var_obj.value_type,
+                definition_period=getattr(var_obj, "definition_period", None),
+                unit=getattr(var_obj, "unit", None),
+                quantity_type=getattr(var_obj, "quantity_type", None),
+                reference=getattr(var_obj, "reference", None),
+                defined_for=getattr(var_obj, "defined_for", None),
+                min_value=getattr(var_obj, "min_value", None),
+                max_value=getattr(var_obj, "max_value", None),
+                is_period_size_independent=getattr(
+                    var_obj, "is_period_size_independent", None
+                ),
+                metadata=getattr(var_obj, "metadata", None) or {},
             )
             if (
                 hasattr(var_obj, "possible_values")
@@ -226,6 +274,8 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 )
                 self.add_parameter(parameter)
             elif isinstance(param_node, CoreParameterNode):
+                if not param_node.children:
+                    continue
                 node = ParameterNode(
                     id=self.id + "-" + param_node.name,
                     name=param_node.name,
@@ -311,7 +361,72 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 "simulation.run() or simulation.ensure() first so there is "
                 "something to persist."
             )
+        serialized_spm = None
+        if self.country_code == "us":
+            from policyengine.core.spm import SPMProvenance
+            from policyengine.tax_benefit_models.us.legacy_inputs import (
+                RENAMES_RECORD_KEY,
+            )
+
+            receipt = SPMProvenance.model_validate(simulation.spm_provenance())
+            if (
+                simulation.output_dataset.metadata.get("spm_config")
+                != simulation.spm_config
+            ):
+                raise ValueError(
+                    "SPM settings changed since this output was calculated; run again before saving"
+                )
+            serialized_spm = json.dumps(
+                {
+                    "config": simulation.spm_config,
+                    "provenance": receipt.model_dump(mode="json"),
+                },
+                sort_keys=True,
+            )
+            # ``PolicyEngineUSDataset.save()`` writes this record into the
+            # file, and ``load()`` refuses an output without it.
+            renames = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+                RENAMES_RECORD_KEY
+            )
+            if renames is None:
+                raise ValueError(
+                    "This US output does not record which renamed stored "
+                    "inputs were mapped when it was calculated; run again "
+                    "before saving"
+                )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                RECORD_KEY,
+                simulation_request,
+            )
+
+            # ``PolicyEngineUKDataset.save()`` writes the record into the
+            # file, and ``load()`` refuses an output without it.
+            record = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+                RECORD_KEY
+            )
+            if record is None:
+                raise ValueError(
+                    "This UK output does not record the capital gains "
+                    "realisation response it was calculated under; run again "
+                    "before saving"
+                )
+            if record["request"]["digest"] != simulation_request(simulation)["digest"]:
+                raise ValueError(
+                    "Capital gains response settings changed since this output "
+                    "was calculated; run again before saving"
+                )
         simulation.output_dataset.save()
+        if serialized_spm is not None:
+            # Store UTF-8 JSON in a dataset rather than an attribute: the
+            # payload size stays unbounded and the receipt is kept out of
+            # the object header, keeping the result file self-contained.
+            with h5py.File(simulation.output_dataset.filepath, "a") as stream:
+                stream.create_dataset(
+                    "policyengine_spm",
+                    data=serialized_spm,
+                    dtype=h5py.string_dtype("utf-8"),
+                )
 
     def load(self, simulation: Simulation) -> None:
         """Rehydrate the simulation's output dataset from disk.
@@ -321,9 +436,96 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         are not written back on ``save()``, so they're filesystem
         approximations, not a true round-trip of the original timestamps.
         """
-        filepath = str(
-            Path(simulation.dataset.filepath).parent / (simulation.id + ".h5")
-        )
+        filepath = str(output_dataset_filepath(simulation))
+
+        receipt = None
+        if self.country_code == "us":
+            from policyengine.core.spm import SPMProvenance
+            from policyengine.tax_benefit_models.us.legacy_inputs import (
+                RENAMES_RECORD_KEY,
+                read_renames_record,
+            )
+            from policyengine.tax_benefit_models.us.legacy_spm import (
+                RECORD_KEY as LEGACY_SPM_RECORD_KEY,
+            )
+            from policyengine.tax_benefit_models.us.legacy_spm import (
+                expected_profile_for_dataset,
+                read_record_value,
+                record_problem,
+            )
+
+            with h5py.File(filepath, "r") as stream:
+                raw = (
+                    stream["policyengine_spm"].asstr()[()]
+                    if "policyengine_spm" in stream
+                    else None
+                )
+            recorded_renames = read_renames_record(filepath)
+            if raw is None:
+                raise StaleOutputError(
+                    "Saved US simulation has no SPM configuration or receipt"
+                )
+            recorded = json.loads(raw)
+            if recorded["config"] != simulation.spm_config:
+                raise StaleOutputError(
+                    "Saved US simulation uses different SPM settings"
+                )
+            receipt = SPMProvenance.model_validate(recorded["provenance"])
+            # Outputs saved before stored inputs were mapped onto renamed
+            # live inputs were calculated without them (for example with
+            # every WIC-eligible person taking WIC up), so they are not
+            # reused. ``Simulation.ensure()`` runs such a simulation again.
+            if recorded_renames is None:
+                raise StaleOutputError(
+                    "Saved US simulation predates the mapping of renamed "
+                    "stored inputs (it has no record of them); run it again"
+                )
+            # BACKWARD COMPATIBILITY (#597, #598): an output is reused only
+            # under exactly the legacy SPM declarations its input needs.
+            recorded_legacy_spm = read_record_value(filepath)
+            legacy_problem = record_problem(
+                recorded_legacy_spm, expected_profile_for_dataset(simulation.dataset)
+            )
+            if legacy_problem is not None:
+                raise StaleOutputError(
+                    f"Saved US simulation output is out of date: {legacy_problem}; "
+                    "run it again"
+                )
+
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.datasets import (
+                _year_file_records_data_year,
+            )
+
+            # UK outputs saved before runs anchored on the observed data year
+            # (PolicyEngine/policyengine.py#556) took a projected year as
+            # observed and uprated the State Pension by CPI, so they are not
+            # reused. ``Simulation.ensure()`` runs such a simulation again.
+            if not _year_file_records_data_year(Path(filepath)):
+                raise StaleOutputError(
+                    "Saved UK simulation predates anchoring on the observed "
+                    "data year (it records none); run it again"
+                )
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                read_record,
+                saved_record_problem,
+                simulation_request,
+            )
+
+            # An output is reused only under the capital gains realisation
+            # response it was calculated with: the same policyengine-uk
+            # release (whose default may differ from another's) and the same
+            # explicit settings.
+            with pd.HDFStore(filepath, mode="r") as store:
+                response_record = read_record(store)
+            problem = saved_record_problem(
+                response_record, simulation_request(simulation)
+            )
+            if problem is not None:
+                raise StaleOutputError(
+                    f"Saved UK simulation output is out of date: {problem}; "
+                    "run it again"
+                )
 
         simulation.output_dataset = self._dataset_class(
             id=simulation.id,
@@ -333,6 +535,24 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             year=simulation.dataset.year,
             is_output_dataset=True,
         )
+        if self.country_code == "us":
+            from policyengine.core.spm import SPMSelection
+
+            simulation.spm_receipt = receipt
+            simulation.spm = SPMSelection.model_validate(recorded["config"])
+            simulation.output_dataset.metadata.update(
+                {"spm_config": recorded["config"], RENAMES_RECORD_KEY: recorded_renames}
+            )
+            if isinstance(recorded_legacy_spm, dict):
+                simulation.output_dataset.metadata[LEGACY_SPM_RECORD_KEY] = (
+                    recorded_legacy_spm
+                )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                RECORD_KEY,
+            )
+
+            simulation.output_dataset.metadata[RECORD_KEY] = response_record
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(

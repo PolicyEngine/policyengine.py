@@ -8,6 +8,8 @@ from microdf import MicroDataFrame
 
 logger = logging.getLogger(__name__)
 
+HouseholdFilterValue = Union[str, int, float, list[Union[str, int, float]]]
+
 
 def _resolve_id_column(person_data: pd.DataFrame, entity_name: str) -> str:
     """Resolve the ID column name for a group entity in person data.
@@ -55,10 +57,10 @@ def build_entity_relationships(
 def _household_mask(
     household_data: pd.DataFrame,
     variable_name: str,
-    variable_value: Union[str, int, float],
+    variable_value: HouseholdFilterValue,
     additional_filters: Optional[dict[str, Union[str, int, float]]] = None,
 ):
-    """Boolean mask over the household table for a single-value filter.
+    """Boolean mask matching one value or any value in a list.
 
     Local intermediate only — never crosses a function boundary — so no
     positional-alignment invariant leaks out (callers key on household_id).
@@ -85,7 +87,7 @@ def _household_mask(
 def matching_household_ids(
     entity_data: dict[str, MicroDataFrame],
     variable_name: str,
-    variable_value: Union[str, int, float],
+    variable_value: HouseholdFilterValue,
     additional_filters: Optional[dict[str, Union[str, int, float]]] = None,
 ) -> set:
     """Return the set of ``household_id`` values matching a household filter.
@@ -163,7 +165,7 @@ def filter_dataset_by_household_variable(
     entity_data: dict[str, MicroDataFrame],
     group_entities: list[str],
     variable_name: str,
-    variable_value: Union[str, int, float],
+    variable_value: HouseholdFilterValue,
     additional_filters: Optional[dict[str, Union[str, int, float]]] = None,
 ) -> dict[str, MicroDataFrame]:
     """Filter dataset entities to only include households matching variables.
@@ -177,7 +179,8 @@ def filter_dataset_by_household_variable(
                      (from YearData.entity_data).
         group_entities: List of group entity names for this country.
         variable_name: The household-level variable to filter on.
-        variable_value: The value to match. Handles both str and bytes encoding.
+        variable_value: One value or a list of allowed values. String values
+                        match both str and bytes encoding.
         additional_filters: Optional household-level filters that must also
                             match, keyed by variable name.
 
@@ -201,7 +204,13 @@ def filter_dataset_by_household_variable(
     )
 
 
-def _values_match(values, expected: Union[str, int, float]):
+def _values_match(values, expected: HouseholdFilterValue):
+    if isinstance(expected, list):
+        allowed = [
+            *expected,
+            *(value.encode() for value in expected if isinstance(value, str)),
+        ]
+        return pd.Series(values).isin(allowed).to_numpy(copy=True)
     if isinstance(expected, str):
         return (values == expected) | (values == expected.encode())
     return values == expected

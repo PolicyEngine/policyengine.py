@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
@@ -32,25 +33,39 @@ class Parameter(BaseModel):
 
     @property
     def parameter_values(self) -> list["ParameterValue"]:
-        """Lazily build parameter values on first access."""
+        """Lazily build the effective parameter history on first access.
+
+        Values are ordered from oldest to newest. ``end_date`` is inclusive,
+        so each bounded value ends one day before the next value starts and the
+        newest value remains open-ended. When Core exposes duplicate effective
+        starts, retain the first entry because Core's lookup uses the first
+        matching entry as the effective value.
+        """
         if self._parameter_values is None:
             self._parameter_values = []
             if self._core_param is not None:
                 from policyengine.utils import parse_safe_date
 
-                for i in range(len(self._core_param.values_list)):
-                    param_at_instant = self._core_param.values_list[i]
-                    if i + 1 < len(self._core_param.values_list):
-                        next_instant = self._core_param.values_list[i + 1]
-                    else:
-                        next_instant = None
+                effective_values: dict[datetime, Any] = {}
+                for value_at_instant in self._core_param.values_list:
+                    start_date = parse_safe_date(value_at_instant.instant_str)
+                    effective_values.setdefault(start_date, value_at_instant)
+
+                chronological_values = sorted(effective_values.items())
+                for index, (start_date, value_at_instant) in enumerate(
+                    chronological_values
+                ):
+                    next_index = index + 1
+                    end_date = (
+                        chronological_values[next_index][0] - timedelta(days=1)
+                        if next_index < len(chronological_values)
+                        else None
+                    )
                     pv = ParameterValue(
                         parameter=self,
-                        start_date=parse_safe_date(param_at_instant.instant_str),
-                        end_date=parse_safe_date(next_instant.instant_str)
-                        if next_instant
-                        else None,
-                        value=param_at_instant.value,
+                        start_date=start_date,
+                        end_date=end_date,
+                        value=value_at_instant.value,
                     )
                     self._parameter_values.append(pv)
         return self._parameter_values

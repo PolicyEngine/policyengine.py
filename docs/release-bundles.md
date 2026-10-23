@@ -12,6 +12,61 @@
 
 This document defines the intended reproducibility boundary for `policyengine.py`.
 
+## Preparing and checking release artifacts
+
+After certifying a new country/data pair, prepare its complete sidecars with
+`python scripts/bundle.py generate --include-tros`. Review the generated manifest,
+TRO source hashes and locations, and the resolved `uv.lock` together. Ordinary
+local generation can emit limited provenance when a remote manifest is unavailable;
+that output cannot pass the public release checks.
+
+Trusted same-repository PRs, Versioning, and Publish require:
+
+```bash
+python scripts/check_release_credentials.py
+python scripts/bundle.py check --published-spm --include-tros --strict-tros
+python scripts/release_lock.py
+```
+
+Strict generation requires full US/UK release manifests from pinned revisions,
+matching the raw hashes and URLs in the reviewed sidecars. It checks the existing
+publisher compatibility contract and certified dataset hash, and requires pinned
+model wheel hashes and URLs. The certified model must match the corresponding
+runtime package name/version, any explicit component wheel pins, and the exact
+wheel URL and SHA256 in the reviewed `uv.lock`. Missing credentials, fetch failures, missing datasets,
+or changed source bytes stop the workflow. These metadata checks do not replace
+native dataset certification or the model test suite. Supply a read-only Hugging
+Face credential through the repository's `HUGGING_FACE_TOKEN` secret; PR verification
+uses `pull_request` only for same-repository heads, never `pull_request_target`.
+Each trusted verification job authenticates its actual credential with Hugging
+Face's `whoami-v2` endpoint and requires access-token role `read`. Missing metadata,
+write scope, and unrecognized or fine-grained permission schemas fail closed;
+the check logs no token, account details, or response body. The workflow does not
+change existing credential permissions.
+
+Versioning checks those reviewed inputs before the bump, generates the versioned
+bundle metadata, and runs `python scripts/release_lock.py --refresh`. The helper
+clears inherited uv resolver overrides, explicitly disables frozen mode, resolves
+from PyPI without local sources, and permits only the root package version to change
+in the reviewed lock. Every locked distribution must use an HTTPS artifact URL
+on PyPI's `files.pythonhosted.org` host and a valid SHA256 digest; a registry source
+label alone is insufficient. Any dependency graph change fails and restores the original
+lock; stage such changes in a reviewed PR instead. Every workflow pins the uv release in its
+`setup-uv` step: the lock's dependency-marker spelling depends on the resolver
+version, so an unpinned latest uv can rewrite reviewed edges and fail this check.
+Raise that pin and regenerate `uv.lock` with the same uv in one reviewed PR. The helper then runs the actual
+`uv lock --check`. Final unpublished dependency pins must wait for registry
+publication before these checks can pass.
+
+The bump changes the wrapper version, bundle identifiers, derived requirements and
+citation fields, root lock version, and the TRO bundle-manifest hash/composition
+fingerprint and wrapper-version fields. Remote data and model hashes, certification
+fields, dataset identities, and fixed repository emission context remain unchanged.
+TRO timestamps come from the pinned manifest, not the current clock. The changelog
+uses Towncrier's release date and consumes the reviewed fragments. Run the actual
+version helper, generator, strict checks, and lock refresh in a staging checkout
+before merge, and compare the eventual published wheel against that receipt.
+
 The key design decision is:
 
 - country `*-data` repos build and stage immutable data artifacts
@@ -41,8 +96,13 @@ environment. It installs the bundled Python packages with pip, downloads the
 certified default US and UK datasets into `./data`, and writes a
 `./data/.policyengine-bundle-receipt.json` receipt that records the target
 Python.
-Existing dataset files with the same filename are moved to
-`./data/.policyengine-bundle-backups/<timestamp>/`.
+An existing file is reused when its SHA-256 matches the manifest. Otherwise, a
+verified download atomically replaces it.
+
+The command invokes the same bundle materializer used by calculations. The
+materializer uses the manifest's exact Hugging Face repository type, immutable
+revision, and certified SHA-256. The data package name is retained only as
+provenance metadata; it does not select a download implementation.
 
 Regional datasets may also be certified in the bundle manifest. They are not
 eagerly downloaded by `policyengine bundle install`; callers should materialize
@@ -55,8 +115,16 @@ Useful variants:
 uvx --from policyengine policyengine bundle install
 uvx --from policyengine policyengine bundle install --country uk
 uvx --from policyengine policyengine bundle install --no-datasets
+uvx --from policyengine policyengine bundle install --no-packages --yes
 uvx --from policyengine policyengine bundle install --yes
 ```
+
+Use `--no-packages` when packages are installed from a separate lockfile. The
+command still downloads and verifies the selected certified datasets and writes
+the bundle receipt, but it does not resolve Python, create a virtual environment,
+or install packages. Dataset-only receipts omit `target_python`; `bundle status`
+therefore inspects its current interpreter unless `--python` or `--venv` is
+supplied explicitly.
 
 Check a local environment against a bundle:
 
@@ -133,29 +201,32 @@ US Populace certification uses the Populace release manifest directly:
 ```bash
 python scripts/bundle.py certify-data --country us --data-producer populace \
   --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json" \
+  --regional-manifest-uri "hf://dataset/policyengine/populace-us@<local-area-tag>/releases/<local-area-tag>/release_manifest.json" \
   --model-version "<policyengine-us-version>"
 ```
 
 That produces one US bundle manifest entry containing the Populace national
-default dataset. State and congressional-district regions are runtime row
-filters over that national dataset, so derived `states/*.h5` or
-`districts/*.h5` files are not vendored into `data_releases.us.datasets`.
+default dataset and the certified ACS-local regional dataset. State and
+congressional-district simulations use the latter with runtime row filters, so
+derived `states/*.h5` or `districts/*.h5` files are not vendored into
+`data_releases.us.datasets`.
 
 ### Non-default dataset overlays
 
 `certify_data_release` rewrites `data_releases.{country}` wholesale from the
-certified release manifest, so that block only ever holds datasets from the
-certified release. A staged artifact published in its own release — one that is
-deliberately not the certified default — is registered instead under the
+certified release manifest or manifests. A staged artifact that is not part of
+that certification and is deliberately not a default is registered under the
 sibling `dataset_overlays.{country}` map:
 
 ```json
 "dataset_overlays": {
-  "us": {
-    "populace_us_2024_acs_local": {
-      "path": "populace_us_2024_acs_local.h5",
-      "repo_id": "policyengine/populace-us",
-      "revision": "populace-us-2024-buildl-acs-local-...",
+  "uk": {
+    "populace_uk_2023": {
+      "data_package_name": "populace-data",
+      "path": "populace_uk_2023.h5",
+      "repo_id": "policyengine/populace-uk-private",
+      "repo_type": "dataset",
+      "revision": "populace-uk-2023-...",
       "sha256": "..."
     }
   }
@@ -166,9 +237,31 @@ sibling `dataset_overlays.{country}` map:
 `resolve_dataset_reference` and `managed_microsimulation` load them by name at
 their own pinned, sha-verified revision. Overlays are strictly additive: an
 overlay may not shadow the certified default or any certified dataset, so
-default resolution is untouched. Because certification only rewrites
-`data_releases`, overlays survive re-certification without any manual
-re-add step.
+default resolution is untouched. Certification keeps every overlay except one
+whose name the new release certifies itself: it removes that overlay and says
+so. If a later release stops certifying the name, re-add the overlay;
+certification warns about every name that stops resolving.
+
+Datasets used automatically for a region type are not overlays. They are
+certified into `data_releases.{country}.datasets`, and
+`data_releases.{country}.region_datasets` maps each region type to its artifact
+path. The national `default_dataset` remains unchanged. Ordinary bundle
+installation downloads only that national default; a regional runtime is
+responsible for materializing the additional certified dataset.
+
+`data_releases.{country}.regional_release_kind` records how certification
+routed those region types: `local_area` for a non-default local-area release,
+and `area_coded_national` (UK only) for another release's national dataset
+whose households carry area codes, certified together with that release's
+area weight matrices at their own repo and revision. It is absent when nothing
+is routed, for a legacy US per-state release, and in an entry certified before
+the field existed (as the US ACS-local routing is until its next
+certification).
+
+Cross-package overlays must declare `data_package_name` and `repo_type`
+explicitly. Ordinary artifacts inherit these values from the country release's
+primary `data_package`. This prevents runtime code from guessing how a
+repository should be addressed.
 
 Earlier releases (policyengine 4.15.x–4.16.x) were certified through the
 `PolicyEngine/policyengine-bundles` archive flow; those bundles remain the
@@ -339,8 +432,14 @@ That is a country-data concern and lives in those repos.
 From Python:
 
 ```python
-from policyengine.provenance.manifest import get_data_release_manifest, get_release_manifest
-from policyengine.provenance.trace import build_trace_tro_from_release_bundle, serialize_trace_tro
+from policyengine.provenance.manifest import (
+    get_data_release_manifest,
+    get_release_manifest,
+)
+from policyengine.provenance.trace import (
+    build_trace_tro_from_release_bundle,
+    serialize_trace_tro,
+)
 
 country = get_release_manifest("us")
 tro = build_trace_tro_from_release_bundle(country, get_data_release_manifest("us"))
@@ -364,9 +463,9 @@ wheel ships with the matching TRO.
 from policyengine.results import write_results_with_trace_tro
 
 write_results_with_trace_tro(
-    results,                                # ResultsJson instance
-    "results.json",                         # where to write results
-    bundle_tro=bundle_tro,                  # loaded from the shipped bundle
+    results,  # ResultsJson instance
+    "results.json",  # where to write results
+    bundle_tro=bundle_tro,  # loaded from the shipped bundle
     reform_payload={"salt_cap": 0},
     bundle_tro_url=(
         "https://raw.githubusercontent.com/PolicyEngine/policyengine.py/"
@@ -421,7 +520,9 @@ assert bundle_hash == recorded, "bundle_tro_url content does not match sim TRO"
 # 3. Confirm the fingerprint recorded on the performance matches the
 #    fingerprint inside the fetched bundle.
 bundle = json.loads(bundle_bytes)
-bundle_fp = bundle["@graph"][0]["trov:hasComposition"]["trov:hasFingerprint"]["trov:sha256"]
+bundle_fp = bundle["@graph"][0]["trov:hasComposition"]["trov:hasFingerprint"][
+    "trov:sha256"
+]
 assert perf["pe:bundleFingerprint"] == bundle_fp
 ```
 
@@ -536,7 +637,7 @@ Things that should usually not affect the fingerprint:
 1. the model version exactly matches the `built_with_model_package.version`
    (`compatibility_basis: built_with_model_package`)
 2. the data publisher's `compatible_model_packages` covers the model version
-   (`compatibility_basis: compatible_model_packages` — the publisher's claim,
+   (`compatibility_basis: legacy_compatible_model_package` — the publisher's claim,
    recorded with a warning and made good by the test suite passing on the
    pinned pair)
 
@@ -592,6 +693,9 @@ The target implementation in `policyengine.py` should add:
 - hard validation of bundle certification rules
 - explicit runtime bundle metadata on simulations, APIs, and app responses
 - checksum-backed dataset resolution from the certified bundle manifest
+
+The checksum-backed runtime resolution described above is now implemented.
+Managed materialization is Hugging Face-only; GCS is not a dataset source.
 
 ## Why not let `policyengine.py` build all country data directly?
 

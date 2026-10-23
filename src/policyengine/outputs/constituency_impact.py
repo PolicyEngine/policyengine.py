@@ -17,6 +17,7 @@ from policyengine.outputs.uk_geography_assets import (
 from policyengine.outputs.uk_geography_impact import (
     compute_longwise_uk_geography_impacts,
     resolve_uk_geography_lookup_csv_path,
+    warn_unprotected_uk_geography_output,
 )
 
 if TYPE_CHECKING:
@@ -43,6 +44,10 @@ class ConstituencyImpact(Output):
 
     def run(self) -> None:
         """Group household output rows and compute per-constituency metrics."""
+        warn_unprotected_uk_geography_output("ConstituencyImpact", "constituency")
+        self._compute()
+
+    def _compute(self) -> None:
         baseline_hh = self.baseline_simulation.output_dataset.data.household
         reform_hh = self.reform_simulation.output_dataset.data.household
 
@@ -66,18 +71,22 @@ def compute_uk_constituency_impacts(
 ) -> ConstituencyImpact:
     """Compute per-constituency income changes for UK.
 
+    Deprecated: the output is not disclosure-controlled. Use
+    ``compute_uk_geography_disclosure(levels=("constituency",))`` instead.
+
     Args:
         baseline_simulation: Completed baseline simulation.
         reform_simulation: Completed reform simulation.
         weight_matrix_path: Deprecated and ignored. Constituency outputs now
             group by ``constituency_code_oa`` on the household output.
-        constituency_csv_path: Optional path to constituencies_2024.csv.
-            If omitted, standard local paths are checked before downloading
-            from GCS. If still unavailable, results use geography codes as names.
+        constituency_csv_path: Optional path to a lookup CSV with ``code``,
+            ``name``, ``x`` and ``y`` columns. If omitted, the packaged 2024
+            constituency list supplies names and hex positions. Codes missing
+            from the lookup use the code as the name.
         year: Deprecated and ignored.
         asset_strategies: Deprecated and ignored.
-        download_missing_assets: Whether to download the optional lookup CSV
-            from GCS when no local CSV is found.
+        download_missing_assets: Deprecated and ignored; the lookup is
+            packaged.
 
     Returns:
         ConstituencyImpact with constituency_results populated.
@@ -94,5 +103,8 @@ def compute_uk_constituency_impacts(
         constituency_csv_path=lookup_csv_path,
         year=year,
     )
-    impact.run()
+    warn_unprotected_uk_geography_output(
+        "compute_uk_constituency_impacts", "constituency"
+    )
+    impact._compute()
     return impact

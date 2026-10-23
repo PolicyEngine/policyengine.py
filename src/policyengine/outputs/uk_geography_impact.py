@@ -1,15 +1,42 @@
 """Longwise UK geography impact helpers."""
 
+import logging
+import warnings
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
 from policyengine.data.uk_geography_assets import (
+    UK_AREA_LIST_FILES,
     UKGeographyAssetSpec,
     default_download_dir,
     default_local_search_dirs,
+    packaged_uk_area_list_path,
 )
+from policyengine.provenance.manifest import uk_area_dataset_hint
+
+logger = logging.getLogger(__name__)
+#: The region type whose dataset carries each longwise area column.
+AREA_REGION_TYPES = {
+    "constituency_code_oa": "constituency",
+    "la_code_oa": "local_authority",
+}
+
+
+def warn_unprotected_uk_geography_output(name: str, level: str) -> None:
+    """Warn that an output without disclosure control is deprecated.
+
+    policyengine-core silences Python warnings in every process that loads a
+    country model, so the message also goes to the log, which it leaves alone.
+    """
+    message = (
+        f"{name} is deprecated. Its output is not disclosure-controlled, so it "
+        "must not be published when the data is licensed survey microdata. Use "
+        f"compute_uk_geography_disclosure(levels=({level!r},)) instead."
+    )
+    logger.warning(message)
+    warnings.warn(message, DeprecationWarning, stacklevel=3)
 
 
 def _normalise_code(value) -> str:
@@ -26,7 +53,14 @@ def resolve_uk_geography_lookup_csv_path(
     lookup_csv_path: Optional[str] = None,
     download_missing_assets: bool = True,
 ) -> Optional[str]:
-    """Resolve a UK geography lookup CSV without requiring a weight matrix."""
+    """Resolve a UK geography lookup CSV without requiring a weight matrix.
+
+    An explicit ``lookup_csv_path`` wins. Constituencies and local
+    authorities otherwise use the area list shipped with the package, so
+    labels never depend on a local file or on the unversioned GCS bucket
+    (``download_missing_assets`` then has no effect). Other geography types
+    keep the local search and GCS fallback.
+    """
     if lookup_csv_path:
         path = Path(lookup_csv_path).expanduser()
         if not path.is_file():
@@ -35,6 +69,9 @@ def resolve_uk_geography_lookup_csv_path(
                 f"or is not a file: {path}"
             )
         return str(path)
+
+    if spec.geography_type in UK_AREA_LIST_FILES:
+        return packaged_uk_area_list_path(spec.geography_type)
 
     for search_dir in default_local_search_dirs():
         path = search_dir / spec.lookup_csv_filename
@@ -111,10 +148,12 @@ def compute_longwise_uk_geography_impacts(
         "household_weight",
     ]:
         if column not in baseline_household.columns:
+            hint = uk_area_dataset_hint(AREA_REGION_TYPES.get(column, ""))
             raise ValueError(
                 f"UK geography impacts require baseline household column "
                 f"'{column}'. Re-run the simulation with an output dataset "
                 f"that preserves UK geography passthrough columns."
+                + (f" {hint}" if hint else "")
             )
     if "household_net_income" not in reform_household.columns:
         raise ValueError(

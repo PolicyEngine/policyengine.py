@@ -15,6 +15,63 @@ from policyengine.core.scoping_strategy import (
 from policyengine.core.simulation import Simulation
 
 
+@pytest.mark.parametrize(
+    "values,selected,expected",
+    [
+        (["LONDON", b"NORTH_WEST", "SCOTLAND"], ["LONDON", "NORTH_WEST"], [0, 1]),
+        ([6, 34, 36], [6, 36], [0, 2]),
+        ([6, "6", b"6"], [6], [0]),
+        ([6, "6", b"6"], ["6"], [1, 2]),
+        (["LONDON", "SCOTLAND", "WALES"], [], []),
+    ],
+)
+def test_row_filter_matches_any_list_value(values, selected, expected):
+    household = MicroDataFrame(
+        pd.DataFrame(
+            {
+                "household_id": [0, 1, 2],
+                "household_weight": [10.0, 20.0, 30.0],
+                "geography": values,
+            }
+        ),
+        weights="household_weight",
+    )
+    person = MicroDataFrame(
+        pd.DataFrame({"person_id": [0, 1, 2], "person_household_id": [0, 1, 2]})
+    )
+    strategy = RowFilterStrategy(variable_name="geography", variable_value=selected)
+    data = {"household": household, "person": person}
+
+    if not expected:
+        with pytest.raises(ValueError, match="No households found"):
+            strategy.apply(data, ["household"], 2026)
+    else:
+        result = strategy.apply(data, ["household"], 2026)
+        assert result["household"]["household_id"].tolist() == expected
+        assert result["person"]["person_id"].tolist() == expected
+
+
+def test_row_filter_list_values_respect_additional_filters(us_entity_data):
+    strategy = RowFilterStrategy(
+        variable_name="state_fips",
+        variable_value=[6, 34],
+        additional_filters={"congressional_district_geoid": 601},
+    )
+
+    result = strategy.apply(
+        us_entity_data,
+        ["household", "tax_unit", "spm_unit", "family", "marital_unit"],
+        2026,
+    )
+
+    assert result["household"]["household_id"].tolist() == [1]
+
+
+def test_row_filter_scalar_cache_key_is_unchanged():
+    strategy = RowFilterStrategy(variable_name="region", variable_value="SCOTLAND")
+    assert strategy.cache_key == "row_filter:region=SCOTLAND"
+
+
 class TestRowFilterStrategy:
     """Tests for RowFilterStrategy."""
 

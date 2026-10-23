@@ -10,13 +10,19 @@ on:
       - .github/**
       - changelog.d/**
       - pyproject.toml
+      - uv.lock
       - src/policyengine/data/bundle/manifest.json
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
         with:
@@ -27,6 +33,7 @@ jobs:
         run: .github/check-changelog.sh
   Lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
         - uses: actions/checkout@v6
         - name: Install ruff
@@ -39,10 +46,13 @@ jobs:
           run: ruff check .
   Mypy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
         - uses: actions/checkout@v6
         - name: Install uv
           uses: astral-sh/setup-uv@v8.1.0
+          with:
+              version: "0.13.4"
         - name: Set up Python
           uses: actions/setup-python@v6
           with:
@@ -54,10 +64,11 @@ jobs:
   Python-Compat:
     name: Install + smoke-import (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
@@ -67,30 +78,43 @@ jobs:
           allow-prereleases: true
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.13.4"
       - name: Install package (no country-model extras)
-        # `h5py` is used transitively by policyengine.core.scoping_strategy
-        # but is normally supplied via the [us]/[uk] extras (through
-        # policyengine-core). Install it directly so the smoke import can
-        # exercise the wrapper without the country models, which pin
-        # versions that don't support 3.9/3.10 yet.
-        run: uv pip install --system . h5py
+        run: uv pip install --system .
       - name: Smoke-import core modules
         run: python -c "import policyengine; from policyengine.core import Dataset, Policy, Simulation; from policyengine.outputs import aggregate, poverty, inequality; print('import OK')"
   BundleVerification:
-    name: Verify bundle metadata
+    name: Verify release inputs and bundle packages
+    # Private manifest credentials are available only to trusted repository PRs.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       POLICYENGINE_SKIP_COUNTRY_IMPORTS: "1"
     steps:
       - uses: actions/checkout@v6
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.13.4"
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Check derived bundle metadata
-        run: python scripts/bundle.py check
+      - name: Install package for TRACE verification
+        run: uv pip install -e . h5py --system
+      - name: Check reviewed release inputs
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: |
+          if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]; then
+            echo "::error::Full private release verification requires HUGGING_FACE_TOKEN"
+            exit 1
+          fi
+          python scripts/check_release_credentials.py
+          python scripts/bundle.py check --published-spm --include-tros --strict-tros
+          python scripts/release_lock.py
       - name: Install bundle package scaffold
         run: |
           uv pip install -e ".[models]" --system
@@ -116,16 +140,22 @@ jobs:
       - name: Verify bundle packages
         run: policyengine bundle verify --country us --country uk --packages-only --json
   Test:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
+    # Observed 2026-10-14..15: 28 to 54 minutes per Python version, with runs on
+    # 3.12 and 3.13 cancelled at the old 60-minute limit. Fail a hung job instead
+    # of holding a shared org runner for the 6-hour default.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
         - name: Checkout repo
           uses: actions/checkout@v6
         - name: Install uv
           uses: astral-sh/setup-uv@v8.1.0
+          with:
+              version: "0.13.4"
 
         - name: Set up Python
           uses: actions/setup-python@v6

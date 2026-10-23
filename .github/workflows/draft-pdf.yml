@@ -1,5 +1,8 @@
 on:
+  # Feature branches get the pull_request run below; building the draft again
+  # on every branch push duplicated it.
   push:
+    branches: [main]
     paths:
       - paper.md
       - paper.bib
@@ -10,10 +13,15 @@ on:
       - paper.bib
       - architecture.png
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   paper:
     runs-on: ubuntu-latest
     name: Draft PDF
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: openjournals/openjournals-draft-action@master

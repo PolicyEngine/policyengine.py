@@ -1,0 +1,364 @@
+{
+ "schema_version": 1,
+ "data_package": {
+  "name": "populace-data",
+  "version": "0.1.0"
+ },
+ "default_datasets": {
+  "national": "populace_us_2024"
+ },
+ "build": {
+  "build_id": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+  "built_at": "2026-07-28T03:56:03.415544+00:00",
+  "built_with_core_package": {
+   "name": "policyengine-core",
+   "version": "3.26.11"
+  },
+  "built_with_model_package": {
+   "name": "policyengine-us",
+   "version": "1.764.6"
+  },
+  "timing": {
+   "target_compilation_seconds": 1132.080194915994,
+   "calibration_seconds": 1072.4242046249856,
+   "elapsed_through_calibration_seconds": 2800.574625542009,
+   "total_build_seconds": 8161.056042167009
+  },
+  "ledger_artifact": {
+   "path_name": "consumer_facts_buildn_v9_4.jsonl",
+   "fact_row_count": 37405,
+   "facts_sha256": "b3c0835631a446eb96aa84d86f3ee962d15ca356174c7114db52974f1cacc080",
+   "schema_version": null,
+   "manifest_sha256": null
+  },
+  "warm_start_calibration": {
+   "enabled": false
+  },
+  "selection_source": {
+   "mode": "frozen_support",
+   "join_key": [
+    "source_year",
+    "source_household_id",
+    "household_support_channel",
+    "household_support_clone_index"
+   ],
+   "source": {
+    "kind": "reselection",
+    "method": "buildm-keogh-carrier-protect-swap",
+    "issue": "PolicyEngine/populace#434",
+    "base_h5_sha256": "5d8a31622e6f4772188944385c5a6d4bd0e589f846043e6fd56634c9f6ef7d61",
+    "parent_selection_identities_sha256": "152baca3afeedfe93fbef49e95978b8f3804eec38c32eb8e5c3a1216a925340d",
+    "parent_selection": "buildi_rmloss100_selection_source (152baca3)",
+    "n_add": 9,
+    "swap_rule": "ADD the 9 keogh_distributions carrier households absent from the parent (13 carriers total in base-m; 4 already selected); REMOVE the 9 lowest-base-weight non-carrier asec-channel households (deterministic tiebreak on the join key). Channel composition preserved. Motivated by the keogh_distribution_neutralization reform-coverage smoke probe: the parent selection predates the keogh restoration and carried ~$0.1M unweighted of the $148.97M weighted source mass."
+   },
+   "n_source": 57240,
+   "n_base_candidates": 337704,
+   "n_selected": 57240,
+   "n_unmapped": 0,
+   "n_ambiguous": 0
+  },
+  "default_dataset": {
+   "method": "dense_no_l0",
+   "sparse": false,
+   "n_candidate_households": 57240,
+   "n_exported_households": 57240,
+   "epochs": 6000,
+   "l2_lambda": 0.0,
+   "final_loss": 0.01768391632283638
+  },
+  "base_population_scale": {
+   "passed": true,
+   "details": {
+    "measure": "person_weight",
+    "population": 334200000.0,
+    "benchmark": 334200000.0,
+    "relative_error": 0.0,
+    "max_abs_relative_error": 0.25,
+    "calibration_mass_policy": "conserve",
+    "mass_repair": {
+     "method": "rescale_household_weights_to_census_person_population",
+     "applied": true,
+     "reason": "US fiscal refresh rescaled base household weights to the Census 2024 national person-population benchmark before mass='conserve' calibration.",
+     "initial_population": 62697558.345378846,
+     "benchmark": 334200000.0,
+     "factor": 5.330351114456635,
+     "initial_relative_error": -0.8123950977098179,
+     "repaired_population": 334200000.0,
+     "repaired_relative_error": 0.0,
+     "mass_change": {
+      "entity": "household",
+      "old_total": 22988559.15013668,
+      "new_total": 122537091.8856833,
+      "declared_factor": 5.330351114456635,
+      "reason": "US fiscal refresh rescaled base household weights to the Census 2024 national person-population benchmark before mass='conserve' calibration."
+     }
+    }
+   }
+  },
+  "immigration_composition": {
+   "passed": true,
+   "details": {
+    "summary": {
+     "person_population": 334200000.0,
+     "ssn_card_type": {
+      "population": {
+       "CITIZEN": 308582144.34344304,
+       "NONE": 13090234.740726216,
+       "NON_CITIZEN_VALID_EAD": 4011891.027315071,
+       "OTHER_NON_CITIZEN": 8515729.8885157
+      },
+      "share": {
+       "CITIZEN": 0.9233457341216129,
+       "NONE": 0.03916886517272955,
+       "NON_CITIZEN_VALID_EAD": 0.012004461482091774,
+       "OTHER_NON_CITIZEN": 0.025480939223565827
+      }
+     },
+     "immigration_status_str": {
+      "population": {
+       "CITIZEN": 308582144.34344304,
+       "CUBAN_HAITIAN_ENTRANT": 518697.3384474666,
+       "DACA": 398079.4611381175,
+       "LEGAL_PERMANENT_RESIDENT": 11610844.116245188,
+       "UNDOCUMENTED": 13090234.740726216
+      },
+      "share": {
+       "CITIZEN": 0.9233457341216129,
+       "CUBAN_HAITIAN_ENTRANT": 0.0015520566680055853,
+       "DACA": 0.0011911414157334454,
+       "LEGAL_PERMANENT_RESIDENT": 0.03474220262191857,
+       "UNDOCUMENTED": 0.03916886517272955
+      }
+     }
+    },
+    "controls": {
+     "undocumented_workers": 8300000.0,
+     "undocumented_students": 408000.0,
+     "undocumented_population_anchor": 11000000.0,
+     "sources": {
+      "undocumented_workers": "https://www.pewresearch.org/short-reads/2024/07/22/what-we-know-about-unauthorized-immigrants-living-in-the-us/",
+      "undocumented_students": "https://www.higheredimmigrationportal.org/research/undocumented-students-in-higher-education-updated-march-2021/",
+      "undocumented_population_anchor": "https://www.pewresearch.org/short-reads/2024/07/22/what-we-know-about-unauthorized-immigrants-living-in-the-us/"
+     }
+    },
+    "non_citizen_share_band": [
+     0.03,
+     0.12
+    ],
+    "undocumented_anchor_relative_band": [
+     0.5,
+     1.6
+    ]
+   }
+  },
+  "ecps_parity": {
+   "passed": true,
+   "details": {
+    "reference_populated_layers": 158,
+    "gaps": 0,
+    "exempted": [
+     "employer_sponsored_insurance_premiums",
+     "financial_assistance",
+     "is_unmarried_partner_of_household_head",
+     "is_wic_at_nutritional_risk",
+     "survivor_benefits",
+     "takes_up_dc_ptc",
+     "takes_up_early_head_start_if_eligible"
+    ],
+    "stale_exemptions": [],
+    "dormant_exemptions": [],
+    "reference": {
+     "repo_id": "policyengine/policyengine-us-data",
+     "repo_type": "model",
+     "filename": "enhanced_cps_2024.h5",
+     "revision": "21280dca5995e978d706740a8a4b9b7860cfd7b6",
+     "sha256": "0a6b961ad363a421bde99f2c8e5d8f20370bcba45fd303050537a25bdd805b14",
+     "vintage": "2024",
+     "period": "2024"
+    },
+    "candidate_populated_layers": 172,
+    "known_gaps": {
+     "employer_sponsored_insurance_premiums": {
+      "reason": "SOURCE UNAVAILABILITY WITH EVIDENCE: archived commit 42ed5d45c56df80d754fbe24cce21cfeb8d05cbe datasets/cps/cps.py lines 197-271 and 1575-1581 requires NOW_OWNGRP, NOW_HIPAID, NOW_GRPFTYP, and PHIP_VAL; datasets/cps/census_cps.py lines 13-55 declares the three NOW_* fields optional. All three SHA-recorded 2022-2024 HDF inputs consumed by the hermetic --asec-h5 build contain PHIP_VAL but omit all three required NOW_* fields, so the retired owner/payment/plan-type derivation cannot execute. has_esi and NOW_GRP are not semantically valid substitutes.",
+      "issue": "PolicyEngine/populace#32"
+     },
+     "financial_assistance": {
+      "reason": "SOURCE UNAVAILABILITY WITH EVIDENCE: archived commit 42ed5d45c56df80d754fbe24cce21cfeb8d05cbe datasets/cps/cps.py lines 1493-1496 derives person-level financial_assistance directly from FIN_VAL; datasets/cps/census_cps.py lines 39-58 and 306-359 make FIN_VAL a required person source. All three SHA-recorded 2022-2024 ASEC H5 inputs consumed by the hermetic --asec-h5 build omit FIN_VAL, FIN_YN, and I_FINVAL from their person tables. HFINVAL and FFINVAL are household/family aggregates and cannot recover the person recipient without synthetic allocation. The retired PUF-clone QRF at datasets/cps/extended_cps.py lines 140-194 and 639-745 trains financial_assistance from CPS person observations, so PUF provides no independent replacement source.",
+      "issue": "PolicyEngine/populace#38"
+     },
+     "is_unmarried_partner_of_household_head": {
+      "reason": "SOURCE UNAVAILABILITY WITH EVIDENCE: archived commit 42ed5d45c56df80d754fbe24cce21cfeb8d05cbe datasets/cps/cps.py lines 1214-1221 derives is_unmarried_partner_of_household_head exclusively from person PERRP; datasets/cps/census_cps.py lines 306-318 declares that person source. All three SHA-recorded 2022-2024 ASEC HDF inputs consumed by the hermetic build omit PERRP. The 2022 and 2023 inputs also omit PECOHAB, A_EXPRRP, and A_FAMREL; only 2024 carries those alternatives, and its A_EXPRRP code 13 conflates partner with roommate. Populace's older-year relationship fallback uses only line, spouse, sex, and parent pointers and never identifies a partner. Using the 2024 pointer for one-third of the pool while treating the other two-thirds as false, or assigning partner status from the combined partner/roommate code, would synthesize statuses the locked sources do not report.",
+      "issue": "PolicyEngine/populace#38"
+     },
+     "is_wic_at_nutritional_risk": {
+      "reason": "SOURCE UNAVAILABILITY WITH EVIDENCE: archived commit 42ed5d45c56df80d754fbe24cce21cfeb8d05cbe datasets/cps/cps.py lines 684-701 does not map a measured nutritional-risk assessment; it loads category priors, makes a seeded Bernoulli draw, and ORs that synthetic draw with reported WIC receipt. parameters/take_up/wic_nutritional_risk.yaml lines 1-13 gives every fixed category prior a 1980 effective key (the infant factor was historically adopted in 1991), while parameters/__init__.py lines 38-50 merely carries the latest value forward. datasets/cps/census_cps.py lines 293-365 loads only WIC receipt/value fields, and cps.py line 1558 maps WICYN solely to receives_wic. All three SHA-recorded 2022-2024 ASEC H5 inputs consumed by the hermetic build contain only SPM_WICVAL/WICYN on person and HRNUMWIC/HRWICYN on household; none contains an individual nutritional-risk assessment. The Census questionnaire gives WICYN an adult-female universe and allows receipt reporting for the respondent or on behalf of a child, so a yes does not identify the assessed person and code 0 is not-in-universe rather than a negative assessment. USDA requires a competent professional to assess and document risk in separate WIC certification records; FNS adopted an all-category 1.0 risk adjustment while producing its CY2020 estimates and applied it to the revised CY2016-2021 series. Assigning risk to a WICYN row, assigning False to nonrecipients, or recreating the retired random False outcomes would synthesize person-level assessments absent from the locked sources, while assigning True to all unknowns is the PolicyEngine-US default and carries no non-default signal.",
+      "issue": "PolicyEngine/populace#312"
+     },
+     "survivor_benefits": {
+      "reason": "SOURCE UNAVAILABILITY WITH EVIDENCE: archived commit 42ed5d45c56df80d754fbe24cce21cfeb8d05cbe datasets/cps/cps.py line 1495 derives person-level survivor_benefits exclusively from SRVS_VAL; datasets/cps/census_cps.py lines 39-58 and 306-359 make SRVS_VAL a required person source. All three SHA-recorded 2022-2024 ASEC H5 inputs consumed by the hermetic --asec-h5 build omit SRVS_VAL from their person tables. Their FSURVAL/HSURVAL fields are only family/household aggregates: each household value exactly equals summed family values, and 657/647/610 positive families have multiple people, so the recipient cannot be recovered. The retired PUF-clone QRF at datasets/cps/extended_cps.py lines 140-194 and 639-745 trains survivor_benefits from CPS person observations, so PUF provides no independent replacement source. Restoring a nonzero person-year amount without SRVS_VAL would synthesize data.",
+      "issue": "PolicyEngine/populace#38"
+     },
+     "takes_up_dc_ptc": {
+      "reason": "SOURCE UNAVAILABILITY WITH EVIDENCE: archived commit 42ed5d45c56df80d754fbe24cce21cfeb8d05cbe datasets/cps/cps.py lines 565-599 does not carry an observed DC property-tax-credit claim; it loads a scalar rate and assigns takes_up_dc_ptc by an independent seeded Bernoulli draw. parameters/take_up/dc_ptc.yaml lines 1-11 divides an aggregate 37,133-claim count by a 131,791,388 PolicyEngine value estimate, which is neither dimensionally a participation denominator nor mathematically 0.32; utils/randomness.py lines 5-28 confirms the output is generated from a variable-name-seeded random stream. Archived census_cps.py lines 251-262 exposes only generic state-tax liability amounts, not a Schedule H claim; archived puf.py lines 704-719 maps other_credits from federal P08000, and the locked PUF has no state geography. All three SHA-recorded 2022-2024 ASEC H5 inputs and the SHA-recorded processed PUF 1.8.0 input consumed by the hermetic build omit takes_up_dc_ptc and any DC Schedule H claim indicator. The aggregate claim count cannot identify claiming tax units, so replaying the retired draw or selecting modeled-eligible units would synthesize claimant identities absent from every locked source.",
+      "issue": "PolicyEngine/populace#312"
+     },
+     "takes_up_early_head_start_if_eligible": {
+      "reason": "SOURCE UNAVAILABILITY WITH EVIDENCE: archived commit 42ed5d45c56df80d754fbe24cce21cfeb8d05cbe datasets/cps/cps.py lines 582-583 and 640-648 does not carry an observed Early Head Start enrollment indicator; it loads a scalar rate and assigns takes_up_early_head_start_if_eligible by an unanchored person-level draw. parameters/take_up/early_head_start.yaml lines 1-9 supplies 0.09 from a NIEER research chart, not an ACF administrative participation fact, and utils/randomness.py lines 5-28 confirms variable-name-seeded randomness. PolicyEngine-US 1.764.6 applies the input to people under age 3 or pregnant. All three SHA-recorded 2022-2024 ASEC H5 inputs and the processed PUF consumed by the hermetic build omit both Head Start take-up flags and any individual Head Start/Early Head Start enrollment indicator. The independently SHA-pinned full 2023 SIPP observes standard Head Start only through a nursery/preschool education item with no reported positives under age 3; its child-care fields cover only ages 2-7, contain no Early Head Start distinction or pregnancy branch, and have a Census-documented universe inconsistency. ACF's exact EHS cumulative-enrollment total includes every participant served during the year and turnover replacements, while its funded enrollment is capacity; neither identifies point-in-time person recipients. Assigning either aggregate to modeled-eligible infants, toddlers, or pregnant people, mapping ambiguous age-2 SIPP Head Start responses to EHS, or replaying the retired 0.09 draw would synthesize the missing person values.",
+      "issue": "PolicyEngine/populace#312"
+     }
+    }
+   }
+  },
+  "hours_worked_signal": {
+   "passed": true,
+   "details": {
+    "worked_share": 0.5296885704999547,
+    "mean_weekly_hours_workers": 37.56500077416023,
+    "worked_share_band": [
+     0.35,
+     0.62
+    ],
+    "mean_weekly_hours_band": [
+     30.0,
+     45.0
+    ],
+    "unique_counts": {
+     "weekly_hours_worked_before_lsr": 94,
+     "hours_worked_last_week": 99,
+     "weeks_worked": 53
+    }
+   }
+  },
+  "snap_take_up_signal": {
+   "passed": true,
+   "details": {
+    "take_up_share": 0.81845299430267,
+    "take_up_share_band": [
+     0.7,
+     0.95
+    ],
+    "unique_count": 2,
+    "reported_share": 0.09658006751385996,
+    "reporters_not_taking_up": 0
+   }
+  },
+  "eligibility_inputs_signal": {
+   "passed": true,
+   "details": {
+    "disabled_share": 0.09470379050475294,
+    "full_time_college_student_share": 0.014372059621570291,
+    "parent_share": 0.30573658099536954,
+    "veterans_benefits_share": 0.014050680524622211,
+    "disabled_share_band": [
+     0.05,
+     0.2
+    ],
+    "full_time_student_share_band": [
+     0.01,
+     0.08
+    ],
+    "parent_share_band": [
+     0.12,
+     0.4
+    ],
+    "veterans_benefits_share_band": [
+     0.002,
+     0.04
+    ],
+    "unique_counts": {
+     "is_disabled": 2,
+     "is_blind": 2,
+     "is_full_time_college_student": 2,
+     "own_children_in_household": 14,
+     "veterans_benefits": 568
+    }
+   }
+  },
+  "pregnancy_signal": {
+   "passed": true,
+   "details": {
+    "pregnant_share": 0.008977563210398776,
+    "pregnant_share_band": [
+     0.002,
+     0.02
+    ],
+    "unique_count": 2
+   }
+  },
+  "snap_discretionary_exemption_signal": {
+   "passed": true,
+   "details": {
+    "exempt_share": 0.046463120829380554,
+    "exempt_share_band": [
+     0.015,
+     0.09
+    ],
+    "unique_count": 2
+   }
+  },
+  "documented_absent_inputs": {
+   "is_homeless": "No ASEC source: the CPS samples the housed population, so the pre-HR1 SNAP ABAWD homeless exemption cannot fire (PolicyEngine/populace#351).",
+   "was_in_foster_care": "No ASEC item for foster-care history, so the pre-HR1 former-foster-youth ABAWD exemption (7 CFR 273.24(c)(9)) cannot fire (PolicyEngine/populace#351).",
+   "is_snap_work_program_participant": "No ASEC item measures SNAP E&T or qualifying work-program participation, so compliance via program participation never fires; USDA reports E&T reaches a small minority of participants, so the always-False default understates compliance only modestly (PolicyEngine/populace#249).",
+   "weekly_snap_work_program_hours": "No ASEC item measures qualifying work-program hours, so combined work-plus-program hours toward the 20-hour ABAWD test omit program hours (PolicyEngine/populace#249).",
+   "is_snap_workfare_participant": "No ASEC item measures workfare participation under 7 CFR 273.7(m), which satisfies the ABAWD requirement regardless of hours; defaults False (PolicyEngine/populace#249)."
+  }
+ },
+ "compatible_core_packages": [
+  {
+   "name": "policyengine-core",
+   "specifier": "==3.26.11"
+  }
+ ],
+ "compatible_model_packages": [
+  {
+   "name": "policyengine-us",
+   "specifier": "==1.764.6"
+  }
+ ],
+ "artifacts": {
+  "populace_us_2024": {
+   "kind": "microdata",
+   "path": "populace_us_2024.h5",
+   "repo_id": "policyengine/populace-us",
+   "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+   "sha256": "48b9d479fb4fd1c3537f9383ce4697d130b6f618658409d74f6233c43b994c7e"
+  },
+  "populace_us_2024_calibration": {
+   "kind": "calibration",
+   "path": "populace_us_2024_calibration.npz",
+   "repo_id": "policyengine/populace-us",
+   "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+   "sha256": "b6e9c0678de5e79e8ddbd7a2a2f17c357bd6b368153cea7b5119c299a280a1b5"
+  },
+  "calibration_diagnostics": {
+   "kind": "diagnostics",
+   "path": "calibration_diagnostics.json",
+   "repo_id": "policyengine/populace-us",
+   "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+   "sha256": "870449b44e86b13b25bcea1a57f0e7af37f4d4db18be815eea3acdf9fe6eb40e"
+  },
+  "us_source_coverage": {
+   "kind": "diagnostics",
+   "path": "us_source_coverage.json",
+   "repo_id": "policyengine/populace-us",
+   "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+   "sha256": "6406c8686c292015a5bc7265a42402f89935f9395a8b63510efdd4d9562e7ff5"
+  },
+  "us_ssi_take_up": {
+   "kind": "diagnostics",
+   "path": "us_ssi_take_up.json",
+   "repo_id": "policyengine/populace-us",
+   "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+   "sha256": "ce631a37e2fe2ed22927fa232d41150d3b6cf328b38d3e5b38018fc4eec1b44d"
+  },
+  "demographics": {
+   "kind": "diagnostics",
+   "path": "demographics.json",
+   "repo_id": "policyengine/populace-us",
+   "revision": "populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z",
+   "sha256": "50c39dea345fa4e21f32272304b376979b9572ca17383dd13061b752d9a81112"
+  }
+ }
+}

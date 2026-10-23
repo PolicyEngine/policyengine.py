@@ -1,0 +1,362 @@
+code,name,x,y
+E06000001,Hartlepool,8,19
+E06000002,Middlesbrough,9,18
+E06000003,Redcar and Cleveland,9,19
+E06000004,Stockton-on-Tees,8,18
+E06000005,Darlington,7,18
+E06000006,Halton,1,11
+E06000007,Warrington,2,11
+E06000008,Blackburn with Darwen,4,15
+E06000009,Blackpool,2,15
+E06000010,"Kingston upon Hull, City of",10,15
+E06000011,East Riding of Yorkshire,11,16
+E06000012,North East Lincolnshire,11,14
+E06000013,North Lincolnshire,10,14
+E06000014,York,9,17
+E06000015,Derby,6,11
+E06000016,Leicester,8,8
+E06000017,Rutland,10,9
+E06000018,Nottingham,8,10
+E06000019,"Herefordshire, County of",0,8
+E06000020,Telford and Wrekin,2,9
+E06000021,Stoke-on-Trent,3,10
+E06000022,Bath and North East Somerset,1,3
+E06000023,"Bristol, City of",0,3
+E06000024,North Somerset,0,2
+E06000025,South Gloucestershire,1,4
+E06000026,Plymouth,-4,-2
+E06000027,Torbay,-3,-2
+E06000030,Swindon,2,4
+E06000031,Peterborough,11,9
+E06000032,Luton,10,7
+E06000033,Southend-on-Sea,16,6
+E06000034,Thurrock,15,4
+E06000035,Medway,15,1
+E06000036,Bracknell Forest,4,2
+E06000037,West Berkshire,2,2
+E06000038,Reading,2,3
+E06000039,Slough,6,4
+E06000040,Windsor and Maidenhead,4,3
+E06000041,Wokingham,3,3
+E06000042,Milton Keynes,6,5
+E06000043,Brighton and Hove,9,-2
+E06000044,Portsmouth,4,-1
+E06000045,Southampton,2,0
+E06000046,Isle of Wight,1,-2
+E06000047,County Durham,6,18
+E06000049,Cheshire East,4,11
+E06000050,Cheshire West and Chester,3,11
+E06000051,Shropshire,1,9
+E06000052,Cornwall,-5,-2
+E06000053,Isles of Scilly,-7,-3
+E06000054,Wiltshire,1,2
+E06000055,Bedford,9,7
+E06000056,Central Bedfordshire,9,6
+E06000057,Northumberland,5,20
+E06000058,"Bournemouth, Christchurch and Poole",0,0
+E06000059,Dorset,-1,0
+E06000060,Buckinghamshire,5,5
+E06000061,North Northamptonshire,9,9
+E06000062,West Northamptonshire,7,6
+E06000063,Cumberland,4,18
+E06000064,Westmorland and Furness,4,17
+E06000065,North Yorkshire,8,17
+E06000066,Somerset,0,1
+E07000008,Cambridge,12,8
+E07000009,East Cambridgeshire,12,9
+E07000010,Fenland,13,10
+E07000011,Huntingdonshire,10,8
+E07000012,South Cambridgeshire,11,8
+E07000032,Amber Valley,7,11
+E07000033,Bolsover,10,12
+E07000034,Chesterfield,9,12
+E07000035,Derbyshire Dales,7,12
+E07000036,Erewash,7,9
+E07000037,High Peak,7,13
+E07000038,North East Derbyshire,8,12
+E07000039,South Derbyshire,6,10
+E07000040,East Devon,-2,-1
+E07000041,Exeter,-3,-1
+E07000042,Mid Devon,-2,0
+E07000043,North Devon,-3,1
+E07000044,South Hams,-4,-3
+E07000045,Teignbridge,-2,-2
+E07000046,Torridge,-4,-1
+E07000047,West Devon,-3,0
+E07000061,Eastbourne,10,-2
+E07000062,Hastings,13,-2
+E07000063,Lewes,10,-1
+E07000064,Rother,12,-2
+E07000065,Wealden,11,-2
+E07000066,Basildon,14,5
+E07000067,Braintree,14,7
+E07000068,Brentwood,13,5
+E07000069,Castle Point,15,5
+E07000070,Chelmsford,14,6
+E07000071,Colchester,15,8
+E07000072,Epping Forest,12,5
+E07000073,Harlow,13,6
+E07000074,Maldon,15,7
+E07000075,Rochford,15,6
+E07000076,Tendring,16,8
+E07000077,Uttlesford,13,7
+E07000078,Cheltenham,1,5
+E07000079,Cotswold,2,5
+E07000080,Forest of Dean,-1,6
+E07000081,Gloucester,0,6
+E07000082,Stroud,0,5
+E07000083,Tewkesbury,1,6
+E07000084,Basingstoke and Deane,2,1
+E07000085,East Hampshire,4,0
+E07000086,Eastleigh,3,0
+E07000087,Fareham,2,-1
+E07000088,Gosport,3,-1
+E07000089,Hart,3,2
+E07000090,Havant,5,0
+E07000091,New Forest,1,0
+E07000092,Rushmoor,4,1
+E07000093,Test Valley,1,1
+E07000094,Winchester,3,1
+E07000095,Broxbourne,12,6
+E07000096,Dacorum,8,6
+E07000098,Hertsmere,9,5
+E07000099,North Hertfordshire,11,7
+E07000102,Three Rivers,7,5
+E07000103,Watford,8,5
+E07000105,Ashford,12,-1
+E07000106,Canterbury,15,0
+E07000107,Dartford,13,1
+E07000108,Dover,14,-1
+E07000109,Gravesham,14,1
+E07000110,Maidstone,14,0
+E07000111,Sevenoaks,12,0
+E07000112,Folkestone and Hythe,13,-1
+E07000113,Swale,16,0
+E07000114,Thanet,15,-1
+E07000115,Tonbridge and Malling,13,0
+E07000116,Tunbridge Wells,11,-1
+E07000117,Burnley,6,15
+E07000118,Chorley,3,14
+E07000119,Fylde,4,16
+E07000120,Hyndburn,5,15
+E07000121,Lancaster,3,17
+E07000122,Pendle,6,16
+E07000123,Preston,5,16
+E07000124,Ribble Valley,5,17
+E07000125,Rossendale,6,14
+E07000126,South Ribble,3,15
+E07000127,West Lancashire,2,13
+E07000128,Wyre,3,16
+E07000129,Blaby,7,7
+E07000130,Charnwood,8,9
+E07000131,Harborough,8,7
+E07000132,Hinckley and Bosworth,7,8
+E07000133,Melton,11,10
+E07000134,North West Leicestershire,6,9
+E07000135,Oadby and Wigston,9,8
+E07000136,Boston,12,12
+E07000137,East Lindsey,12,13
+E07000138,Lincoln,11,12
+E07000139,North Kesteven,11,11
+E07000140,South Holland,12,11
+E07000141,South Kesteven,12,10
+E07000142,West Lindsey,11,13
+E07000143,Breckland,14,10
+E07000144,Broadland,15,12
+E07000145,Great Yarmouth,15,11
+E07000146,King's Lynn and West Norfolk,13,11
+E07000147,North Norfolk,14,12
+E07000148,Norwich,14,11
+E07000149,South Norfolk,15,10
+E07000170,Ashfield,8,11
+E07000171,Bassetlaw,10,13
+E07000172,Broxtowe,7,10
+E07000173,Gedling,9,10
+E07000174,Mansfield,9,11
+E07000175,Newark and Sherwood,10,11
+E07000176,Rushcliffe,10,10
+E07000177,Cherwell,4,5
+E07000178,Oxford,4,4
+E07000179,South Oxfordshire,5,4
+E07000180,Vale of White Horse,3,4
+E07000181,West Oxfordshire,3,5
+E07000192,Cannock Chase,3,9
+E07000193,East Staffordshire,5,11
+E07000194,Lichfield,4,9
+E07000195,Newcastle-under-Lyme,2,10
+E07000196,South Staffordshire,2,8
+E07000197,Stafford,4,10
+E07000198,Staffordshire Moorlands,5,10
+E07000199,Tamworth,5,9
+E07000200,Babergh,14,8
+E07000202,Ipswich,15,9
+E07000203,Mid Suffolk,14,9
+E07000207,Elmbridge,7,2
+E07000208,Epsom and Ewell,8,0
+E07000209,Guildford,5,1
+E07000210,Mole Valley,6,1
+E07000211,Reigate and Banstead,7,0
+E07000212,Runnymede,5,3
+E07000213,Spelthorne,6,3
+E07000214,Surrey Heath,5,2
+E07000215,Tandridge,9,-1
+E07000216,Waverley,6,0
+E07000217,Woking,6,2
+E07000218,North Warwickshire,6,8
+E07000219,Nuneaton and Bedworth,6,7
+E07000220,Rugby,6,6
+E07000221,Stratford-on-Avon,3,6
+E07000222,Warwick,4,6
+E07000223,Adur,8,-2
+E07000224,Arun,6,-2
+E07000225,Chichester,5,-1
+E07000226,Crawley,8,-1
+E07000227,Horsham,6,-1
+E07000228,Mid Sussex,7,-1
+E07000229,Worthing,7,-2
+E07000234,Bromsgrove,2,7
+E07000235,Malvern Hills,-1,7
+E07000236,Redditch,4,7
+E07000237,Worcester,0,7
+E07000238,Wychavon,2,6
+E07000239,Wyre Forest,1,8
+E07000240,St Albans,10,6
+E07000241,Welwyn Hatfield,11,6
+E07000242,East Hertfordshire,13,8
+E07000243,Stevenage,12,7
+E07000244,East Suffolk,16,10
+E07000245,West Suffolk,13,9
+E08000001,Bolton,4,14
+E08000002,Bury,5,14
+E08000003,Manchester,5,12
+E08000004,Oldham,5,13
+E08000005,Rochdale,7,14
+E08000006,Salford,4,13
+E08000007,Stockport,6,12
+E08000008,Tameside,6,13
+E08000009,Trafford,4,12
+E08000010,Wigan,3,13
+E08000011,Knowsley,2,12
+E08000012,Liverpool,1,13
+E08000013,St. Helens,3,12
+E08000014,Sefton,2,14
+E08000015,Wirral,1,12
+E08000016,Barnsley,8,14
+E08000017,Doncaster,9,14
+E08000018,Rotherham,9,13
+E08000019,Sheffield,8,13
+E08000021,Newcastle upon Tyne,5,19
+E08000022,North Tyneside,6,20
+E08000023,South Tyneside,7,20
+E08000024,Sunderland,7,19
+E08000025,Birmingham,5,8
+E08000026,Coventry,5,6
+E08000027,Dudley,1,7
+E08000028,Sandwell,3,7
+E08000029,Solihull,5,7
+E08000030,Walsall,4,8
+E08000031,Wolverhampton,3,8
+E08000032,Bradford,7,16
+E08000033,Calderdale,7,15
+E08000034,Kirklees,8,15
+E08000035,Leeds,8,16
+E08000036,Wakefield,9,15
+E08000037,Gateshead,6,19
+E09000001,City of London,11,2
+E09000002,Barking and Dagenham,13,3
+E09000003,Barnet,10,5
+E09000004,Bexley,12,1
+E09000005,Brent,10,4
+E09000006,Bromley,11,0
+E09000007,Camden,11,4
+E09000008,Croydon,10,0
+E09000009,Ealing,9,4
+E09000010,Enfield,11,5
+E09000011,Greenwich,11,1
+E09000012,Hackney,12,3
+E09000013,Hammersmith and Fulham,8,3
+E09000014,Haringey,12,4
+E09000015,Harrow,8,4
+E09000016,Havering,14,3
+E09000017,Hillingdon,7,4
+E09000018,Hounslow,7,3
+E09000019,Islington,11,3
+E09000020,Kensington and Chelsea,9,3
+E09000021,Kingston upon Thames,7,1
+E09000022,Lambeth,10,2
+E09000023,Lewisham,10,1
+E09000024,Merton,8,1
+E09000025,Newham,13,2
+E09000026,Redbridge,14,4
+E09000027,Richmond upon Thames,8,2
+E09000028,Southwark,9,1
+E09000029,Sutton,9,0
+E09000030,Tower Hamlets,12,2
+E09000031,Waltham Forest,13,4
+E09000032,Wandsworth,9,2
+E09000033,Westminster,10,3
+N09000001,Antrim and Newtownabbey,-4,16
+N09000002,"Armagh City, Banbridge and Craigavon",-5,16
+N09000003,Belfast,-4,17
+N09000004,Causeway Coast and Glens,-5,18
+N09000005,Derry City and Strabane,-6,17
+N09000006,Fermanagh and Omagh,-6,16
+N09000007,Lisburn and Castlereagh,-5,15
+N09000008,Mid and East Antrim,-4,18
+N09000009,Mid Ulster,-5,17
+N09000010,"Newry, Mourne and Down",-4,15
+N09000011,Ards and North Down,-3,16
+S12000005,Clackmannanshire,2,24
+S12000006,Dumfries and Galloway,4,20
+S12000008,East Ayrshire,3,20
+S12000010,East Lothian,5,22
+S12000011,East Renfrewshire,2,20
+S12000013,Na h-Eileanan Siar,-1,27
+S12000014,Falkirk,2,23
+S12000017,Highland,1,26
+S12000018,Inverclyde,0,21
+S12000019,Midlothian,3,21
+S12000020,Moray,2,26
+S12000021,North Ayrshire,1,20
+S12000023,Orkney Islands,4,28
+S12000026,Scottish Borders,4,21
+S12000027,Shetland Islands,5,30
+S12000028,South Ayrshire,1,19
+S12000029,South Lanarkshire,2,21
+S12000030,Stirling,1,24
+S12000033,Aberdeen City,4,26
+S12000034,Aberdeenshire,3,26
+S12000035,Argyll and Bute,0,24
+S12000036,City of Edinburgh,4,22
+S12000038,Renfrewshire,1,22
+S12000039,West Dunbartonshire,0,23
+S12000040,West Lothian,3,22
+S12000041,Angus,2,25
+S12000042,Dundee City,3,25
+S12000045,East Dunbartonshire,1,23
+S12000047,Fife,3,24
+S12000048,Perth and Kinross,1,25
+S12000049,Glasgow City,1,21
+S12000050,North Lanarkshire,2,22
+W06000001,Isle of Anglesey,-2,12
+W06000002,Gwynedd,-2,10
+W06000003,Conwy,-1,10
+W06000004,Denbighshire,0,10
+W06000005,Flintshire,0,11
+W06000006,Wrexham,1,10
+W06000008,Ceredigion,-2,9
+W06000009,Pembrokeshire,-5,6
+W06000010,Carmarthenshire,-4,6
+W06000011,Swansea,-4,5
+W06000012,Neath Port Talbot,-3,5
+W06000013,Bridgend,-3,6
+W06000014,Vale of Glamorgan,-2,4
+W06000015,Cardiff,-2,5
+W06000016,Rhondda Cynon Taf,-3,7
+W06000018,Caerphilly,-2,6
+W06000019,Blaenau Gwent,0,9
+W06000020,Torfaen,-2,7
+W06000021,Monmouthshire,-1,8
+W06000022,Newport,-1,5
+W06000023,Powys,-1,9
+W06000024,Merthyr Tydfil,-2,8

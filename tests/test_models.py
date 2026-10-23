@@ -1,9 +1,23 @@
 """Tests for UK and US tax-benefit model versions and core models."""
 
 import re
+from datetime import timedelta
 
 from policyengine.tax_benefit_models.uk import uk_latest
 from policyengine.tax_benefit_models.us import us_latest
+
+
+def _assert_parameter_value_interval_contract(model, parameter_name):
+    values = model.get_parameter(parameter_name).parameter_values
+
+    assert len(values) > 1
+    assert [value.start_date for value in values] == sorted(
+        value.start_date for value in values
+    )
+    for current, following in zip(values, values[1:]):
+        assert current.end_date == following.start_date - timedelta(days=1)
+        assert current.start_date <= current.end_date
+    assert values[-1].end_date is None
 
 
 class TestUKModel:
@@ -29,13 +43,13 @@ class TestUKModel:
         assert uk_latest.release_manifest is not None
         assert uk_latest.release_manifest.country_id == "uk"
         assert uk_latest.model_package.name == "policyengine-uk"
-        assert uk_latest.model_package.version == "2.89.2"
-        assert uk_latest.data_package.name == "populace-data"
+        assert uk_latest.model_package.version == "2.132.6"
+        assert uk_latest.data_package.name == "microcosm-data"
         assert uk_latest.data_package.version == "0.1.0"
         assert (
             uk_latest.default_dataset_uri
-            == "hf://policyengine/populace-uk-private/populace_uk_2023.h5"
-            "@populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
+            == "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
+            "@microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
         )
 
     def test_has_hundreds_of_parameters(self):
@@ -69,6 +83,13 @@ class TestUKModel:
         """model_version.parameter_values should aggregate all parameter values."""
         all_values = uk_latest.parameter_values
         assert len(all_values) >= 100
+
+    def test_parameter_value_intervals_are_chronological_and_inclusive(self):
+        """UK catalog histories should expose valid inclusive intervals."""
+        _assert_parameter_value_interval_contract(
+            uk_latest,
+            "gov.hmrc.income_tax.rates.uk[0].rate",
+        )
 
     def test__given_bracket_parameter__then_has_generated_label(self):
         """Bracket parameters should have auto-generated labels."""
@@ -114,13 +135,13 @@ class TestUSModel:
         assert us_latest.release_manifest is not None
         assert us_latest.release_manifest.country_id == "us"
         assert us_latest.model_package.name == "policyengine-us"
-        assert us_latest.model_package.version == "1.764.6"
-        assert us_latest.data_package.name == "populace-data"
+        assert us_latest.model_package.version == "2.2.1"
+        assert us_latest.data_package.name == "microcosm-data"
         assert us_latest.data_package.version == "0.1.0"
         assert (
             us_latest.default_dataset_uri
             == "hf://policyengine/populace-us/populace_us_2024.h5"
-            "@populace-us-2024-buildm-sparse-rmloss100-98bf731-20260717T075101Z"
+            "@populace-us-2024-spm-20260915"
         )
 
     def test_has_hundreds_of_parameters(self):
@@ -154,6 +175,13 @@ class TestUSModel:
         """model_version.parameter_values should aggregate all parameter values."""
         all_values = us_latest.parameter_values
         assert len(all_values) >= 100
+
+    def test_parameter_value_intervals_are_chronological_and_inclusive(self):
+        """US catalog histories should expose valid inclusive intervals."""
+        _assert_parameter_value_interval_contract(
+            us_latest,
+            "gov.irs.credits.ctc.amount.base[0].amount",
+        )
 
     def test__given_breakdown_parameter__then_has_generated_label(self):
         """Breakdown parameters (e.g., filing status) should have auto-generated labels."""

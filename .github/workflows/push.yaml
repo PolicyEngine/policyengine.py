@@ -7,8 +7,11 @@
 # Phase 2 (sentinel commit): Publish to PyPI + GitHub Release
 #   Skips Lint + Test since the code is identical to Phase 1.
 #   After Publish, NotifyConsumers waits for the release to be visible on
-#   PyPI and sends a policyengine-release repository dispatch to consumer
-#   repos so they open version-bump PRs.
+#   PyPI and sends a policyengine-release repository dispatch (version plus
+#   the certified UK bundle identity and qualification digests) to consumer
+#   repos so they open version-bump PRs, then a released-bundle replay
+#   request to policyengine-scorecard. New consumers are dispatched in
+#   separate, non-blocking steps.
 
 name: Push to main
 
@@ -28,6 +31,7 @@ jobs:
   Lint:
     if: github.event.head_commit.message != 'Update package version'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - name: Install ruff
@@ -39,16 +43,23 @@ jobs:
 
   Test:
     if: github.event.head_commit.message != 'Update package version'
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
+    # Successful runs on main 2026-10-14..16: 3.11 33-54 min, 3.12 32-56,
+    # 3.13 36-60, 3.14 23-42; at 60 minutes every push run on 16 Oct was
+    # cancelled before Versioning, so nothing was released (#640). Matches
+    # the pull-request Test job (#631).
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.13.4"
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -114,22 +125,41 @@ jobs:
           fetch-depth: 0
       - name: Fetch tags
         run: git fetch --tags --force
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.13.4"
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+      - name: Install package for TRO verification and regeneration
+        run: uv pip install -e . h5py --system
+      - name: Check reviewed release inputs before versioning
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: |
+          if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]; then
+            echo "::error::Full private release verification requires HUGGING_FACE_TOKEN"
+            exit 1
+          fi
+          python scripts/check_release_credentials.py
+          python scripts/bundle.py check --published-spm --include-tros --strict-tros
+          python scripts/release_lock.py
       - name: Build changelog
         run: pip install yaml-changelog towncrier && make changelog
       - name: Generate derived bundle metadata
         run: python scripts/bundle.py generate
+      - name: Refresh only the release version in the registry lock
+        run: python scripts/release_lock.py --refresh
       - name: Preview changelog update
         run: ".github/get-changelog-diff.sh"
-      - name: Install package for TRO regeneration
-        run: pip install -e . h5py
       - name: Regenerate bundled TRACE TROs
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-        run: python scripts/bundle.py generate --include-tros
+        run: |
+          python scripts/bundle.py generate --include-tros --strict-tros
+          python scripts/bundle.py check --published-spm --include-tros --strict-tros
       - name: Update changelog, bundle metadata, and TROs
         uses: EndBug/add-and-commit@v9
         with:
@@ -140,6 +170,10 @@ jobs:
   Publish:
     runs-on: ubuntu-latest
     if: github.event.head_commit.message == 'Update package version'
+    # PyPI trusted publishing: PyPI accepts uploads only from this workflow in
+    # the pypi environment, which is limited to main. id-token: write comes
+    # from the workflow-level permissions. No stored PyPI token.
+    environment: pypi
     env:
       GH_TOKEN: ${{ github.token }}
     outputs:
@@ -149,6 +183,8 @@ jobs:
         uses: actions/checkout@v6
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.13.4"
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -160,6 +196,17 @@ jobs:
       - name: Capture published version
         id: version
         run: bash .github/capture-version.sh
+      - name: Validate complete bundle and registry lock before publication
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: |
+          if [[ -z "${HUGGING_FACE_TOKEN:-}" ]]; then
+            echo "::error::Full private release verification requires HUGGING_FACE_TOKEN"
+            exit 1
+          fi
+          python scripts/check_release_credentials.py
+          python scripts/bundle.py check --published-spm --include-tros --strict-tros
+          python scripts/release_lock.py
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh"
       - name: Build package
@@ -176,8 +223,6 @@ jobs:
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI }}
           skip-existing: true
           packages-dir: dist
       - name: Create GitHub Release
@@ -200,10 +245,29 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - name: Wait for release to be visible on PyPI
         env:
           VERSION: ${{ needs.Publish.outputs.version }}
         run: bash .github/wait-for-pypi.sh
+      - name: Validate published SPM bundle before consumer updates
+        run: python -S scripts/bundle.py check --published-spm
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.13.4"
+      - name: Install policyengine without country models
+        run: uv pip install -e . --system
+      # The payload carries the certified UK bundle identity and, for an
+      # automatically qualified pair, the qualification receipt digest.
+      # client_payload.version stays first, as existing updaters read only it.
+      - name: Build the release dispatch payload
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: python scripts/release_consumers.py payload --version "$VERSION" > "$RUNNER_TEMP/release-payload.json"
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -216,4 +280,63 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION: ${{ needs.Publish.outputs.version }}
+          PAYLOAD_FILE: ${{ runner.temp }}/release-payload.json
+        run: bash .github/dispatch-policyengine-release.sh
+      # New consumers are dispatched separately, so a missing App
+      # installation on one of them can never block the consumers above.
+      - name: Generate GitHub App token for the Budget dashboard
+        id: dashboard-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: uk-autumn-budget-dashboard-2026
+      - name: Dispatch policyengine-release to the Budget dashboard
+        if: steps.dashboard-token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.dashboard-token.outputs.token }}
+          VERSION: ${{ needs.Publish.outputs.version }}
+          PAYLOAD_FILE: ${{ runner.temp }}/release-payload.json
+          CONSUMER_REPOS: uk-autumn-budget-dashboard-2026
+        run: bash .github/dispatch-policyengine-release.sh
+      - name: Install the released bundle for the replay request
+        continue-on-error: true
+        id: released
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: uv pip install --system "policyengine[uk]==$VERSION"
+      - name: Build the scorecard's released-bundle replay request
+        if: steps.released.outcome == 'success'
+        id: scorecard-request
+        continue-on-error: true
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+        run: python scripts/release_consumers.py scorecard-request --version "$VERSION" > "$RUNNER_TEMP/scorecard-request.json"
+      - name: Warn that no released-bundle replay was requested
+        if: steps.released.outcome == 'failure' || steps.scorecard-request.outcome == 'failure'
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: echo "::warning title=No released-bundle replay::The scorecard's replay request for policyengine $VERSION could not be built; see the steps above."
+      - name: Generate GitHub App token for the scorecard
+        if: steps.scorecard-request.outcome == 'success'
+        id: scorecard-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: policyengine-scorecard
+      - name: Send the scorecard a released-bundle replay request
+        if: steps.scorecard-token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.scorecard-token.outputs.token }}
+          VERSION: ${{ needs.Publish.outputs.version }}
+          PAYLOAD_FILE: ${{ runner.temp }}/scorecard-request.json
+          CONSUMER_REPOS: policyengine-scorecard
         run: bash .github/dispatch-policyengine-release.sh

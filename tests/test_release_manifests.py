@@ -16,6 +16,11 @@ from requests import Timeout
 
 from policyengine.core.tax_benefit_model import TaxBenefitModel
 from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+from policyengine.provenance.dataset_materialization import (
+    DatasetSource,
+    MaterializedDataset,
+    _resolve_bundle_dataset,
+)
 from policyengine.provenance.manifest import (
     ArtifactPathReference,
     CountryReleaseManifest,
@@ -29,7 +34,6 @@ from policyengine.provenance.manifest import (
     https_release_manifest_uri,
     resolve_dataset_reference,
     resolve_default_datasets,
-    resolve_local_managed_dataset_source,
     resolve_managed_dataset_reference,
     resolve_region_dataset_path,
 )
@@ -40,10 +44,10 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "1.764.6"
-US_BUILT_WITH_MODEL_VERSION = "1.764.6"
+US_MODEL_VERSION = "2.2.1"
+US_BUILT_WITH_MODEL_VERSION = "2.2.1"
 US_DATA_RELEASE_VERSION = "0.1.0"
-US_DATA_RELEASE_ID = "populace-us-2024-buildm-sparse-rmloss100-98bf731-20260717T075101Z"
+US_DATA_RELEASE_ID = "populace-us-2024-spm-20260915"
 US_DATA_RELEASE_REVISION = US_DATA_RELEASE_ID
 US_DATA_RELEASE_PATH = f"releases/{US_DATA_RELEASE_ID}/release_manifest.json"
 US_DATA_ARTIFACT_REVISION = US_DATA_RELEASE_ID
@@ -57,28 +61,79 @@ US_CERTIFIED_DATASET_URI = (
 US_RELEASE_MANIFEST_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
-# Non-default local-area overlay: a staged Populace US artifact published in its
-# own immutable release (Build L), loadable by name but never the default.
+# Certified local-area dataset: a Populace US artifact published in its own
+# immutable release. It remains non-default nationally and is selected for
+# states and congressional districts.
 US_LOCAL_AREA_DATASET = "populace_us_2024_acs_local"
-US_LOCAL_AREA_RELEASE_ID = "populace-us-2024-buildl-acs-local-36de5d9a-20260712T104640Z"
+US_LOCAL_AREA_RELEASE_ID = "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
 US_LOCAL_AREA_SHA256 = (
-    "36de5d9aa69fa932cd42b1b9c08ef72b20176414118997de6240a588fab30a6b"
+    "3ce781c440a7f933b1d952ff4e9d9f65f4698c64b94d2fad165af0c662838d6c"
 )
 US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
     f"@{US_LOCAL_AREA_RELEASE_ID}"
 )
-UK_MODEL_VERSION = "2.89.2"
-UK_BUILT_WITH_MODEL_VERSION = "2.89.2"
+UK_MODEL_VERSION = "2.132.6"
+UK_BUILT_WITH_MODEL_VERSION = "2.132.6"
 UK_DATA_RELEASE_VERSION = "0.1.0"
-UK_DATA_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
-UK_DATA_RELEASE_REVISION = UK_DATA_RELEASE_ID
-UK_DATA_RELEASE_PATH = f"releases/{UK_DATA_RELEASE_ID}/release_manifest.json"
+UK_DATA_RELEASE_ID = "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+UK_DATA_RELEASE_REVISION = "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+UK_DATA_RELEASE_PATH = "releases/microcosm-uk-2024-25-national/release_manifest.json"
+UK_LOCAL_AREA_RELEASE_ID = "microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe"
+# The prior certified default (policyengine-uk-data 1.58.1), kept resolvable
+# via dataset_overlays.
+UK_EFRS_DATASET_URI = (
+    "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.1"
+)
+UK_EFRS_FRS_DATASET_URI = (
+    "hf://policyengine/policyengine-uk-data-private/frs_2024_25.h5@1.58.1"
+)
+# The prior certified default, kept resolvable via dataset_overlays.
+UK_POPULACE_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
+UK_POPULACE_DATASET_URI = (
+    f"hf://policyengine/populace-uk-private/populace_uk_2023.h5"
+    f"@{UK_POPULACE_RELEASE_ID}"
+)
 UK_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 UK_CERTIFIED_DATASET_URI = (
-    f"hf://policyengine/populace-uk-private/populace_uk_2023.h5"
-    f"@{UK_DATA_RELEASE_REVISION}"
+    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
+    f"@{UK_DATA_RELEASE_ID}"
 )
+UK_LOCAL_AREA_DATASET_URI = (
+    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
+    f"@{UK_LOCAL_AREA_RELEASE_ID}"
+)
+
+
+def _materialized_dataset(
+    country_id: str,
+    dataset: str,
+    path: str,
+) -> MaterializedDataset:
+    plan = _resolve_bundle_dataset(country_id, dataset)
+    return MaterializedDataset(
+        data_package_name=plan.data_package_name,
+        repo_type=plan.repo_type,
+        revision=plan.revision,
+        source_uri=plan.source_uri,
+        sha256=plan.sha256,
+        path=Path(path),
+    )
+
+
+def _dataset_source(
+    country_id: str,
+    dataset: str,
+    path: str,
+) -> DatasetSource:
+    bundle_dataset = _materialized_dataset(country_id, dataset, path)
+    return DatasetSource(
+        source_uri=bundle_dataset.source_uri,
+        path=str(bundle_dataset.path),
+        bundle_dataset=bundle_dataset,
+    )
+
+
 UK_LEGACY_DATA_RELEASE_REVISION = "655dd07e4bb9c777b00dac044949611f1feb824f"
 UK_LEGACY_FRS_DATASET_URI = (
     "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5"
@@ -155,7 +210,7 @@ class TestReleaseManifests:
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-us"
         assert manifest.model_package.version == US_MODEL_VERSION
-        assert manifest.data_package.name == "populace-data"
+        assert manifest.data_package.name == "microcosm-data"
         assert manifest.data_package.version == US_DATA_RELEASE_VERSION
         assert manifest.data_package.repo_id == "policyengine/populace-us"
         assert manifest.data_package.release_manifest_path == US_DATA_RELEASE_PATH
@@ -185,7 +240,7 @@ class TestReleaseManifests:
         assert manifest.policyengine_version == POLICYENGINE_VERSION
         assert manifest.model_package.name == "policyengine-uk"
         assert manifest.model_package.version == UK_MODEL_VERSION
-        assert manifest.data_package.name == "populace-data"
+        assert manifest.data_package.name == "microcosm-data"
         assert manifest.data_package.version == UK_DATA_RELEASE_VERSION
         assert manifest.data_package.repo_id == "policyengine/populace-uk-private"
         assert manifest.data_package.release_manifest_path == UK_DATA_RELEASE_PATH
@@ -194,7 +249,7 @@ class TestReleaseManifests:
         )
         assert manifest.certified_data_artifact is not None
         assert manifest.certified_data_artifact.build_id == UK_DATA_RELEASE_ID
-        assert manifest.certified_data_artifact.dataset == "populace_uk_2023"
+        assert manifest.certified_data_artifact.dataset == "microcosm_uk_2024_25"
         assert manifest.certified_data_artifact.uri == UK_CERTIFIED_DATASET_URI
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == UK_DATA_RELEASE_ID
@@ -231,9 +286,26 @@ class TestReleaseManifests:
         )
 
     def test__given_uk_dataset_name__then_resolves_to_versioned_hf_url(self):
-        resolved = resolve_dataset_reference("uk", "populace_uk_2023")
+        resolved = resolve_dataset_reference("uk", "microcosm_uk_2024_25")
 
         assert resolved == UK_CERTIFIED_DATASET_URI
+
+    def test__given_uk_manifest__then_area_regions_route_to_local_release(self):
+        manifest = get_release_manifest("uk")
+
+        assert manifest.regional_release_kind == "local_area"
+        assert {
+            region_type: template.path_template
+            for region_type, template in manifest.region_datasets.items()
+        } == {
+            "national": "microcosm_uk_2024_25.h5",
+            "constituency": "microcosm_uk_2024_25_dense.h5",
+            "local_authority": "microcosm_uk_2024_25_dense.h5",
+        }
+        assert (
+            resolve_dataset_reference("uk", "microcosm_uk_2024_25_dense")
+            == UK_LOCAL_AREA_DATASET_URI
+        )
 
     def test__given_uk_legacy_dataset_names__then_resolves_bundled_aliases(self):
         assert (
@@ -243,6 +315,15 @@ class TestReleaseManifests:
             resolve_dataset_reference("uk", "enhanced_frs_2023_24")
             == UK_LEGACY_ENHANCED_FRS_DATASET_URI
         )
+        assert (
+            resolve_dataset_reference("uk", "populace_uk_2023")
+            == UK_POPULACE_DATASET_URI
+        )
+        assert (
+            resolve_dataset_reference("uk", "enhanced_frs_2024_25")
+            == UK_EFRS_DATASET_URI
+        )
+        assert resolve_dataset_reference("uk", "frs_2024_25") == UK_EFRS_FRS_DATASET_URI
 
     def test__given_explicit_url__then_resolution_is_noop(self):
         url = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
@@ -267,13 +348,8 @@ class TestReleaseManifests:
             == get_release_manifest("us").default_dataset_uri
         )
 
-    def test__given_local_area_overlay__then_default_resolution_is_unchanged(self):
-        """Regression: the non-default local-area overlay never changes defaults.
-
-        The overlay adds a loadable name; it must never become the certified
-        default, and default resolution must keep pointing at the certified
-        national Populace artifact.
-        """
+    def test__given_local_area_dataset__then_national_default_is_unchanged(self):
+        """The certified regional dataset never changes the national default."""
         manifest = get_release_manifest("us")
 
         assert manifest.default_dataset == "populace_us_2024"
@@ -283,9 +359,16 @@ class TestReleaseManifests:
         assert manifest.region_datasets["national"].path_template == (
             "populace_us_2024.h5"
         )
+        assert manifest.region_datasets["state"].path_template == (
+            "populace_us_2024_acs_local.h5"
+        )
+        assert (
+            manifest.region_datasets["congressional_district"].path_template
+            == "populace_us_2024_acs_local.h5"
+        )
 
     def test__given_local_area_name__then_resolves_to_its_immutable_tag(self):
-        """The local-area overlay resolves to its own Build L release tag."""
+        """The local-area dataset resolves to its own immutable release tag."""
         assert (
             resolve_dataset_reference("us", US_LOCAL_AREA_DATASET)
             == US_LOCAL_AREA_DATASET_URI
@@ -297,7 +380,7 @@ class TestReleaseManifests:
             == US_LOCAL_AREA_DATASET_URI
         )
 
-    def test__given_local_area_overlay__then_registered_with_sha_but_not_default(self):
+    def test__given_local_area_dataset__then_registered_with_sha_but_not_default(self):
         manifest = get_release_manifest("us")
 
         reference = manifest.datasets[US_LOCAL_AREA_DATASET]
@@ -308,19 +391,18 @@ class TestReleaseManifests:
         assert US_LOCAL_AREA_DATASET in resolve_default_datasets("us")
         assert US_LOCAL_AREA_DATASET != manifest.default_dataset
 
-    def test__given_us_manifest__then_has_no_inherited_area_artifacts(self):
-        manifest = get_release_manifest("us")
-
-        assert "state" not in manifest.region_datasets
-        assert "congressional_district" not in manifest.region_datasets
-        assert resolve_region_dataset_path("us", "state", state_code="CA") is None
+    def test__given_us_manifest__then_local_regions_resolve_to_acs_local(self):
+        assert (
+            resolve_region_dataset_path("us", "state", state_code="CA")
+            == US_LOCAL_AREA_DATASET_URI
+        )
         assert (
             resolve_region_dataset_path(
                 "us",
                 "congressional_district",
                 district_code="CA-01",
             )
-            is None
+            == US_LOCAL_AREA_DATASET_URI
         )
         assert not any(
             key.startswith(("states/", "districts/"))
@@ -349,6 +431,7 @@ class TestReleaseManifests:
             datasets=["populace_us_2024"],
             years=[2026],
             data_folder="./data",
+            allow_unmanaged=False,
         )
 
     def test__given_explicit_uri__then_managed_resolution_requires_opt_in(self):
@@ -409,28 +492,6 @@ class TestReleaseManifests:
         dataset = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.73.0"
 
         assert dataset_logical_name(dataset) == "enhanced_cps_2024"
-
-    def test__given_explicit_local_data_repo__then_resolves_local_mirror(
-        self, monkeypatch, tmp_path
-    ):
-        local_dataset = (
-            tmp_path
-            / "policyengine-us-data"
-            / "policyengine_us_data"
-            / "storage"
-            / "long_term"
-            / "2100.h5"
-        )
-        local_dataset.parent.mkdir(parents=True)
-        local_dataset.write_text("", encoding="utf-8")
-        monkeypatch.setenv("POLICYENGINE_LOCAL_DATA_REPO_ROOT", str(tmp_path))
-
-        resolved = resolve_local_managed_dataset_source(
-            "us",
-            "hf://policyengine/policyengine-us-data/long_term/2100.h5@candidate",
-        )
-
-        assert resolved == str(local_dataset)
 
     def test__given_country__then_can_fetch_data_release_manifest(self):
         get_data_release_manifest.cache_clear()
@@ -642,6 +703,41 @@ class TestReleaseManifests:
         assert certification.built_with_model_version == "1.601.0"
         assert certification.certified_for_model_version == "1.602.0"
 
+    def test__given_release_with_cut_tag__then_cut_tag_is_the_data_build_id(self):
+        # Microcosm keeps build_id equal to the line name for every cut, so
+        # the runtime check must name the cut the same way certification did.
+        get_data_release_manifest.cache_clear()
+        payload = {
+            "schema_version": 1,
+            "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+            "build": {
+                "build_id": "microcosm-uk-2024-25-national",
+                "cut_tag": "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa",
+                "built_with_model_package": {
+                    "name": "policyengine-us",
+                    "version": "1.601.0",
+                },
+            },
+            "compatible_model_packages": [],
+            "default_datasets": {"national": "enhanced_cps_2024"},
+            "artifacts": {},
+        }
+
+        with patch(
+            "policyengine.provenance.manifest.requests.get",
+            return_value=_response_with_json(payload),
+        ):
+            certification = certify_data_release_compatibility(
+                "us",
+                runtime_model_version="1.601.0",
+            )
+
+        assert certification.compatibility_basis == "exact_build_model_version"
+        assert certification.data_build_id == (
+            "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa"
+        )
+        get_data_release_manifest.cache_clear()
+
     def test__given_private_manifest_unavailable__then_bundled_certification_is_used(
         self,
     ):
@@ -850,7 +946,7 @@ class TestReleaseManifests:
         bundle = model_version.release_bundle
 
         assert bundle["bundle_id"] == f"uk-{POLICYENGINE_VERSION}"
-        assert bundle["default_dataset"] == "populace_uk_2023"
+        assert bundle["default_dataset"] == "microcosm_uk_2024_25"
         assert bundle["default_dataset_uri"] == manifest.default_dataset_uri
         assert bundle["certified_data_build_id"] == UK_DATA_RELEASE_ID
         assert bundle["data_build_model_version"] == UK_BUILT_WITH_MODEL_VERSION
@@ -910,8 +1006,12 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "materialize_dataset_source",
-                return_value="/tmp/populace_us_2024.h5",
+                "materialize_dataset",
+                return_value=_dataset_source(
+                    "us",
+                    "populace_us_2024",
+                    "/tmp/populace_us_2024.h5",
+                ),
             ):
                 microsim = us_model.managed_microsimulation()
 
@@ -927,6 +1027,11 @@ class TestReleaseManifests:
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
         assert dataset_source == "/tmp/populace_us_2024.h5"
+        assert (
+            microsim.policyengine_bundle["runtime_dataset_sha256"]
+            == get_release_manifest("us").datasets["populace_us_2024"].sha256
+        )
+        assert microsim.policyengine_bundle["runtime_dataset_repo_type"] == "dataset"
 
     def test__given_us_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-us-data/cps_2023.h5@1.73.0"
@@ -950,8 +1055,11 @@ class TestReleaseManifests:
             )
             with patch.object(
                 us_model,
-                "materialize_dataset_source",
-                return_value="/tmp/cps_2023.h5",
+                "materialize_dataset",
+                return_value=DatasetSource(
+                    source_uri=dataset,
+                    path="/tmp/cps_2023.h5",
+                ),
             ):
                 microsim = us_model.managed_microsimulation(
                     dataset=dataset,
@@ -1019,22 +1127,33 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "materialize_dataset_source",
-                return_value="/tmp/populace_uk_2023.h5",
+                "materialize_dataset",
+                return_value=_dataset_source(
+                    "uk",
+                    "microcosm_uk_2024_25",
+                    "/tmp/microcosm_uk_2024_25.h5",
+                ),
             ):
-                microsim = uk_model.managed_microsimulation(dataset="populace_uk_2023")
+                microsim = uk_model.managed_microsimulation(
+                    dataset="microcosm_uk_2024_25"
+                )
 
         dataset = mock_microsimulation.call_args.kwargs["dataset"]
-        assert dataset == "/tmp/populace_uk_2023.h5"
+        assert dataset == "/tmp/microcosm_uk_2024_25.h5"
         assert (
             microsim.policyengine_bundle["policyengine_version"] == POLICYENGINE_VERSION
         )
-        assert microsim.policyengine_bundle["runtime_dataset"] == "populace_uk_2023"
+        assert microsim.policyengine_bundle["runtime_dataset"] == "microcosm_uk_2024_25"
         assert microsim.policyengine_bundle["runtime_dataset_uri"] == (
             UK_CERTIFIED_DATASET_URI
         )
         dataset_source = microsim.policyengine_bundle["runtime_dataset_source"]
-        assert dataset_source == "/tmp/populace_uk_2023.h5"
+        assert dataset_source == "/tmp/microcosm_uk_2024_25.h5"
+        assert (
+            microsim.policyengine_bundle["runtime_dataset_sha256"]
+            == get_release_manifest("uk").datasets["microcosm_uk_2024_25"].sha256
+        )
+        assert microsim.policyengine_bundle["runtime_dataset_repo_type"] == "dataset"
 
     def test__given_uk_unmanaged_dataset_uri__then_source_is_not_rewritten(self):
         dataset = "hf://policyengine/policyengine-uk-data-private/frs_2022_23.h5@1.40.4"
@@ -1058,8 +1177,11 @@ class TestReleaseManifests:
             )
             with patch.object(
                 uk_model,
-                "materialize_dataset_source",
-                return_value="/tmp/frs_2022_23.h5",
+                "materialize_dataset",
+                return_value=DatasetSource(
+                    source_uri=dataset,
+                    path="/tmp/frs_2022_23.h5",
+                ),
             ):
                 microsim = uk_model.managed_microsimulation(
                     dataset=dataset,
@@ -1080,8 +1202,9 @@ class TestDatasetOverlays:
 
     ``dataset_overlays`` is the hand-maintained sibling of ``data_releases``.
     ``certify_data_release`` rewrites ``data_releases.{country}`` wholesale, so
-    these tests pin the invariant that overlays are additive, survive
-    re-certification, and can never hijack default resolution.
+    these tests pin the invariant that overlays are additive, survive a
+    re-certification that does not certify their names, and can never hijack
+    default resolution.
     """
 
     def teardown_method(self):
@@ -1160,7 +1283,7 @@ class TestDatasetOverlays:
         try:
             _apply_dataset_overlays("us", payload, bundle)
         except ValueError as error:
-            assert "shadows the certified default" in str(error)
+            assert "shadows certified datasets: populace_us_2024" in str(error)
         else:
             raise AssertionError("Expected overlay shadowing the default to fail")
 
@@ -1179,6 +1302,6 @@ class TestDatasetOverlays:
         try:
             _apply_dataset_overlays("us", payload, bundle)
         except ValueError as error:
-            assert "collides with a certified dataset" in str(error)
+            assert "shadows certified datasets: demographics" in str(error)
         else:
             raise AssertionError("Expected overlay colliding with a dataset to fail")

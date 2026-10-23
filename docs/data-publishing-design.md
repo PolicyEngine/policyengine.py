@@ -162,16 +162,21 @@ concrete `artifact_sha256` pin in the country release manifest.
 After that, the release manifest is what papers cite; the storage
 channel is just the cache.
 
-## Consumer resolver (what `pe.py` changes)
+## Consumer resolver (historical proposal)
 
-Minimal. The existing `pe.us.ensure_datasets` takes a URI today:
+PolicyEngine.py now resolves managed datasets by logical name through its
+certified release bundle:
 
 ```python
 pe.us.ensure_datasets(
-    datasets=["hf://policyengine/populace-us/populace_us_2024.h5@<release>"],
+    datasets=["populace_us_2024"],
     years=[2026],
 )
 ```
+
+Direct Hugging Face references require `allow_unmanaged=True`; GCS dataset
+references are unsupported. The `pe-data://` examples below remain an
+unimplemented design proposal rather than a description of current behavior.
 
 Under the substrate, the URI scheme gains a new prefix:
 

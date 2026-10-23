@@ -4,6 +4,9 @@ The v4 surface is the kwarg-based ``pe.us.calculate_household`` /
 ``pe.uk.calculate_household`` pair returning a dot-accessible
 :class:`HouseholdResult`. Input validation raises on unknown variable
 names; extra variables are a flat list dispatched by the library.
+
+US regression cases explicitly select national SPM geography because these
+fixtures test the calculator interface without claiming a local SPM area.
 """
 
 import pytest
@@ -64,10 +67,9 @@ class TestUKCalculateHousehold:
             year=2026,
             reform={"gov.hmrc.child_benefit.amount.eldest": 50.0},
         )
-        # If the param path is valid the calc runs; if results differ the reform took.
-        # Accept either: the key thing is the reform dict was accepted without error.
         assert isinstance(reformed.benunit.child_benefit, float)
         assert isinstance(baseline.benunit.child_benefit, float)
+        assert reformed.benunit.child_benefit > baseline.benunit.child_benefit
 
     def test__monthly_year_period__then_raises_before_calculation(self):
         with pytest.raises(ValueError, match="Monthly periods are not supported"):
@@ -125,6 +127,7 @@ class TestUKCalculateHousehold:
 class TestUSCalculateHousehold:
     def test__single_adult__then_returns_result_with_net_income(self):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 30, "is_tax_unit_head": True}],
             year=2026,
         )
@@ -134,6 +137,7 @@ class TestUSCalculateHousehold:
 
     def test__single_adult_with_income__then_tax_unit_income_tax_positive(self):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 30, "employment_income": 50000, "is_tax_unit_head": True}],
             tax_unit={"filing_status": "SINGLE"},
             year=2026,
@@ -143,6 +147,7 @@ class TestUSCalculateHousehold:
 
     def test__reform_applied_through_dict__then_numbers_change(self):
         baseline = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 35, "employment_income": 60000, "is_tax_unit_head": True}],
             tax_unit={"filing_status": "SINGLE"},
             year=2026,
@@ -150,6 +155,7 @@ class TestUSCalculateHousehold:
         # Halve the standard deduction — biggest tax number a reform dict
         # can move for a simple wage-earner test case.
         reformed = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 35, "employment_income": 60000, "is_tax_unit_head": True}],
             tax_unit={"filing_status": "SINGLE"},
             year=2026,
@@ -159,6 +165,7 @@ class TestUSCalculateHousehold:
 
     def test__extra_variables_flat_list__then_values_appear_on_entity(self):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 35, "employment_income": 60000, "is_tax_unit_head": True}],
             tax_unit={"filing_status": "SINGLE"},
             year=2026,
@@ -167,8 +174,20 @@ class TestUSCalculateHousehold:
         assert "adjusted_gross_income" in result.tax_unit
         assert result.tax_unit.adjusted_gross_income > 0
 
+    def test__enum_extra_variable__then_returns_name(self):
+        result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
+            people=[{"age": 35, "is_tax_unit_head": True}],
+            household={"state_code": "CA"},
+            year=2026,
+            extra_variables=["state_name"],
+        )
+
+        assert result.household.state_name == "CA"
+
     def test__axes__then_result_values_are_axis_series(self):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[
                 {
                     "age": 35,
@@ -188,7 +207,7 @@ class TestUSCalculateHousehold:
                     "count": 3,
                 }
             ],
-            extra_variables=["charitable_cash_donations"],
+            extra_variables=["charitable_cash_donations", "state_name"],
         )
         assert result.person[0].charitable_cash_donations == [0, 5000, 10000]
         # Donations reduce income tax via the charitable deduction; assert
@@ -199,9 +218,11 @@ class TestUSCalculateHousehold:
         assert income_tax[0] > income_tax[-1]
         assert all(a >= b for a, b in zip(income_tax, income_tax[1:]))
         assert len(result.household.household_net_income) == 3
+        assert result.household.state_name == ["CA", "CA", "CA"]
 
     def test__nested_axes_shape__then_supported(self):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[
                 {
                     "age": 35,
@@ -227,6 +248,7 @@ class TestUSCalculateHousehold:
     def test__axes_nonpositive_count__then_raises_before_calculation(self):
         with pytest.raises(ValueError, match="'count' must be a positive integer"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 35, "is_tax_unit_head": True}],
                 year=2026,
                 axes=[
@@ -242,6 +264,7 @@ class TestUSCalculateHousehold:
     def test__axes_mismatched_group_counts__then_raises_before_calculation(self):
         with pytest.raises(ValueError, match="must share 'count'"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 35, "is_tax_unit_head": True}],
                 year=2026,
                 axes=[
@@ -262,6 +285,7 @@ class TestUSCalculateHousehold:
 
     def test__reform_compiles_effective_date_form(self):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 30, "is_tax_unit_head": True}],
             year=2026,
             reform={"gov.irs.credits.ctc.amount.adult_dependent": {"2026-01-01": 1000}},
@@ -271,6 +295,7 @@ class TestUSCalculateHousehold:
     def test__monthly_year_period__then_raises_before_calculation(self):
         with pytest.raises(ValueError, match="Monthly periods are not supported"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 30, "is_tax_unit_head": True}],
                 year="2026-01",
             )
@@ -281,6 +306,7 @@ class TestUSCalculateHousehold:
             match=r"Periodized household inputs.*people\[0\]\.employment_income",
         ):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[
                     {
                         "age": 30,
@@ -297,6 +323,7 @@ class TestUSCalculateHousehold:
             match=r"Periodized household inputs.*household\.state_code",
         ):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 30, "is_tax_unit_head": True}],
                 household={"state_code": {"2026-01": "CA"}},
                 year=2026,
@@ -320,6 +347,7 @@ class TestHouseholdInputValidation:
     def test__unknown_person_variable__then_raises_with_suggestion(self):
         with pytest.raises(ValueError, match="employment_incme"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 35, "employment_incme": 60000}],
                 year=2026,
             )
@@ -329,6 +357,7 @@ class TestHouseholdInputValidation:
         # point the caller at the correct entity kwarg.
         with pytest.raises(ValueError, match="belongs on tax_unit"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 35, "filing_status": "SINGLE"}],
                 year=2026,
             )
@@ -340,6 +369,7 @@ class TestHouseholdInputValidation:
     def test__unknown_extra_variable__then_raises(self):
         with pytest.raises(ValueError, match="not defined"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 35}],
                 year=2026,
                 extra_variables=["not_a_real_variable"],
@@ -347,6 +377,7 @@ class TestHouseholdInputValidation:
 
     def test__unknown_dot_access__then_raises_with_extra_variables_hint(self):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 35, "is_tax_unit_head": True}],
             year=2026,
         )
@@ -356,6 +387,7 @@ class TestHouseholdInputValidation:
     def test__unknown_reform_path__then_raises_with_close_match(self):
         with pytest.raises(ValueError, match="not defined"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 35, "is_tax_unit_head": True}],
                 year=2026,
                 reform={"gov.irs.not_a_real_parameter": 0},
@@ -364,6 +396,7 @@ class TestHouseholdInputValidation:
     def test__unknown_axis_variable__then_raises_with_suggestion(self):
         with pytest.raises(ValueError, match="axis variable"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 35, "is_tax_unit_head": True}],
                 year=2026,
                 axes=[
@@ -386,6 +419,7 @@ class TestHouseholdInputValidation:
     def test__uk_kwarg_on_us__then_raises_with_us_hint(self):
         with pytest.raises(TypeError, match="UK-only"):
             pe.us.calculate_household(
+                spm={"geography_kind": "national"},
                 people=[{"age": 30, "is_tax_unit_head": True}],
                 benunit={"foo": 1},
             )
@@ -394,6 +428,7 @@ class TestHouseholdInputValidation:
 class TestHouseholdResultSerialisation:
     def test__to_dict_produces_plain_dict_tree(self):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 30, "is_tax_unit_head": True}],
             year=2026,
         )
@@ -405,6 +440,7 @@ class TestHouseholdResultSerialisation:
 
     def test__write_creates_json_file(self, tmp_path):
         result = pe.us.calculate_household(
+            spm={"geography_kind": "national"},
             people=[{"age": 30, "is_tax_unit_head": True}],
             year=2026,
         )

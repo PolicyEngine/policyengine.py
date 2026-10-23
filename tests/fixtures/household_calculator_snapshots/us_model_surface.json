@@ -1,11 +1,11 @@
 {
   "country_id": "us",
-  "data_package_name": "populace-data",
+  "data_package_name": "microcosm-data",
   "has_employment_income": true,
   "has_income_tax": true,
   "has_region_registry": true,
   "model_package_name": "policyengine-us",
-  "num_parameters_bucketed_100s": 978,
-  "num_variables_bucketed_100s": 57,
+  "num_parameters_bucketed_100s": 1025,
+  "num_variables_bucketed_100s": 61,
   "region_registry_country": "us"
 }

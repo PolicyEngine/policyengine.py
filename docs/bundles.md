@@ -29,10 +29,15 @@ When run from `uvx` or `pipx`, the installer creates or reuses `./.venv`.
 Inside an existing virtualenv or conda environment, it installs into that active
 environment. The installer then installs the
 exact bundled package scaffold with pip, downloads certified default US and UK
-datasets into `./data`, moves replaced dataset files into
-`./data/.policyengine-bundle-backups/<timestamp>/`, and writes a
-`./data/.policyengine-bundle-receipt.json` receipt that records the target
-Python.
+datasets into `./data`, and writes a `./data/.policyengine-bundle-receipt.json`
+receipt that records the target Python.
+
+Dataset pre-download and US and UK calculations share the same verified-download
+implementation. For every managed artifact, PolicyEngine.py reads the source
+data package name, Hugging Face repository type, immutable revision, and SHA-256
+from the bundle. It reuses an existing file only when its hash matches, downloads
+and verifies a replacement before atomically replacing an invalid local file,
+and records the verified result in the receipt.
 
 The bundle manifest can certify additional regional datasets, such as US state
 datasets. Those artifacts are part of the citable bundle manifest, but
@@ -40,14 +45,44 @@ datasets. Those artifacts are part of the citable bundle manifest, but
 Runtime callers should use the manifest's regional dataset URI when a regional
 simulation needs one.
 
-Country-specific and package-only installs are supported:
+To materialize a default or named artifact without installing the complete
+package scaffold:
+
+```python
+from policyengine.provenance import materialize_dataset
+
+result = materialize_dataset("us", "populace_us_2024")
+print(result.path)
+print(result.bundle_dataset.sha256)
+```
+
+`materialize_dataset` returns the selected source URI and local path. For a
+bundle-managed input, `bundle_dataset` also contains the selected source
+package, repository type, revision, verified SHA-256, and optional metadata
+path.
+`policyengine-*-data` and `populace-data` artifacts use the repository type
+recorded in the bundle. Callers do not infer repository type from the repository
+name.
+
+Managed datasets are downloaded from the Hugging Face artifact specified in the
+bundle. GCS dataset URIs are unsupported. The separate UK geography lookup files
+retain their existing storage implementation.
+
+Country-specific, package-only, and dataset-only installs are supported:
 
 ```bash
 uvx --from policyengine policyengine bundle install --country uk
 uvx --from policyengine policyengine bundle install --no-datasets
+uvx --from policyengine policyengine bundle install --no-packages --yes
 ```
 
 Use `--yes` for CI/CD. Without `--yes`, dataset downloads ask for confirmation.
+Use `--no-packages` when a lockfile or another package manager owns the Python
+environment. It downloads and verifies the selected certified datasets and
+writes the bundle receipt without resolving Python, creating a virtual
+environment, or installing packages. Dataset-only receipts omit
+`target_python`; `bundle status` therefore inspects its current interpreter
+unless `--python` or `--venv` is supplied explicitly.
 
 The canonical bundle manifest is `src/policyengine/data/bundle/manifest.json`.
 Derived artifacts are:
@@ -55,6 +90,19 @@ Derived artifacts are:
 - `pyproject.toml` extras
 - `src/policyengine/data/bundle/{country}.trace.tro.jsonld`
 - GitHub release assets exported from the bundle manifest
+
+The US model in this bundle uses the SPM calculator 1.0.0 API. The manifest pins
+`spm-calculator==1.0.0` as a US runtime dependency, and the generated `us`,
+`models` and `dev` extras carry that pin. The model formulas and certified
+dataset artifacts remain unchanged.
+
+Previously published versions cannot acquire a new dependency constraint. To
+reproduce the historical 5.3.0 US package set, include the compatible calculator
+explicitly:
+
+```bash
+uv pip install "policyengine[us]==5.3.0" "spm-calculator==0.3.1"
+```
 
 Inspect or verify a local setup with:
 
@@ -79,6 +127,14 @@ python scripts/bundle.py update-packages \
   --uk 2.91.0
 ```
 
+By default a data certificate follows the core pin (`core_binding:
+bundle_pin`), so `--core` can move it; `bundle.py check --include-tros
+--strict-tros` then warns when a data release does not claim the new core. A
+certificate that binds its core (`certify-data --core-version`,
+`core_binding: certified`) instead fails that check until the country is
+re-certified for the new core. See "The core" in the data certification
+skill.
+
 To certify a new data release from a data-producer manifest, run:
 
 ```bash
@@ -95,14 +151,20 @@ python scripts/bundle.py certify-data \
   --country us \
   --data-producer populace \
   --manifest-uri hf://dataset/policyengine/populace-us@<release>/releases/<release>/release_manifest.json \
+  --regional-manifest-uri hf://dataset/policyengine/populace-us@<local-area-release>/releases/<local-area-release>/release_manifest.json \
   --model-version <policyengine-us-version>
 ```
 
-US state and congressional-district regions scope the certified national
-Populace dataset with row filters. If a Populace release also publishes derived
-`states/*.h5` or `districts/*.h5` area slices, the bundle certification omits
-those slices from `data_releases.us.datasets`; they are not runtime dataset
-dependencies.
+US state and congressional-district regions scope one certified ACS-local
+Populace dataset with row filters. Pass its non-default local-area release
+manifest through `--regional-manifest-uri`; certification adds the pinned H5
+artifact to `data_releases.us.datasets` and writes both regional path templates
+under `data_releases.us.region_datasets`. If a legacy release publishes derived
+`states/*.h5` or `districts/*.h5` slices, certification still omits them.
+
+`policyengine bundle install` continues to materialize only each country's
+certified national `default_dataset`. Regional runtimes materialize the
+additional certified dataset when the selected region declares it.
 
 Use `python scripts/bundle.py generate` to regenerate derived bundle metadata,
 and `python scripts/bundle.py generate --include-tros` when TRACE TRO sidecars

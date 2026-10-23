@@ -33,12 +33,14 @@ Override in any output with `income_variable=`.
 | | Dataset |
 |---|---|
 | US | Populace US 2024 (`populace_us_2024.h5`) |
-| UK | Populace UK 2023 (`populace_uk_2023.h5`) |
+| UK | Microcosm UK 2024-25 (`microcosm_uk_2024_25.h5`); constituency and local-authority regions use its local-area release (`microcosm_uk_2024_25_dense.h5`) |
 
 ## State / regional breakdown
 
 US: Populace row scoping uses `state_fips` and `congressional_district_geoid`.
-`state_code` remains the human-readable input for custom households.
+`state_code` remains the human-readable state input for custom households.
+US resource and poverty calculations also require observed `county_fips` or an
+explicit national or SPM-area choice; see [Households](households.md#spm-geography-and-measurement-selection).
 
 UK: constituency code and local authority code on every household where available.
 
@@ -72,7 +74,7 @@ Most analysis patterns are identical — swap `pe.us` for `pe.uk`:
 pe.us.calculate_household(
     people=[{"age": 35, "employment_income": 60_000}],
     tax_unit={"filing_status": "SINGLE"},
-    household={"state_code": "CA"},
+    household={"state_code": "CA", "county_fips": "06037"},
     year=2026,
 )
 

@@ -31,7 +31,7 @@ A `PolicyReformAnalysis` with:
 
 | Attribute | Type | Content |
 |---|---|---|
-| `decile_impacts` | `OutputCollection[DecileImpact]` | Mean baseline / reform / change and winner-loser counts per decile |
+| `decile_impacts` | `OutputCollection[DecileImpact]` | Household-weighted net income means, changes, and outcome counts within person-weighted income deciles; negative-income rows are excluded from reported deciles |
 | `wealth_decile_impacts` | `OutputCollection[DecileImpact]` | UK only: household net income impacts grouped by `household_wealth_decile` |
 | `intra_wealth_decile_impacts` | `OutputCollection[IntraDecileImpact]` | UK only: within-wealth-decile distribution of household net income changes |
 | `program_statistics` | `OutputCollection[ProgramStatistics]` | Totals, counts, winners/losers per program |
@@ -83,7 +83,8 @@ for amount in [0, 1_000, 2_000, 3_000]:
 
 ```python
 from policyengine.outputs import (
-    ChangeAggregate, ChangeAggregateType,
+    ChangeAggregate,
+    ChangeAggregateType,
     calculate_decile_impacts,
     calculate_us_poverty_rates,
     calculate_us_inequality,
@@ -97,7 +98,9 @@ budget = ChangeAggregate(
 )
 budget.run()
 
-deciles = calculate_decile_impacts(baseline_simulation=baseline, reform_simulation=reformed)
+deciles = calculate_decile_impacts(
+    baseline_simulation=baseline, reform_simulation=reformed
+)
 
 baseline_poverty = calculate_us_poverty_rates(simulation=baseline)
 reform_poverty = calculate_us_poverty_rates(simulation=reformed)

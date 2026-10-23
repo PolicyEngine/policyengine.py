@@ -15,6 +15,12 @@ force provenance imports on every consumer.
     )
 """
 
+from .canonical import (
+    canonical_json as canonical_json,
+)
+from .canonical import (
+    canonical_sha256 as canonical_sha256,
+)
 from .certification import (
     CertificationError as CertificationError,
 )
@@ -23,6 +29,18 @@ from .certification import (
 )
 from .certification import (
     certify_data_release as certify_data_release,
+)
+from .dataset_materialization import (
+    DatasetMaterializationError as DatasetMaterializationError,
+)
+from .dataset_materialization import (
+    DatasetSource as DatasetSource,
+)
+from .dataset_materialization import (
+    MaterializedDataset as MaterializedDataset,
+)
+from .dataset_materialization import (
+    materialize_dataset as materialize_dataset,
 )
 from .manifest import (
     CertifiedDataArtifact as CertifiedDataArtifact,
@@ -73,10 +91,22 @@ from .manifest import (
     resolve_dataset_reference as resolve_dataset_reference,
 )
 from .manifest import (
-    resolve_local_managed_dataset_source as resolve_local_managed_dataset_source,
-)
-from .manifest import (
     resolve_managed_dataset_reference as resolve_managed_dataset_reference,
+)
+from .receipt import (
+    ExecutionReceipt as ExecutionReceipt,
+)
+from .receipt import (
+    build_execution_receipt as build_execution_receipt,
+)
+from .receipt import (
+    composed_reform_identity as composed_reform_identity,
+)
+from .receipt import (
+    reform_identity as reform_identity,
+)
+from .receipt import (
+    verify_certificate as verify_certificate,
 )
 from .trace import (
     build_simulation_trace_tro as build_simulation_trace_tro,

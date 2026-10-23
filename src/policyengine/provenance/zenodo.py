@@ -27,7 +27,7 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Callable, Optional
 
 from .manifest import (
@@ -37,6 +37,7 @@ from .manifest import (
     PreservationMirror,
     get_data_release_manifest,
     get_release_manifest,
+    release_build_id,
 )
 from .trace import canonical_json_bytes
 
@@ -94,8 +95,8 @@ def deposition_metadata(
         f"{country_id}-{country_manifest.policyengine_version}"
     )
     build_id = None
-    if data_release_manifest is not None and data_release_manifest.build is not None:
-        build_id = data_release_manifest.build.build_id
+    if data_release_manifest is not None:
+        build_id = release_build_id(data_release_manifest.build)
     certified = country_manifest.certified_data_artifact
     description_parts = [
         f"Certification record for the PolicyEngine {country_id} certified "
@@ -477,7 +478,7 @@ def mirror_release_to_zenodo(
             "resume it manually before retrying, to avoid orphaned drafts."
         ) from exc
 
-    deposited_at = datetime.now(timezone.utc).isoformat()
+    deposited_at = datetime.now(UTC).isoformat()
     mirrors = [
         PreservationMirror(
             kind="zenodo",

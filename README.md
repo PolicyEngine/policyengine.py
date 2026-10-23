@@ -1,6 +1,11 @@
 # PolicyEngine.py
 
+[![status](https://joss.theoj.org/papers/34b9f72df98e586d7e6a2448922407e7/status.svg)](https://joss.theoj.org/papers/34b9f72df98e586d7e6a2448922407e7)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22145449.svg)](https://doi.org/10.5281/zenodo.22145449)
+
 A Python package for tax-benefit microsimulation analysis. Run policy simulations, analyse distributional impacts, and visualise results across the UK and US.
+
+Requires Python 3.11–3.14.
 
 > **Results are estimates.** PolicyEngine simulates a large, evolving body of tax-benefit law (the US model alone encodes more than 95,000 parameters across 5,500+ variables) over survey microdata calibrated to administrative targets. Treat outputs as estimates, and validate them against the policies relevant to your analysis, the scope of the rules engine, and external or back-of-the-envelope calculations. You can inspect the certified US dataset's calibration at https://calibration-diagnostics.vercel.app/populace.
 
@@ -17,19 +22,23 @@ uk = pe.uk.calculate_household(
     people=[{"age": 35, "employment_income": 50_000}],
     year=2026,
 )
-print(uk.person[0].income_tax)                   # income tax
-print(uk.household.hbai_household_net_income)    # net income
+print(uk.person[0].income_tax)  # income tax
+print(uk.household.hbai_household_net_income)  # net income
 
 # US: single filer in California, with a reform
 us = pe.us.calculate_household(
     people=[{"age": 35, "employment_income": 60_000}],
     tax_unit={"filing_status": "SINGLE"},
-    household={"state_code": "CA"},
+    household={"state_code": "CA", "county_fips": "06037"},
     year=2026,
     reform={"gov.irs.credits.ctc.amount.adult_dependent": 1000},
 )
 print(us.tax_unit.income_tax, us.household.household_net_income)
 ```
+
+US default outputs require observed county FIPS or an explicit national/SPM-area
+choice. See the [SPM household contract](docs/households.md#spm-geography-and-measurement-selection)
+for settings, provenance and the coordinated bundle this release ships.
 
 ### Population analysis
 
@@ -61,17 +70,18 @@ print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 For baseline-vs-reform comparisons, see `pe.uk.economic_impact_analysis`
 and its US counterpart.
 
-UK population data is stored in a private Hugging Face model repository. Set
-`HUGGING_FACE_TOKEN` to a token from an account with access before running UK
-population examples. To download the raw `.h5` file directly, see
+UK population data is stored in private Hugging Face repositories: the
+Microcosm default in a dataset repository, and the enhanced FRS in a model
+repository. Set `HUGGING_FACE_TOKEN` to a token from an account with access
+before running UK population examples. To download the raw `.h5` file directly, see
 [Microsimulation](docs/microsim.md#uk-private-data-and-raw-h5-access).
 
 ## Documentation
 
 **Core concepts:**
-- [Core concepts](docs/core-concepts.md): Architecture, datasets, simulations, outputs
-- [UK tax-benefit model](docs/country-models-uk.md): Entities, parameters, examples
-- [US tax-benefit model](docs/country-models-us.md): Entities, parameters, examples
+- [Microsimulation](docs/microsim.md): Datasets, simulations, outputs, performance
+- [Country models](docs/countries.md): UK and US entities, defaults, and differences
+- [Model architecture](docs/methodology/model-architecture.md): How rules, data, and simulations fit together
 
 **Examples:**
 - `examples/income_distribution_us.py`: Analyse benefit distribution by decile
@@ -326,3 +336,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 ## License
 
 AGPL-3.0
+
+## Citing
+
+If you use this package in research, please cite it. Citation metadata is in
+[CITATION.cff](CITATION.cff), and each release is archived on Zenodo:
+
+> Ahmadi, V., Ghenis, M., Woodruff, N., Makarchuk, P., & Volk, A. (2026).
+> policyengine: A Microsimulation Tool for Tax-Benefit Policy Analysis
+> (Version 5.0.4) [Computer software]. Zenodo.
+> https://doi.org/10.5281/zenodo.22145449

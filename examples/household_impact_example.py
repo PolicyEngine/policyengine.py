@@ -61,11 +61,11 @@ def us_example() -> None:
     print("US household calculator")
     print("=" * 60)
 
-    # Single adult earning $50,000 in California.
+    # Single adult earning $50,000 in Los Angeles County, California.
     single = pe.us.calculate_household(
         people=[{"age": 35, "employment_income": 50_000}],
         tax_unit={"filing_status": "SINGLE"},
-        household={"state_code_str": "CA"},
+        household={"state_code": "CA", "county_fips": "06037"},
         year=2026,
     )
     print("\nSingle adult, $50k income (California):")
@@ -73,7 +73,9 @@ def us_example() -> None:
     print(f"  Income tax:  ${single.tax_unit.income_tax:,.0f}")
     print(f"  Payroll tax: ${single.tax_unit.employee_payroll_tax:,.0f}")
 
-    # Married couple with two kids, Texas, lower income.
+    # Married couple with two kids, Texas, lower income. Explicit national
+    # measurement is recorded in the result; state alone does not select an
+    # SPM area. Use an observed county_fips for local SPM measurement instead.
     family = pe.us.calculate_household(
         people=[
             {"age": 35, "employment_income": 40_000},
@@ -82,8 +84,9 @@ def us_example() -> None:
             {"age": 5},
         ],
         tax_unit={"filing_status": "JOINT"},
-        household={"state_code_str": "TX"},
+        household={"state_code": "TX"},
         year=2026,
+        spm={"geography_kind": "national"},
     )
     print("\nMarried couple with 2 children, $40k income (Texas):")
     print(f"  Net income:         ${family.household.household_net_income:,.0f}")
@@ -91,6 +94,10 @@ def us_example() -> None:
     print(f"  EITC:               ${family.tax_unit.eitc:,.0f}")
     print(f"  Child tax credit:   ${family.tax_unit.ctc:,.0f}")
     print(f"  SNAP:               ${family.spm_unit.snap:,.0f}")
+    receipt = family.to_dict()["provenance"]["spm"]
+    print(f"  SPM geography:      {receipt['geography_kind']}")
+    print(f"  SPM scenario:       {receipt['scenario']}")
+    print(f"  SPM artifact hash:  {receipt['forecast_sha256']}")
 
 
 def main() -> None:

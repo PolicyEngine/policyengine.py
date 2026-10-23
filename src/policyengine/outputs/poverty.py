@@ -81,6 +81,21 @@ class Poverty(Output):
 
         # Map poverty variable to target entity if needed
         if poverty_var_obj.entity != target_entity:
+            source = getattr(
+                self.simulation.output_dataset.data, poverty_var_obj.entity
+            )
+            if (
+                target_entity != "person"
+                and pd.isna(source[self.poverty_variable]).any()
+            ):
+                # Mapping onto a group sums members and fills empty groups
+                # with zero, which would count a person outside the SPM
+                # measurement as measured and not poor.
+                raise ValueError(
+                    f"{self.poverty_variable} is missing for units outside "
+                    f"the poverty measurement; summarise it for people, not "
+                    f"for {target_entity} units."
+                )
             mapped = self.simulation.output_dataset.data.map_to_entity(
                 poverty_var_obj.entity,
                 target_entity,
@@ -121,8 +136,13 @@ class Poverty(Output):
         # Calculate results using weighted counts
         self.headcount = float((poverty_series == True).sum())  # noqa: E712
         self.total_population = float(poverty_series.count())
+        # ``None`` means nobody in the group is measured (for example, every
+        # member is outside the SPM measurement population), which is not
+        # a measured rate of zero.
         self.rate = (
-            self.headcount / self.total_population if self.total_population > 0 else 0.0
+            self.headcount / self.total_population
+            if self.total_population > 0
+            else None
         )
 
 

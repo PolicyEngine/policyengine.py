@@ -78,6 +78,10 @@ from policyengine.outputs.uk_geography_assets import (
     default_uk_geography_asset_strategies,
     resolve_uk_geography_asset_paths,
 )
+from policyengine.outputs.uk_geography_disclosure import (
+    UKGeographyDisclosure,
+    compute_uk_geography_disclosure,
+)
 
 __all__ = [
     "Output",
@@ -129,6 +133,8 @@ __all__ = [
     "compute_uk_constituency_impacts",
     "LocalAuthorityImpact",
     "compute_uk_local_authority_impacts",
+    "UKGeographyDisclosure",
+    "compute_uk_geography_disclosure",
     "CONSTITUENCY_ASSET_SPEC",
     "LOCAL_AUTHORITY_ASSET_SPEC",
     "GCSUKGeographyAssetStrategy",

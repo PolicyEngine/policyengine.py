@@ -17,6 +17,7 @@ from policyengine.outputs.uk_geography_assets import (
 from policyengine.outputs.uk_geography_impact import (
     compute_longwise_uk_geography_impacts,
     resolve_uk_geography_lookup_csv_path,
+    warn_unprotected_uk_geography_output,
 )
 
 if TYPE_CHECKING:
@@ -43,6 +44,10 @@ class LocalAuthorityImpact(Output):
 
     def run(self) -> None:
         """Group household output rows and compute per-local-authority metrics."""
+        warn_unprotected_uk_geography_output("LocalAuthorityImpact", "local_authority")
+        self._compute()
+
+    def _compute(self) -> None:
         baseline_hh = self.baseline_simulation.output_dataset.data.household
         reform_hh = self.reform_simulation.output_dataset.data.household
 
@@ -66,18 +71,23 @@ def compute_uk_local_authority_impacts(
 ) -> LocalAuthorityImpact:
     """Compute per-local-authority income changes for UK.
 
+    Deprecated: the output is not disclosure-controlled. Use
+    ``compute_uk_geography_disclosure(levels=("local_authority",))`` instead.
+
     Args:
         baseline_simulation: Completed baseline simulation.
         reform_simulation: Completed reform simulation.
         weight_matrix_path: Deprecated and ignored. Local-authority outputs
             now group by ``la_code_oa`` on the household output.
-        local_authority_csv_path: Optional path to local_authorities_2021.csv.
-            If omitted, standard local paths are checked before downloading
-            from GCS. If still unavailable, results use geography codes as names.
+        local_authority_csv_path: Optional path to a lookup CSV with
+            ``code``, ``name``, ``x`` and ``y`` columns. If omitted, the
+            packaged April 2023 local-authority list supplies names and
+            hex positions. Codes missing from the lookup use the code as
+            the name.
         year: Deprecated and ignored.
         asset_strategies: Deprecated and ignored.
-        download_missing_assets: Whether to download the optional lookup CSV
-            from GCS when no local CSV is found.
+        download_missing_assets: Deprecated and ignored; the lookup is
+            packaged.
 
     Returns:
         LocalAuthorityImpact with local_authority_results populated.
@@ -94,5 +104,8 @@ def compute_uk_local_authority_impacts(
         local_authority_csv_path=lookup_csv_path,
         year=year,
     )
-    impact.run()
+    warn_unprotected_uk_geography_output(
+        "compute_uk_local_authority_impacts", "local_authority"
+    )
+    impact._compute()
     return impact

@@ -534,6 +534,12 @@ def _build_bundle_performance(
             certification.certified_for_model_version
         )
         performance["pe:compatibilityBasis"] = certification.compatibility_basis
+        if certification.core_binding is not None:
+            performance["pe:coreBinding"] = certification.core_binding
+        if certification.certified_for_core_version is not None:
+            performance["pe:certifiedForCoreVersion"] = (
+                certification.certified_for_core_version
+            )
         if certification.built_with_model_version is not None:
             performance["pe:builtWithModelVersion"] = (
                 certification.built_with_model_version

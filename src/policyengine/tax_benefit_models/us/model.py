@@ -1,22 +1,44 @@
 import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel
-from policyengine.provenance.dataset_sources import materialize_dataset_source
-from policyengine.provenance.manifest import (
-    dataset_logical_name,
-    resolve_local_managed_dataset_source,
-    resolve_managed_dataset_reference,
+from policyengine.provenance.dataset_materialization import (
+    materialize_dataset,
 )
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
+from policyengine.tax_benefit_models.common.model_version import (
+    build_runtime_dataset_provenance,
+)
 from policyengine.tax_benefit_models.common.model_version import (
     output_dataset_filepath as _output_dataset_filepath,
 )
 
-from .datasets import PolicyEngineUSDataset, USYearData
+from .datasets import PolicyEngineUSDataset, USYearData, _validate_entity_ids
+from .legacy_inputs import (
+    RENAMES_RECORD_KEY,
+    apply_legacy_input_renames,
+    apply_legacy_input_renames_to_microsimulation,
+)
+from .legacy_spm import (
+    RECORD_KEY as LEGACY_SPM_RECORD_KEY,
+)
+from .legacy_spm import (
+    derive_from_stored_tables,
+    legacy_spm_for_run,
+    legacy_spm_source,
+    prepare_microsimulation,
+    set_declarations,
+)
+from .spm import (
+    SPMProvenance,
+    SPMSelection,
+    calculation_provenance,
+    resolve_spm_selection,
+)
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -157,6 +179,17 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         if dataset.data is None:
             dataset.load()
 
+        # Validate every entity before constructing either the reform or its
+        # baseline, so no set_input can suppress a canonical SPM formula.
+        from spm_calculator.policyengine_adapter import validate_policyengine_inputs
+
+        validate_policyengine_inputs(dataset.data.entity_data)
+
+        # BACKWARD COMPATIBILITY (#597, #598): a legacy certified source
+        # carries no SPM declarations. A year file cut from one stores them;
+        # a run straight over one derives them now (see ``legacy_spm``).
+        legacy_spm = legacy_spm_for_run(dataset)
+
         # Apply regional scoping if specified
         if simulation.scoping_strategy:
             scoped_data = simulation.scoping_strategy.apply(
@@ -190,22 +223,54 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         dynamic_reform = build_reform_dict(simulation.dynamic)
         reform_dict = merge_reform_dicts(policy_reform, dynamic_reform)
 
-        microsim = Microsimulation(reform=reform_dict)
+        class InputMicrosimulation(Microsimulation):
+            # The caller already supplied the entire dataset. The country
+            # default would load another population before we build this one.
+            default_dataset = None
+
+        microsim = InputMicrosimulation(
+            situation={},
+            reform=reform_dict,
+            spm=simulation.spm_config,
+            default_input_period=dataset.year,
+        )
+        legacy_spm_mode = None
+        if legacy_spm is not None:
+            # BACKWARD COMPATIBILITY (#597, #598): after construction, so every
+            # policy and structural reform is in place, and before populations
+            # are built, so stored declarations load as inputs in the reform
+            # and its baseline.
+            legacy_spm_mode = prepare_microsimulation(microsim)
         # Use ``microsim.tax_benefit_system``, not the module-level
         # ``system``: ``Microsimulation.__init__`` applies structural
         # reforms (e.g. ``gov.contrib.ctc.*``) to its per-sim system but
         # leaves the module-level one untouched. Building populations
         # against the module-level system would hide reform-registered
         # variables like ``ctc_minimum_refundable_amount`` at calc time.
-        if microsim.baseline is not None:
-            self._build_simulation_from_dataset(
-                microsim.baseline,
-                dataset,
-                microsim.baseline.tax_benefit_system,
-            )
-        self._build_simulation_from_dataset(
-            microsim, dataset, microsim.tax_benefit_system
+        # Renames already applied when the input data was cut (a
+        # ``create_datasets`` year file stores the mapped input under its
+        # live name) count as applied to this run's inputs too, so the
+        # output's record keeps the whole chain.
+        legacy_input_renames: dict[str, str] = dict(
+            simulation.dataset.metadata.get(RENAMES_RECORD_KEY) or {}
         )
+        if microsim.baseline is not None:
+            legacy_input_renames.update(
+                self._build_simulation_from_dataset(
+                    microsim.baseline,
+                    dataset,
+                    microsim.baseline.tax_benefit_system,
+                )
+            )
+        legacy_input_renames.update(
+            self._build_simulation_from_dataset(
+                microsim, dataset, microsim.tax_benefit_system
+            )
+        )
+        if legacy_spm is not None and legacy_spm.in_memory is not None:
+            # BACKWARD COMPATIBILITY (#597, #598): declarations derived from a
+            # raw legacy source are set on the simulation and its baseline.
+            set_declarations(microsim, legacy_spm.in_memory, [dataset.year])
 
         data = {
             "person": pd.DataFrame(),
@@ -248,22 +313,33 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         # Person entity also needs person-level group ID columns so that
         # downstream joins (e.g. person->tax_unit) work.
         person_input_df = pd.DataFrame(dataset.data.person)
-        for col in person_input_df.columns:
-            if col.startswith("person_") and col.endswith("_id"):
-                target_col = col.replace("person_", "")
-                if target_col in id_columns:
-                    data["person"][target_col] = person_input_df[col].values
+        for entity in US_GROUP_ENTITIES:
+            target_col = f"{entity}_id"
+            native_col = f"person_{target_col}"
+            source_col = (
+                native_col if native_col in person_input_df.columns else target_col
+            )
+            if source_col in person_input_df.columns:
+                data["person"][target_col] = person_input_df[source_col].values
 
         # Calculate non-ID, non-weight variables from simulation.
         # ``resolve_entity_variables`` merges bundled defaults with
         # caller-supplied ``simulation.extra_variables``; unknown
         # entity keys or variable names raise with close-match hints.
         for entity, variables in self.resolve_entity_variables(simulation).items():
+            # Country populations use their own ID order. Restore each native
+            # table's order before attaching values to its IDs and weights.
+            input_ids = pd.DataFrame(getattr(dataset.data, entity))[f"{entity}_id"]
+            output_order = pd.Index(microsim.populations[entity].ids).get_indexer(
+                input_ids
+            )
+            if (output_order < 0).any():
+                raise ValueError(f"Missing {entity}_id in simulation output")
             for var in variables:
                 if var not in id_columns and var not in weight_columns:
                     data[entity][var] = microsim.calculate(
                         var, period=simulation.dataset.year, map_to=entity
-                    ).values
+                    ).values[output_order]
 
         data["person"] = MicroDataFrame(data["person"], weights="person_weight")
         data["marital_unit"] = MicroDataFrame(
@@ -276,6 +352,14 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             data["household"], weights="household_weight"
         )
 
+        output_metadata = {
+            "spm_config": dict(microsim.spm_config),
+            RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items())),
+        }
+        if legacy_spm is not None:
+            output_metadata[LEGACY_SPM_RECORD_KEY] = legacy_spm.record.model_copy(
+                update={"model_mode": legacy_spm_mode}
+            ).model_dump(mode="json")
         simulation.output_dataset = PolicyEngineUSDataset(
             id=simulation.id,
             name=dataset.name,
@@ -283,6 +367,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             filepath=str(_output_dataset_filepath(simulation)),
             year=simulation.dataset.year,
             is_output_dataset=True,
+            metadata=output_metadata,
             data=USYearData(
                 person=data["person"],
                 marital_unit=data["marital_unit"],
@@ -292,6 +377,10 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
                 household=data["household"],
             ),
         )
+        simulation.spm_receipt = SPMProvenance.model_validate(
+            calculation_provenance(microsim)
+        )
+        simulation.spm = SPMSelection.model_validate(microsim.spm_config)
 
     def _build_simulation_from_dataset(self, microsim, dataset, system):
         """Build a PolicyEngine Core simulation from dataset entity IDs.
@@ -299,11 +388,21 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         Mirrors the policyengine-uk pattern of instantiating entities from
         IDs first and then setting variable inputs. Handles both the legacy
         ``person_X_id`` and the ``X_id`` column-naming conventions.
+
+        Stored columns the engine has since renamed are mapped onto their
+        live inputs (see ``legacy_inputs.LEGACY_INPUT_RENAMES``).
+
+        Returns:
+            The legacy input renames applied, ``{legacy: live}``.
         """
         import numpy as np
         from policyengine_core.simulations.simulation_builder import (
             SimulationBuilder,
         )
+        from spm_calculator.policyengine_adapter import validate_policyengine_inputs
+
+        validate_policyengine_inputs(dataset.data.entity_data)
+        _validate_entity_ids(dataset.data.entity_data)
 
         builder = SimulationBuilder()
         builder.populations = system.instantiate_entities()
@@ -335,6 +434,24 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             if "person_tax_unit_id" in person_data.columns
             else "tax_unit_id"
         )
+
+        # The builder requires membership IDs and declared population IDs to
+        # describe the same groups. Check explicitly before its positional
+        # membership mapping can silently attach a person to a different group.
+        for entity, link in {
+            "household": household_id_col,
+            "marital_unit": marital_unit_id_col,
+            "family": family_id_col,
+            "spm_unit": spm_unit_id_col,
+            "tax_unit": tax_unit_id_col,
+        }.items():
+            if link not in person_data or person_data[link].isna().any():
+                raise ValueError(f"Missing nonnull person {link} membership")
+            entity_ids = pd.DataFrame(getattr(dataset.data, entity))[f"{entity}_id"]
+            if set(entity_ids) != set(person_data[link]):
+                raise ValueError(
+                    f"Native {entity}_id values must match person {link} memberships"
+                )
 
         builder.declare_person_entity("person", person_data["person_id"].values)
         builder.declare_entity(
@@ -393,6 +510,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             "person_marital_unit_id",
         }
 
+        stored_tables = {}
         for entity_name, entity_df in [
             ("person", dataset.data.person),
             ("household", dataset.data.household),
@@ -401,29 +519,24 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             ("tax_unit", dataset.data.tax_unit),
             ("marital_unit", dataset.data.marital_unit),
         ]:
-            df = pd.DataFrame(entity_df)
+            df = pd.DataFrame(entity_df).set_index(f"{entity_name}_id", drop=False)
+            df = df.loc[microsim.populations[entity_name].ids]
+            stored_tables[entity_name] = df
             for column in df.columns:
                 if column not in id_columns and column in system.variables:
                     microsim.set_input(column, dataset.year, df[column].values)
 
-
-def _managed_release_bundle(
-    dataset_uri: str,
-    dataset_source: Optional[str] = None,
-) -> dict[str, Optional[str]]:
-    bundle = dict(us_latest.release_bundle)
-    bundle["runtime_dataset"] = dataset_logical_name(dataset_uri)
-    bundle["runtime_dataset_uri"] = dataset_uri
-    if dataset_source:
-        bundle["runtime_dataset_source"] = dataset_source
-    bundle["managed_by"] = "policyengine.py"
-    return bundle
+        # The loop above skips columns the engine does not define, including
+        # stored inputs it has since renamed. The tables are already in the
+        # simulation's entity order.
+        return apply_legacy_input_renames(microsim, {dataset.year: stored_tables})
 
 
 def managed_microsimulation(
     *,
     dataset: Optional[str] = None,
     allow_unmanaged: bool = False,
+    spm: Optional[SPMSelection] = None,
     **kwargs,
 ):
     """Construct a country-package Microsimulation pinned to this bundle.
@@ -431,6 +544,10 @@ def managed_microsimulation(
     By default this enforces the dataset selection from the bundled
     ``policyengine.py`` release manifest. Arbitrary dataset URIs require
     ``allow_unmanaged=True``.
+
+    Stored inputs the engine has since renamed are mapped onto their live
+    inputs (see ``legacy_inputs.LEGACY_INPUT_RENAMES``), and the renames
+    applied are recorded as ``policyengine_bundle["legacy_input_renames"]``.
     """
 
     from policyengine_us import Microsimulation
@@ -441,24 +558,44 @@ def managed_microsimulation(
             "**kwargs, so policyengine.py can enforce the release bundle."
         )
 
-    dataset_uri = resolve_managed_dataset_reference(
+    selection = resolve_spm_selection(spm)
+    source = materialize_dataset(
         "us",
         dataset,
         allow_unmanaged=allow_unmanaged,
     )
-    dataset_source = resolve_local_managed_dataset_source(
-        "us",
-        dataset_uri,
-        allow_local_mirror=not (
-            allow_unmanaged and dataset is not None and "://" in dataset
-        ),
+    microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
+    legacy_input_renames = apply_legacy_input_renames_to_microsimulation(microsim)
+    # BACKWARD COMPATIBILITY (#597, #598): a legacy certified source carries
+    # no SPM declarations, so derive them from its stored evidence and set
+    # them on the simulation and its branches (see ``legacy_spm``).
+    legacy_spm_record = None
+    legacy_source = legacy_spm_source(
+        source.bundle_dataset.sha256 if source.bundle_dataset else None
     )
-    runtime_dataset_source = materialize_dataset_source(dataset_source)
-    microsim = Microsimulation(dataset=runtime_dataset_source, **kwargs)
-    microsim.policyengine_bundle = _managed_release_bundle(
-        dataset_uri,
-        runtime_dataset_source,
+    if legacy_source is not None:
+        declarations, years = derive_from_stored_tables(
+            legacy_source, microsim.dataset, data_dir=Path(source.path).parent
+        )
+        mode = prepare_microsimulation(microsim)
+        set_declarations(microsim, declarations, years)
+        legacy_spm_record = declarations.record.model_copy(
+            update={"model_mode": mode}
+        ).model_dump(mode="json")
+    microsim.policyengine_bundle = dict(us_latest.release_bundle)
+    microsim.policyengine_bundle.update(
+        build_runtime_dataset_provenance(
+            source.source_uri,
+            source.path,
+            source.bundle_dataset,
+        )
     )
+    microsim.policyengine_bundle["spm"] = dict(microsim.spm_config)
+    microsim.policyengine_bundle[RENAMES_RECORD_KEY] = dict(
+        sorted(legacy_input_renames.items())
+    )
+    if legacy_spm_record is not None:
+        microsim.policyengine_bundle[LEGACY_SPM_RECORD_KEY] = legacy_spm_record
     return microsim
 
 

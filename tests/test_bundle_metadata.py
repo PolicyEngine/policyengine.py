@@ -29,10 +29,12 @@ def test_bundle_manifest_exposes_model_and_country_extras():
         "policyengine-core",
         "policyengine-us",
         "policyengine-uk",
+        "spm-calculator",
     ]
     assert manifest["extras"]["us"] == [
         "policyengine-core",
         "policyengine-us",
+        "spm-calculator",
     ]
     assert manifest["extras"]["uk"] == [
         "policyengine-core",
@@ -42,14 +44,32 @@ def test_bundle_manifest_exposes_model_and_country_extras():
     assert "policyengine-us-data" not in manifest["packages"]
 
 
-def test_bundle_manifest_carries_populace_uk_data_release():
+def test_generated_us_extras_preserve_legacy_spm_compatibility(monkeypatch):
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    monkeypatch.syspath_prepend(str(scripts_dir))
+    from generate_bundle_artifacts import update_pyproject_text
+
+    pyproject_path = scripts_dir.parent / "pyproject.toml"
+    original = pyproject_path.read_text()
+    generated = update_pyproject_text(original, bundle.get_current_bundle())
+    # Regeneration and a later release must retain the constraint in every US
+    # installation surface, including dev; the UK-only extra does not need it.
+    assert generated == original
+    for extra in ("us", "models", "dev"):
+        section = generated.split(f"\n{extra} = [\n", 1)[1].split("\n]", 1)[0]
+        assert '"spm-calculator==1.0.0"' in section
+    uk_section = generated.split("\nuk = [\n", 1)[1].split("\n]", 1)[0]
+    assert "spm-calculator" not in uk_section
+
+
+def test_bundle_manifest_carries_uk_data_release():
     release = bundle.get_current_bundle()["data_releases"]["uk"]
 
     assert release["data_producer"] == "populace"
-    assert release["data_package"]["name"] == "populace-data"
+    assert release["data_package"]["name"] == "microcosm-data"
     assert release["data_package"]["repo_type"] == "dataset"
-    assert release["default_dataset"] == "populace_uk_2023"
-    assert release["version"].startswith("populace-uk-2023-")
+    assert release["default_dataset"] == "microcosm_uk_2024_25"
+    assert release["version"].startswith("microcosm-uk-2024-25-national-")
     assert release["default_dataset_uri"].startswith(
         "hf://policyengine/populace-uk-private/"
     )
@@ -116,6 +136,28 @@ def test_export_release_assets_writes_bundle_assets(monkeypatch, tmp_path):
         in (tmp_path / f"policyengine-bundle-{version}.constraints.txt").read_text()
     )
     assert (
+        "spm-calculator==1.0.0"
+        in (tmp_path / f"policyengine-bundle-{version}.constraints.txt").read_text()
+    )
+    assert (
         "PolicyEngine bundle"
         in (tmp_path / f"policyengine-bundle-{version}.citation.txt").read_text()
     )
+
+
+def test_dataset_overlays_may_not_shadow_certified_names():
+    import copy
+
+    import pytest
+
+    from policyengine.provenance.bundle_validation import validate_dataset_overlays
+
+    current = bundle.get_current_bundle()
+    validate_dataset_overlays(current)
+
+    release = current["data_releases"]["uk"]
+    for name in (release["default_dataset"], next(iter(release["datasets"]))):
+        shadowing = copy.deepcopy(current)
+        shadowing["dataset_overlays"]["uk"][name] = {"path": f"{name}.h5"}
+        with pytest.raises(ValueError, match=f"shadows certified datasets: {name}"):
+            validate_dataset_overlays(shadowing)

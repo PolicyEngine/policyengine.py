@@ -39,12 +39,14 @@ website:
           - impact-analysis.md
           - outputs.md
           - regions.md
+          - disclosure.md
           - visualisation.md
       - section: "Methodology"
         contents:
           - methodology/index.md
           - methodology/model-architecture.md
           - methodology/us-health-costs.md
+          - methodology/uk-capital-gains-responses.md
       - section: "Programs"
         contents:
           - programs/index.md
@@ -54,6 +56,7 @@ website:
           - reference/index.md
           - countries.md
           - release-bundles.md
+          - receipts.md
           - data-publishing-design.md
           - examples.md
           - dev.md

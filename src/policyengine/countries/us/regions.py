@@ -43,7 +43,7 @@ def build_us_region_registry() -> RegionRegistry:
         )
     )
 
-    # 2. State regions (filtered from the certified national dataset)
+    # 2. State regions (filtered from the configured state dataset)
     for abbrev, name in US_STATES.items():
         regions.append(
             Region(
@@ -51,6 +51,11 @@ def build_us_region_registry() -> RegionRegistry:
                 label=name,
                 region_type="state",
                 parent_code="us",
+                dataset_path=resolve_region_dataset_path(
+                    "us",
+                    "state",
+                    state_code=abbrev,
+                ),
                 scoping_strategy=RowFilterStrategy(
                     variable_name="state_fips",
                     variable_value=US_STATE_FIPS[abbrev],
@@ -60,7 +65,7 @@ def build_us_region_registry() -> RegionRegistry:
             )
         )
 
-    # 3. Congressional district regions (filtered from the national dataset)
+    # 3. Congressional districts (filtered from the configured district dataset)
     for state_abbrev, count in DISTRICT_COUNTS.items():
         state_name = US_STATES[state_abbrev]
         state_fips = US_STATE_FIPS[state_abbrev]
@@ -81,6 +86,11 @@ def build_us_region_registry() -> RegionRegistry:
                     label=label,
                     region_type="congressional_district",
                     parent_code=f"state/{state_abbrev.lower()}",
+                    dataset_path=resolve_region_dataset_path(
+                        "us",
+                        "congressional_district",
+                        district_code=district_code,
+                    ),
                     scoping_strategy=RowFilterStrategy(
                         variable_name="congressional_district_geoid",
                         variable_value=district_geoid,

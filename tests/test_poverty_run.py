@@ -242,10 +242,10 @@ class TestPovertyRunWithCombinedFilter:
 class TestPovertyRunZeroPopulation:
     """Tests for Poverty.run() with zero matching population."""
 
-    def test__given_no_matching_persons__then_rate_is_zero(self):
+    def test__given_no_matching_persons__then_rate_is_none(self):
         """Given: Filter matches no persons
         When: Running poverty
-        Then: headcount=0, total=0, rate=0.0
+        Then: headcount=0, total=0, rate=None (nobody measured)
         """
         sim = _make_sim(
             poverty_values=[True, True],
@@ -262,4 +262,5 @@ class TestPovertyRunZeroPopulation:
 
         assert pov.headcount == 0.0
         assert pov.total_population == 0.0
-        assert pov.rate == 0.0
+        # Nobody in the group is measured, which is not a measured rate of 0.
+        assert pov.rate is None

@@ -55,7 +55,7 @@ Aggregate(
     aggregate_type=AggregateType.MEAN,
     filter_variable="household_net_income",
     quantile=10,
-    quantile_eq=1,          # bottom decile
+    quantile_eq=1,  # bottom decile
 )
 ```
 
@@ -86,7 +86,7 @@ winners = ChangeAggregate(
     reform_simulation=reform,
     variable="household_net_income",
     aggregate_type=ChangeAggregateType.COUNT,
-    change_geq=1,           # households gaining at least $1
+    change_geq=1,  # households gaining at least $1
 )
 ```
 
@@ -96,7 +96,11 @@ Or on a relative change — `relative_change_geq=0.05` selects households with a
 
 One decile's baseline mean, reform mean, and mean change. For all ten at once, use `calculate_decile_impacts`.
 
-By default, `calculate_decile_impacts` ranks units into deciles using `income_variable`. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
+By default, `calculate_decile_impacts` measures `household_net_income` and ranks units into deciles using that variable. Household groups are person-weighted: their survey weights are multiplied by `household_count_people` before ranking. Rows with negative values of the computed income concept receive the conventional `-1` group and are excluded from the reported decile results. Missing and non-finite ranking values are also excluded and do not affect group boundaries.
+
+The statistics reported after grouping use the entity survey weight. For household analysis, this means the decile boundaries are person-weighted while baseline and reform means and better-off, worse-off, and no-change counts are household-weighted. `relative_change` is the percentage change between the two reported group means, not the mean of household-level percentage changes. Empty groups have null means and changes and zero outcome counts. Nullable result columns in the collection DataFrame use Pandas `Float64`, so `to_dict("records")` preserves these values as JSON-safe `None` rather than non-standard `NaN`.
+
+Pass another `income_variable`, such as `equiv_hbai_household_net_income`, to select a different income concept explicitly. To measure changes in one variable while grouping by an existing decile variable, pass `decile_variable`. Precomputed group values outside `1..quantiles` are excluded, which preserves country-package sentinel values such as `-1` for negative income or wealth. For example, UK wealth-decile impacts measure changes in household net income grouped by `household_wealth_decile`.
 
 ```python
 from policyengine.outputs import calculate_decile_impacts
@@ -118,12 +122,16 @@ wealth_deciles = calculate_decile_impacts(
     entity="household",
 )
 
-impacts.dataframe                        # includes the decile_variable column
+impacts.dataframe  # includes the decile_variable column
 ```
 
 ## IntraDecileImpact
 
-Distribution of household-level impact within each decile (five bucket categories summing to 1.0). Use `compute_intra_decile_impacts` for the full set. Like `calculate_decile_impacts`, this helper accepts `decile_variable` when the grouping variable is already present in the simulation output.
+Distribution of household-level impact within each decile (five bucket categories summing to 1.0 for populated groups). Use `compute_intra_decile_impacts` for the full set. Its computed household groups use the same person-weighted ranking as `calculate_decile_impacts`, and its category proportions are also person-weighted. Empty groups have null proportions.
+
+The `decile=0` row is calculated directly from all included people. It is not the arithmetic mean of the individual decile proportions, so it remains valid when tied values, large survey observations, exclusions, or empty groups make decile populations unequal. Nullable proportion columns in the collection DataFrame also use Pandas `Float64` so empty results serialize as JSON `null`.
+
+This helper accepts `decile_variable` when the grouping variable is already present in the simulation output.
 
 ```python
 from policyengine.outputs import compute_intra_decile_impacts
@@ -159,17 +167,35 @@ rate.run()
 rate.headcount, rate.total_population, rate.rate
 ```
 
+`rate.rate` is `None` when nobody in the group is measured: the group's
+weighted population with a poverty status is zero, for example a filter that
+matches no one, or a group whose members are all outside the SPM measurement
+on a legacy source. That is not a measured rate of zero, so handle `None`
+before formatting or subtracting rates.
+
 For all canonical poverty measures over one simulation:
 
 ```python
 from policyengine.outputs import calculate_us_poverty_rates
 
 rates = calculate_us_poverty_rates(simulation=baseline)
-rates.outputs                 # Poverty entries for each measure
+rates.outputs  # Poverty entries for each measure
 rates.dataframe
 ```
 
 Call it once per simulation for a baseline-vs-reform comparison. Age / gender / race breakdowns: `calculate_us_poverty_by_age`, `_by_gender`, `_by_race`. UK counterparts: `calculate_uk_poverty_rates`, `_by_age`, `_by_gender`.
+
+### Which measure to headline
+
+PolicyEngine headlines **absolute poverty before housing costs** in the UK: `absolute_bhc` in `calculate_uk_poverty_rates`, from the `in_poverty_bhc` variable. That function also returns `absolute_ahc`, `relative_bhc` and `relative_ahc`. In the US, `calculate_us_poverty_rates` returns the Supplemental Poverty Measure (`spm`) and deep SPM poverty (`spm_deep`).
+
+The reasons:
+
+- **Relative poverty measures inequality, not poverty.** policyengine-uk draws the relative line at 60% of each simulation's own median income. A reform that raises the median raises the line with it, so relative poverty can rise when every household is better off.
+  - Example: raising the personal allowance to £15,000 in 2026-27 lowers absolute child poverty and raises relative child poverty.
+- **After-housing-costs measures subtract housing spending,** and much of that spending is a choice: a flat or a mansion. International poverty statistics are computed on income before housing costs.
+
+The absolute line is HBAI's: 60% of median income in a fixed reference year, held constant in real terms (the `household.poverty.absolute_poverty_threshold_bhc` and `_ahc` parameters). Since the March 2026 HBAI release, DWP's reference year is FYE 2025 for FYE 2022 onward: 60% of the FYE 2025 medians of £719.48 (BHC) and £623.14 (AHC), so £431.69 and £373.89 a week (HBAI table 2.4ts). Earlier years keep the FYE 2011 reference, and DWP plans to extend FYE 2025 back to FYE 2019 in its March 2027 release. policyengine-uk follows the same split from version 2.102.3: FYE 2022 to FYE 2024 use HBAI's own annual CPI-variant deflators, and later years are uprated by the OBR's CPI forecast. Earlier policyengine-uk versions use the FYE 2011 line throughout, so their absolute rates are lower than DWP's.
 
 ## Inequality
 
@@ -240,7 +266,33 @@ for row in impacts.district_results:
     print(row["district_geoid"], row["avg_change"], row["winner_percentage"])
 ```
 
-### UK constituencies / local authorities
+### UK regions, constituencies and local authorities
+
+`compute_uk_geography_disclosure` returns results by area under disclosure
+control: each number passes a floor on the survey households behind it and
+carries a 90% interval. Use it for anything you publish. See
+[Disclosure control](disclosure.md).
+
+Constituency and local-authority levels need simulations on a dataset whose
+households carry those codes. The Microcosm national default does not: run
+them on the local-area dataset the bundle routes those regions to,
+`microcosm_uk_2024_25_dense`. Regions can come from either.
+
+```python
+from policyengine.outputs import compute_uk_geography_disclosure
+
+impact = compute_uk_geography_disclosure(
+    baseline_simulation=baseline,
+    reform_simulation=reform,
+    year=2026,
+    levels=("region", "constituency"),
+)
+impact.public.to_frame()
+```
+
+The two older functions below are deprecated. Their output is not
+disclosure-controlled, so do not publish it when the data is licensed survey
+microdata.
 
 Constituency and local-authority breakdowns group household output rows by
 dataset-provided longwise geography columns. Constituencies use

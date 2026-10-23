@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "description": "Universal Credit coverage floor for UK certification candidates (PolicyEngine/policyengine.py#491, #553). Benefit units with Universal Credit and Universal Credit spend in Great Britain must each be within the tolerance of DWP's and the OBR's figures for the same year. These are the totals policyengine-uk-data calibrates to (targets dwp/uc/households and obr/universal_credit).",
+  "tolerance": 0.1,
+  "geography": "great_britain",
+  "years": {
+    "2025": {
+      "benefit_units": {
+        "value": 6700000,
+        "source": "DWP, Universal Credit deductions statistics, March 2025 to February 2026, Table 1: households on Universal Credit (households with a deduction divided by their share), calendar-2025 average",
+        "url": "https://www.gov.uk/government/statistics/universal-credit-quarterly-statistics-29-april-2013-to-12-february-2026/universal-credit-deductions-statistics-march-2025-to-february-2026"
+      },
+      "spend": {
+        "value": 79286349140,
+        "source": "OBR, Economic and fiscal outlook, March 2026, detailed forecast tables (expenditure), Table 4.9: Universal Credit inside and outside the welfare cap, 2025-26 (£66.411bn + £12.876bn; DWP social security, Great Britain)",
+        "url": "https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/"
+      }
+    },
+    "2026": {
+      "benefit_units": {
+        "value": 7200000,
+        "source": "DWP, Universal Credit deductions statistics, March 2025 to February 2026, Table 1: households on Universal Credit, December 2025 to February 2026 plateau",
+        "url": "https://www.gov.uk/government/statistics/universal-credit-quarterly-statistics-29-april-2013-to-12-february-2026/universal-credit-deductions-statistics-march-2025-to-february-2026"
+      },
+      "spend": {
+        "value": 87649386699,
+        "source": "OBR, Economic and fiscal outlook, March 2026, detailed forecast tables (expenditure), Table 4.9: Universal Credit inside and outside the welfare cap, 2026-27 (£71.710bn + £15.939bn; DWP social security, Great Britain)",
+        "url": "https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/"
+      }
+    }
+  }
+}

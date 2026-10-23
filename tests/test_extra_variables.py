@@ -48,6 +48,11 @@ def _us_fixture_dataset(tmp_path):
             {
                 "household_id": [1],
                 "state_code": ["CA"],
+                # The certified bundle measures SPM at county geography
+                # (manifest ``measurements.spm.geography_kind == "county"``),
+                # so a US household fixture must name its county. State alone
+                # does not identify an SPM area.
+                "county_fips": ["06037"],
                 "household_weight": [1_000.0],
             }
         ),
@@ -154,6 +159,7 @@ def _uk_fixture_dataset(tmp_path):
                 "constituency_code_oa": ["E14001234"],
                 "la_code_oa": ["E09000001"],
                 "region_code_oa": ["E12000007"],
+                "source_household_id": [4321],
                 "tenure_type": ["RENT_PRIVATELY"],
                 "rent": [12_000.0],
                 "council_tax": [1_500.0],
@@ -204,6 +210,8 @@ def test__uk_extra_variables_appear_on_output_dataset(tmp_path) -> None:
     assert household["constituency_code_oa"].tolist() == ["E14001234"]
     assert household["la_code_oa"].tolist() == ["E09000001"]
     assert household["region_code_oa"].tolist() == ["E12000007"]
+    assert household["source_household_id"].tolist() == [4321]
+    assert household["region"].tolist() == ["LONDON"]
 
 
 def test__uk_resolve_entity_variables_raises_on_unknown_variable() -> None:

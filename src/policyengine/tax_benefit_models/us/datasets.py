@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import logging
 import warnings
 from importlib import metadata as importlib_metadata
 from pathlib import Path
@@ -12,14 +13,50 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
-from policyengine.provenance.dataset_sources import materialize_dataset_source
+from policyengine.provenance.dataset_materialization import (
+    MaterializedDataset,
+    materialize_dataset,
+)
 from policyengine.provenance.manifest import (
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
-    resolve_local_managed_dataset_source,
-    resolve_managed_dataset_reference,
 )
+from policyengine.tax_benefit_models.common.model_version import (
+    build_runtime_dataset_provenance,
+)
+from policyengine.tax_benefit_models.us.legacy_inputs import (
+    _ABSENT as _ABSENT_RECORD,
+)
+from policyengine.tax_benefit_models.us.legacy_inputs import (
+    RENAMES_RECORD_KEY,
+    apply_legacy_input_renames_to_microsimulation,
+    check_yearly_periods,
+    pending_legacy_input_renames,
+    read_renames_record,
+    write_renames_record,
+    write_year_file_stamp,
+    year_file_stamp,
+    year_file_stamp_problem,
+)
+from policyengine.tax_benefit_models.us.legacy_spm import (
+    RECORD_KEY as LEGACY_SPM_RECORD_KEY,
+)
+from policyengine.tax_benefit_models.us.legacy_spm import (
+    LegacySPMDeclarations,
+    LegacySPMProfile,
+    add_to_year_file_frames,
+    derive_from_stored_tables,
+    expected_profile,
+    legacy_spm_source,
+    parse_record,
+    read_record_value,
+    write_record,
+    year_file_problem,
+)
+from policyengine.utils.hashing import sha256_file
+
+logger = logging.getLogger(__name__)
 
 
 class USYearData(YearData):
@@ -92,27 +129,51 @@ class PolicyEngineUSDataset(Dataset):
                 store["spm_unit"] = pd.DataFrame(self.data.spm_unit)
                 store["tax_unit"] = pd.DataFrame(self.data.tax_unit)
                 store["household"] = pd.DataFrame(self.data.household)
+        # The renamed stored inputs mapped when this data was cut or
+        # calculated. Its presence marks a year file or output as written
+        # with the mapping (see ``legacy_inputs.RENAMES_H5_DATASET``).
+        renames = self.metadata.get(RENAMES_RECORD_KEY)
+        if renames is not None:
+            write_renames_record(filepath, renames)
+        # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+        # year file was cut with, or an output calculated with (see
+        # ``legacy_spm.record``).
+        legacy_spm_record = parse_record(self.metadata.get(LEGACY_SPM_RECORD_KEY))
+        if legacy_spm_record is not None:
+            write_record(filepath, legacy_spm_record)
 
     def load(self) -> None:
         """Load dataset from HDF5 file into this instance."""
         filepath = self.filepath
-        if _is_policyengine_core_h5(Path(filepath)):
-            self.data = _load_policyengine_core_h5(Path(filepath), self.year)
+        path = Path(filepath)
+        renames = read_renames_record(path)
+        if renames is not None:
+            self.metadata[RENAMES_RECORD_KEY] = renames
+        # BACKWARD COMPATIBILITY (#597, #598): keep the stored record as it
+        # is, readable or not; runs and loaders judge it (``legacy_spm.record``).
+        legacy_spm_record = read_record_value(path)
+        if isinstance(legacy_spm_record, dict):
+            self.metadata[LEGACY_SPM_RECORD_KEY] = legacy_spm_record
+        elif legacy_spm_record is not _ABSENT_RECORD:
+            self.metadata[LEGACY_SPM_RECORD_KEY] = None
+        else:
+            self.metadata.pop(LEGACY_SPM_RECORD_KEY, None)
+        if _is_policyengine_core_h5(path):
+            self.data = _load_policyengine_core_h5(path, self.year)
             return
 
         with pd.HDFStore(filepath, mode="r") as store:
-            self.data = USYearData(
-                person=MicroDataFrame(store["person"], weights="person_weight"),
-                marital_unit=MicroDataFrame(
-                    store["marital_unit"], weights="marital_unit_weight"
-                ),
-                family=MicroDataFrame(store["family"], weights="family_weight"),
-                spm_unit=MicroDataFrame(store["spm_unit"], weights="spm_unit_weight"),
-                tax_unit=MicroDataFrame(store["tax_unit"], weights="tax_unit_weight"),
-                household=MicroDataFrame(
-                    store["household"], weights="household_weight"
-                ),
-            )
+            data = {entity: store[entity] for entity in US_ENTITY_KEYS}
+        # Native producer files store calibrated household weights. Project
+        # missing weights through membership IDs on these in-memory copies,
+        # before constructing MicroDataFrames; the source HDF remains read-only.
+        _assign_missing_entity_weights(data)
+        self.data = USYearData(
+            **{
+                entity: MicroDataFrame(frame, weights=f"{entity}_weight")
+                for entity, frame in data.items()
+            }
+        )
 
     def __repr__(self) -> str:
         if self.data is None:
@@ -190,62 +251,128 @@ def _core_h5_entity_lengths(h5_file: h5py.File, year: int) -> dict[str, int]:
     return lengths
 
 
-def _core_h5_variable_entities() -> dict[str, str]:
+def _core_h5_variable_entities() -> tuple[dict[str, str], dict[str, str]]:
+    """Return each variable's entity, and the pending renames ``{legacy: live}``."""
     from policyengine_us.system import system
 
-    return {name: variable.entity.key for name, variable in system.variables.items()}
+    entities = {
+        name: variable.entity.key for name, variable in system.variables.items()
+    }
+    # A stored input the engine has since renamed belongs to its live input's
+    # entity. Without this its entity is guessed from its length, and a column
+    # as long as two entities is dropped before the rename can map it.
+    pending = pending_legacy_input_renames(system.variables)
+    for legacy, live in pending.items():
+        entities[legacy] = entities[live]
+    return entities, pending
+
+
+def _validate_entity_ids(data: dict[str, pd.DataFrame]) -> None:
+    """Reject ambiguous row identities before joining inputs or weights."""
+    for entity, frame in data.items():
+        entity_id = US_ENTITY_ID_COLUMNS[entity]
+        if entity_id not in frame:
+            raise ValueError(f"Missing {entity_id} for native entity alignment")
+        if frame[entity_id].isna().any() or frame[entity_id].duplicated().any():
+            raise ValueError(
+                f"Native entity alignment requires unique nonmissing {entity_id} values"
+            )
 
 
 def _assign_missing_entity_weights(data: dict[str, pd.DataFrame]) -> None:
+    """Project missing weights from calibrated households through native IDs.
+
+    Both supported HDF layouts use this mapping. Existing weight columns are
+    retained; group weights are one household weight, never sums of person
+    weights. Missing or ambiguous links cannot silently produce unweighted rows.
+    """
+    _validate_entity_ids(data)
+    missing = [
+        entity for entity in US_ENTITY_KEYS if f"{entity}_weight" not in data[entity]
+    ]
+    if not missing:
+        return
     household = data["household"]
     if "household_id" not in household or "household_weight" not in household:
-        return
-
-    household_weights = household[["household_id", "household_weight"]]
-    person = data["person"]
+        raise ValueError(
+            "Missing household_id or household_weight for deriving entity weights"
+        )
     if (
-        "person_weight" not in person
-        and "person_household_id" in person
-        and len(person) > 0
+        household["household_id"].isna().any()
+        or household["household_id"].duplicated().any()
     ):
-        person.loc[:, "person_weight"] = person["person_household_id"].map(
-            household_weights.set_index("household_id")["household_weight"]
+        raise ValueError(
+            "Deriving entity weights requires unique nonmissing household_id values"
+        )
+    if household["household_weight"].isna().any():
+        raise ValueError(
+            "Cannot derive entity weights from missing household_weight values"
         )
 
-    for entity, person_entity_id in US_PERSON_ENTITY_ID_COLUMNS.items():
-        if entity == "household":
-            continue
-        entity_id = US_ENTITY_ID_COLUMNS[entity]
-        entity_weight = US_ENTITY_WEIGHT_COLUMNS[entity]
-        if (
-            entity_weight in data[entity]
-            or entity_id not in data[entity]
-            or person_entity_id not in person
-            or "person_household_id" not in person
-        ):
-            continue
+    household_weights = household.set_index("household_id")["household_weight"]
+    person = data["person"]
 
-        entity_households = person[
-            [person_entity_id, "person_household_id"]
-        ].drop_duplicates(subset=[person_entity_id])
-        weight_lookup = entity_households.merge(
-            household_weights,
-            left_on="person_household_id",
-            right_on="household_id",
-            how="left",
-        ).set_index(person_entity_id)["household_weight"]
-        data[entity].loc[:, entity_weight] = data[entity][entity_id].map(weight_lookup)
+    def person_link(entity: str) -> str:
+        native = US_PERSON_ENTITY_ID_COLUMNS[entity]
+        alias = US_ENTITY_ID_COLUMNS[entity]
+        if native in person:
+            return native
+        if alias in person:
+            return alias
+        raise ValueError(f"Missing person {native} link for deriving {entity} weights")
+
+    for entity in missing:
+        frame = data[entity]
+        weight = US_ENTITY_WEIGHT_COLUMNS[entity]
+        if frame.empty:
+            frame[weight] = pd.Series(index=frame.index, dtype=household_weights.dtype)
+            continue
+        household_link = person_link("household")
+        if entity == "person":
+            weights = person[household_link].map(household_weights)
+        else:
+            entity_id = US_ENTITY_ID_COLUMNS[entity]
+            if entity_id not in frame:
+                raise ValueError(f"Missing {entity_id} for deriving {weight}")
+            entity_link = person_link(entity)
+            relationships = person[[entity_link, household_link]].drop_duplicates()
+            if relationships[entity_link].duplicated().any():
+                raise ValueError(
+                    f"Cannot derive {weight}: {entity_id} spans multiple households"
+                )
+            weight_lookup = relationships.set_index(entity_link)[household_link].map(
+                household_weights
+            )
+            weights = frame[entity_id].map(weight_lookup)
+        if weights.isna().any():
+            raise ValueError(
+                f"Cannot derive {weight}: missing or unknown native household/entity links"
+            )
+        frame[weight] = weights
 
 
 def _load_policyengine_core_h5(path: Path, year: int) -> USYearData:
     """Load a PolicyEngine core variable/period H5 into .py entity DataFrames."""
 
     data = {entity: pd.DataFrame() for entity in US_ENTITY_KEYS}
-    variable_entities = _core_h5_variable_entities()
+    variable_entities, pending_renames = _core_h5_variable_entities()
 
     with h5py.File(path, "r") as h5_file:
         entity_lengths = _core_h5_entity_lengths(h5_file, year)
         for variable_name in h5_file.keys():
+            live_name = pending_renames.get(variable_name)
+            if live_name is not None and live_name not in h5_file:
+                # A stored legacy column is mapped onto every month of the
+                # year, so a part-year value is refused, as it is when
+                # ``managed_microsimulation`` reads this file. A file that
+                # also stores the live name loads that natively, and its
+                # legacy column is left alone on both paths.
+                node = h5_file[variable_name]
+                check_yearly_periods(
+                    variable_name,
+                    node.keys() if isinstance(node, h5py.Group) else [],
+                    path,
+                )
             values = _read_core_h5_period_values(h5_file, variable_name, year)
             entity = variable_entities.get(variable_name)
             if entity is None:
@@ -279,8 +406,15 @@ def create_datasets(
     datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
+    allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUSDataset]:
     """Create PolicyEngineUSDataset instances from logical dataset names or URLs.
+
+    Each year file is written to ``{data_folder}/{dataset_stem}_year_{year}.h5``
+    and stamped last with the register of renamed stored inputs it was cut
+    under and the year-file format revision (see
+    ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which ``ensure_datasets``
+    and ``load_datasets`` check.
 
     Args:
         datasets: List of logical dataset names or HuggingFace dataset URLs
@@ -292,13 +426,30 @@ def create_datasets(
     """
     from policyengine_us import Microsimulation
 
-    datasets = datasets or [get_release_manifest("us").default_dataset]
+    from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
+
+    dataset_requests: list[Optional[str]] = datasets or [None]
     result = {}
-    for dataset in datasets:
-        resolved_dataset = resolve_dataset_reference("us", dataset)
-        dataset_stem = dataset_logical_name(resolved_dataset)
-        runtime_dataset = materialize_dataset_source(resolved_dataset)
-        sim = Microsimulation(dataset=runtime_dataset)
+    for dataset in dataset_requests:
+        source = materialize_dataset(
+            "us",
+            dataset,
+            allow_unmanaged=allow_unmanaged,
+            data_dir=Path(data_folder),
+        )
+        dataset_stem = source.name
+        sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
+        # The register the mapping below uses, stamped into each year file.
+        stamp = year_file_stamp()
+        # Map stored inputs the engine has since renamed before extracting,
+        # so each year's file stores the live input rather than dropping it.
+        legacy_input_renames = apply_legacy_input_renames_to_microsimulation(sim)
+        # BACKWARD COMPATIBILITY (#597, #598): a legacy certified source
+        # carries no SPM declarations, so derive them while its stored
+        # evidence is still available; year files keep model inputs only.
+        legacy_spm = _legacy_spm_declarations(
+            sim, source.bundle_dataset, Path(data_folder)
+        )
 
         for year in years:
             # Get all input variables from the simulation
@@ -436,12 +587,24 @@ def create_datasets(
                     elif entity_name == "tax_unit":
                         tax_unit_df = entity_df
 
+            metadata: dict[str, Any] = {
+                RENAMES_RECORD_KEY: dict(sorted(legacy_input_renames.items()))
+            }
+            if legacy_spm is not None:
+                # BACKWARD COMPATIBILITY (#597, #598): store the derived
+                # declarations as the ordinary inputs newer sources carry.
+                add_to_year_file_frames(person_df, spm_unit_df, legacy_spm)
+                metadata[LEGACY_SPM_RECORD_KEY] = legacy_spm.record.model_dump(
+                    mode="json"
+                )
+
             us_dataset = PolicyEngineUSDataset(
                 id=f"{dataset_stem}_year_{year}",
                 name=f"{dataset_stem}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset_stem}",
                 filepath=f"{data_folder}/{dataset_stem}_year_{year}.h5",
                 year=int(year),
+                metadata=metadata,
                 data=USYearData(
                     person=MicroDataFrame(person_df, weights="person_weight"),
                     household=MicroDataFrame(household_df, weights="household_weight"),
@@ -454,11 +617,65 @@ def create_datasets(
                 ),
             )
             us_dataset.save()
+            # Stamp last. ``save()`` truncates the file first, so a year file
+            # whose write stopped part-way has no stamp and is cut again.
+            write_year_file_stamp(us_dataset.filepath, stamp)
 
             dataset_key = f"{dataset_stem}_{year}"
             result[dataset_key] = us_dataset
 
     return result
+
+
+def _legacy_spm_declarations(
+    sim: Any,
+    bundle_dataset: Optional[MaterializedDataset],
+    data_folder: Path,
+) -> Optional[LegacySPMDeclarations]:
+    """Derive the SPM declarations a legacy certified source lacks.
+
+    BACKWARD COMPATIBILITY (#597, #598). Only a bundle dataset whose verified
+    SHA-256 is registered in ``legacy_spm.registry`` gets any; see
+    ``legacy_spm``.
+    """
+    source = legacy_spm_source(bundle_dataset.sha256 if bundle_dataset else None)
+    if source is None:
+        return None
+    declarations, _ = derive_from_stored_tables(
+        source, getattr(sim, "dataset", None), data_dir=data_folder
+    )
+    return declarations
+
+
+def _managed_source_sha256(dataset: Optional[str]) -> Optional[str]:
+    """Return the certified SHA-256 of a managed bundle dataset reference.
+
+    A managed dataset may be named by its manifest name or by the URI that
+    name resolves to (the form the region registry's dataset paths take).
+    Any other reference is unmanaged and has no certified hash.
+    """
+    manifest = get_release_manifest("us")
+    if dataset is None or dataset == manifest.default_dataset_uri:
+        name: Optional[str] = manifest.default_dataset
+    elif dataset in manifest.datasets:
+        name = dataset
+    else:
+        name = next(
+            (
+                candidate
+                for candidate in manifest.datasets
+                if resolve_dataset_reference("us", candidate) == dataset
+            ),
+            None,
+        )
+    reference = manifest.datasets.get(name) if name is not None else None
+    return reference.sha256 if reference is not None else None
+
+
+def _expected_legacy_spm_profile(dataset: Optional[str]) -> Optional[LegacySPMProfile]:
+    """Return the legacy SPM profile a dataset reference's year files need."""
+    source = legacy_spm_source(_managed_source_sha256(dataset))
+    return expected_profile(source) if source is not None else None
 
 
 def load_datasets(
@@ -467,6 +684,14 @@ def load_datasets(
     data_folder: str = "./data",
 ) -> dict[str, PolicyEngineUSDataset]:
     """Load PolicyEngineUSDataset instances from saved HDF5 files.
+
+    A year file is refused unless ``create_datasets`` stamped it with this
+    release's register of renamed stored inputs and year-file format revision
+    (see ``legacy_inputs.year_file_stamp_problem``). A file cut before a
+    register entry was added may have lost that input, as files that
+    policyengine.py 6.1.1 and earlier cut from the certified default lost the
+    WIC take-up draw. The error says why, and names the renames the file may
+    lack when its register is the reason.
 
     Args:
         datasets: List of HuggingFace dataset paths (used to derive file names)
@@ -483,6 +708,25 @@ def load_datasets(
         dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
             filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
+            if Path(filepath).exists():
+                problem = year_file_stamp_problem(filepath)
+                if problem is not None:
+                    raise ValueError(
+                        f"US year file {filepath} is out of date: {problem}. "
+                        "Regenerate it with ensure_datasets() or "
+                        "create_datasets()."
+                    )
+                # BACKWARD COMPATIBILITY (#597, #598): a legacy source's year
+                # file must carry exactly the declarations this release derives.
+                legacy_problem = year_file_problem(
+                    filepath, _expected_legacy_spm_profile(dataset)
+                )
+                if legacy_problem is not None:
+                    raise ValueError(
+                        f"US year file {filepath} is out of date: "
+                        f"{legacy_problem}. Regenerate it with ensure_datasets() "
+                        "or create_datasets()."
+                    )
             us_dataset = PolicyEngineUSDataset(
                 name=f"{dataset_stem}-year-{year}",
                 description=f"US Dataset for year {year} based on {dataset_stem}",
@@ -509,7 +753,8 @@ def _metadata_path_for_h5(path: Path) -> Path:
 
 
 def _load_dataset_metadata(
-    path: Path, require_metadata: bool
+    path: Path,
+    require_metadata: bool,
 ) -> tuple[dict, Optional[Path]]:
     metadata_path = _metadata_path_for_h5(path)
     if not metadata_path.exists():
@@ -572,7 +817,7 @@ def _runtime_policyengine_us_metadata() -> dict[str, Any]:
             result["direct_url"] = {}
     package_file = _runtime_policyengine_us_package_file()
     if package_file is not None:
-        result["package_file_sha256"] = _sha256_file(package_file)
+        result["package_file_sha256"] = sha256_file(package_file)
         result["package_tree_sha256"] = _sha256_directory(package_file.parent)
     return result
 
@@ -836,6 +1081,7 @@ def _build_long_term_dataset(
     metadata: dict,
     metadata_path: Optional[Path],
     dataset_uri: Optional[str] = None,
+    materialized: Optional[MaterializedDataset] = None,
 ) -> PolicyEngineUSDataset:
     dataset = PolicyEngineUSDataset(
         id=_long_term_dataset_key(dataset_name, year),
@@ -849,11 +1095,12 @@ def _build_long_term_dataset(
     if dataset_uri is not None:
         dataset.metadata.setdefault("policyengine_bundle", {})
         dataset.metadata["policyengine_bundle"].update(
-            {
-                "managed_by": "policyengine.py",
-                "runtime_dataset": _long_term_dataset_key(dataset_name, year),
-                "runtime_dataset_uri": dataset_uri,
-            }
+            build_runtime_dataset_provenance(
+                dataset_uri,
+                str(path),
+                materialized,
+                logical_name=_long_term_dataset_key(dataset_name, year),
+            )
         )
     return dataset
 
@@ -912,14 +1159,6 @@ def _validate_loaded_long_term_metadata(
         require_policyengine_us_clean_build=require_policyengine_us_clean_build,
         require_runtime_policyengine_us_match=require_runtime_policyengine_us_match,
     )
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def load_long_term_datasets(
@@ -1013,6 +1252,7 @@ def load_long_term_datasets(
 def load_managed_long_term_datasets(
     years: list[int],
     dataset_name: str = "long_term_cps",
+    data_folder: str = "./data",
     require_metadata: bool = True,
     required_profile: Optional[str] = None,
     required_target_source: Optional[str] = None,
@@ -1037,12 +1277,10 @@ def load_managed_long_term_datasets(
     """Load bundled long-term US datasets from the managed release manifest.
 
     Each requested year must have a logical dataset entry named
-    ``{dataset_name}_{year}`` in the bundled US manifest. For local development,
-    policyengine.py first checks for the corresponding sibling data-repo mirror
-    before falling back to the managed URI. Long-term H5 files are large, so this
-    helper intentionally refuses to stream remote files directly; callers should
-    either provide the published local mirror or use ``load_long_term_datasets``
-    with an explicit local data folder.
+    ``{dataset_name}_{year}`` in the bundled US manifest. A verified file in
+    ``data_folder`` is reused when available; otherwise the exact
+    bundle-certified Hugging Face artifact and its certified metadata sidecar
+    are downloaded there.
     """
 
     manifest = get_release_manifest("us")
@@ -1070,38 +1308,14 @@ def load_managed_long_term_datasets(
                 f"Managed long-term dataset {key!r} is missing a sha256 in "
                 "the bundled US release manifest."
             )
-        dataset_uri = resolve_managed_dataset_reference("us", key)
-        dataset_source = resolve_local_managed_dataset_source("us", dataset_uri)
-        if "://" in dataset_source:
-            raise FileNotFoundError(
-                f"Managed long-term dataset {key!r} resolves to {dataset_uri}, "
-                "but no local mirror exists. Download the bundled artifact into "
-                "the sibling policyengine-us-data storage mirror or call "
-                "load_long_term_datasets(..., data_folder=...) with an explicit "
-                "local directory."
-            )
-
-        path = Path(dataset_source).expanduser()
-        actual_sha256 = _sha256_file(path)
-        if actual_sha256 != path_reference.sha256:
-            raise ValueError(
-                f"Managed long-term dataset {key!r} at {path} has sha256 "
-                f"{actual_sha256}, expected {path_reference.sha256}."
-            )
+        source = materialize_dataset(
+            "us",
+            key,
+            data_dir=Path(data_folder),
+        )
+        dataset_uri = source.source_uri
+        path = Path(source.path)
         metadata, metadata_path = _load_dataset_metadata(path, require_metadata)
-        if path_reference.metadata_sha256:
-            if metadata_path is None:
-                raise FileNotFoundError(
-                    f"Managed long-term dataset {key!r} at {path} is missing "
-                    "metadata sidecar required by the bundled manifest."
-                )
-            metadata_sha256 = _sha256_file(metadata_path)
-            if metadata_sha256 != path_reference.metadata_sha256:
-                raise ValueError(
-                    f"Managed long-term dataset {key!r} metadata at "
-                    f"{metadata_path} has sha256 {metadata_sha256}, expected "
-                    f"{path_reference.metadata_sha256}."
-                )
         _validate_loaded_long_term_metadata(
             metadata=metadata,
             metadata_path=metadata_path,
@@ -1144,6 +1358,7 @@ def load_managed_long_term_datasets(
             metadata=metadata,
             metadata_path=metadata_path,
             dataset_uri=dataset_uri,
+            materialized=source.bundle_dataset,
         )
 
     return result
@@ -1153,8 +1368,17 @@ def ensure_datasets(
     datasets: Optional[list[str]] = None,
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
+    allow_unmanaged: bool = False,
 ) -> dict[str, PolicyEngineUSDataset]:
     """Ensure datasets exist, loading if available or creating if not.
+
+    Existing year files are reused only when ``create_datasets`` stamped them
+    with this release's register of renamed stored inputs and year-file format
+    revision (see ``legacy_inputs.year_file_stamp_problem``). Only each file's
+    stamp and renames record are read to decide, never its tables or the
+    source dataset. If any year file is missing or out of date, every
+    year file is created again from the source dataset, and each out-of-date
+    file is logged with the reason.
 
     Args:
         datasets: List of HuggingFace dataset paths
@@ -1166,20 +1390,47 @@ def ensure_datasets(
     """
     datasets = datasets or [get_release_manifest("us").default_dataset]
 
-    # Check if all dataset files exist
-    all_exist = True
+    # Check that every year file exists and is current. A year file cut
+    # under another register of renamed stored inputs may have lost one, so
+    # it is created again rather than reused.
+    all_current = True
     for dataset in datasets:
         resolved_dataset = resolve_dataset_reference("us", dataset)
         dataset_stem = dataset_logical_name(resolved_dataset)
         for year in years:
             filepath = Path(f"{data_folder}/{dataset_stem}_year_{year}.h5")
             if not filepath.exists():
-                all_exist = False
-                break
-        if not all_exist:
-            break
+                all_current = False
+                continue
+            problem = year_file_stamp_problem(filepath)
+            if problem is not None:
+                all_current = False
+                logger.warning(
+                    "US year file %s is out of date: %s. Creating the year "
+                    "files again.",
+                    filepath,
+                    problem,
+                )
+                continue
+            # BACKWARD COMPATIBILITY (#597, #598): see ``legacy_spm.record``.
+            legacy_problem = year_file_problem(
+                filepath, _expected_legacy_spm_profile(dataset)
+            )
+            if legacy_problem is not None:
+                all_current = False
+                logger.warning(
+                    "US year file %s is out of date: %s. Creating the year "
+                    "files again.",
+                    filepath,
+                    legacy_problem,
+                )
 
-    if all_exist:
+    if all_current:
         return load_datasets(datasets=datasets, years=years, data_folder=data_folder)
     else:
-        return create_datasets(datasets=datasets, years=years, data_folder=data_folder)
+        return create_datasets(
+            datasets=datasets,
+            years=years,
+            data_folder=data_folder,
+            allow_unmanaged=allow_unmanaged,
+        )

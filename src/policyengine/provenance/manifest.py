@@ -2,20 +2,21 @@ import hashlib
 import json
 import os
 from functools import lru_cache
-from importlib import import_module
 from importlib.resources import files
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
+from urllib.parse import quote
 
 import requests
 from pydantic import BaseModel, Field
 
+from policyengine.provenance.bundle_validation import (
+    shadowed_dataset_overlays,
+    shadowing_overlays_message,
+)
+
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
-LOCAL_DATA_REPO_HINTS = {
-    "us": ("policyengine_us", "policyengine-us-data", "policyengine_us_data"),
-    "uk": ("policyengine_uk", "policyengine-uk-data", "policyengine_uk_data"),
-}
 
 
 class DataReleaseManifestUnavailableError(ValueError):
@@ -31,7 +32,7 @@ class PackageVersion(BaseModel):
 
 class DataPackageVersion(PackageVersion):
     repo_id: str
-    repo_type: str = "model"
+    repo_type: Literal["model", "dataset"] = "model"
     release_manifest_path: str = "release_manifest.json"
     release_manifest_revision: Optional[str] = None
 
@@ -51,9 +52,20 @@ class BuiltWithModelPackage(PackageVersion):
 
 class DataBuildInfo(BaseModel):
     build_id: Optional[str] = None
+    cut_tag: Optional[str] = None
+    """The immutable tag of one cut of a release line. Microcosm keeps
+    ``build_id`` equal to the line name for every cut, so the cut tag is what
+    tells two cuts apart (see ``release_build_id``)."""
     built_at: Optional[str] = None
     built_with_core_package: Optional[PackageVersion] = None
     built_with_model_package: Optional[BuiltWithModelPackage] = None
+
+
+def release_build_id(build: Optional[DataBuildInfo]) -> Optional[str]:
+    """Identify one data build: its cut tag when it has one, else its build id."""
+    if build is None:
+        return None
+    return build.cut_tag or build.build_id
 
 
 class ArtifactPathReference(BaseModel):
@@ -61,10 +73,13 @@ class ArtifactPathReference(BaseModel):
     revision: Optional[str] = None
     sha256: Optional[str] = None
     metadata_sha256: Optional[str] = None
+    # Set when the artifact is supplied by a different package than the
+    # country release manifest's primary data package.
+    data_package_name: Optional[str] = None
     # Set when the artifact lives outside the data package's repo (inherited
     # datasets keep their original repo + revision pins).
     repo_id: Optional[str] = None
-    repo_type: Optional[str] = None
+    repo_type: Optional[Literal["model", "dataset"]] = None
 
 
 class ArtifactPathTemplate(BaseModel):
@@ -107,6 +122,7 @@ class DataReleaseArtifact(BaseModel):
     path: str
     repo_id: str
     revision: str
+    repo_type: Optional[Literal["model", "dataset"]] = None
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
     preservation_mirrors: list[PreservationMirror] = Field(default_factory=list)
@@ -126,6 +142,10 @@ class DataReleaseArtifact(BaseModel):
 class DataReleaseManifest(BaseModel):
     schema_version: int
     data_package: PackageVersion
+    dataset_role: Optional[str] = None
+    """Producer-declared role for a release that supplements a default release."""
+    is_default: Optional[bool] = None
+    """Whether the producer intends this release to provide default datasets."""
     compatible_model_packages: list[CompatiblePackage] = Field(default_factory=list)
     compatible_core_packages: list[CompatiblePackage] = Field(default_factory=list)
     default_datasets: dict[str, str] = Field(default_factory=dict)
@@ -151,6 +171,24 @@ class DataCertification(BaseModel):
     built_with_model_git_sha: Optional[str] = None
     data_build_fingerprint: Optional[str] = None
     certified_by: Optional[str] = None
+    certified_for_core_version: Optional[str] = None
+    #: How the certificate covers policyengine-core. ``certified``: it names
+    #: the core it was certified for (``certified_for_core_version``), and the
+    #: bundle's core pin must equal it. ``bundle_pin``: it certifies whatever
+    #: core the bundle pins, without holding the pin to the data release's
+    #: core claims; certification and the strict check warn when the pin is
+    #: outside them. Absent in certificates from before October 2026, which
+    #: follow the pin the same way.
+    core_binding: Optional[Literal["certified", "bundle_pin"]] = None
+    qualification_pair_id: Optional[str] = None
+    qualification_ledger_url: Optional[str] = None
+
+
+#: Bases whose runtime model legitimately differs from the data's build-time
+#: model, so the build fingerprint is not expected to match.
+CLAIM_BASED_COMPATIBILITY = frozenset(
+    {"legacy_compatible_model_package", "qualified_exact_pair"}
+)
 
 
 class CertifiedDataArtifact(BaseModel):
@@ -159,6 +197,9 @@ class CertifiedDataArtifact(BaseModel):
     uri: str
     sha256: Optional[str] = None
     build_id: Optional[str] = None
+
+
+RegionalReleaseKind = Literal["local_area", "area_coded_national"]
 
 
 class CountryReleaseManifest(BaseModel):
@@ -172,6 +213,11 @@ class CountryReleaseManifest(BaseModel):
     default_dataset: str
     datasets: dict[str, ArtifactPathReference] = Field(default_factory=dict)
     region_datasets: dict[str, ArtifactPathTemplate] = Field(default_factory=dict)
+    regional_release_kind: Optional[RegionalReleaseKind] = None
+    """How certification routed the local region types, when it did:
+    ``local_area`` for a non-default local-area release, and
+    ``area_coded_national`` for another release's national dataset that
+    carries area codes (and its area weight matrices)."""
     certified_data_artifact: Optional[CertifiedDataArtifact] = None
     certification: Optional[DataCertification] = None
     source_sha256: Optional[str] = Field(default=None, exclude=True)
@@ -200,7 +246,21 @@ def https_dataset_uri(
 ) -> str:
     """Return a dereferenceable HTTPS URI for a Hugging Face dataset artifact."""
     prefix = "datasets/" if repo_type == "dataset" else ""
-    return f"https://huggingface.co/{prefix}{repo_id}/resolve/{revision}/{path_in_repo}"
+    return (
+        f"https://huggingface.co/{prefix}{repo_id}/resolve/"
+        f"{quote(revision, safe='')}/{quote(path_in_repo)}"
+    )
+
+
+def hugging_face_auth_headers() -> dict[str, str]:
+    """Return authentication headers for Hugging Face requests."""
+
+    token = (
+        os.environ.get("HUGGING_FACE_TOKEN")
+        or os.environ.get("HF_TOKEN")
+        or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+    )
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def _artifact_revision(data_package: "DataPackageVersion") -> str:
@@ -268,33 +328,23 @@ def _apply_dataset_overlays(
     registry of *additional* named datasets that resolution should expose
     without ever certifying them as the default — for example a staged
     artifact published in its own immutable release (see
-    ``docs/release-bundles.md``). Because certification only rewrites
-    ``data_releases``, overlays survive re-certification untouched.
+    ``docs/release-bundles.md``). Certification keeps every overlay except
+    one whose name the new release certifies itself, which it removes and
+    reports; re-add such an overlay if a later release stops certifying it.
 
-    Overlays are strictly additive: an overlay may not shadow the certified
-    default dataset or any certified dataset entry, so it can never alter
-    default resolution.
+    Overlays are strictly additive (``shadowed_dataset_overlays``): an overlay
+    may not shadow the certified default dataset or any certified dataset
+    entry, so it can never alter default resolution.
     """
     overlays = (bundle.get(DATASET_OVERLAYS_KEY) or {}).get(country_id) or {}
     if not overlays:
         return release_payload
 
+    shadowed = shadowed_dataset_overlays(release_payload, overlays)
+    if shadowed:
+        raise ValueError(shadowing_overlays_message(country_id, shadowed))
     certified_datasets = dict(release_payload.get("datasets") or {})
-    default_dataset = release_payload.get("default_dataset")
-    for overlay_name, overlay_reference in overlays.items():
-        if overlay_name == default_dataset:
-            raise ValueError(
-                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
-                "shadows the certified default dataset. Overlays must never "
-                "change default resolution."
-            )
-        if overlay_name in certified_datasets:
-            raise ValueError(
-                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
-                "collides with a certified dataset entry. Overlays must be "
-                "additive, not overrides."
-            )
-        certified_datasets[overlay_name] = overlay_reference
+    certified_datasets.update(overlays)
 
     return {**release_payload, "datasets": certified_datasets}
 
@@ -311,7 +361,6 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
         release_payload = bundle["data_releases"][country_id]
     except KeyError as exc:
         raise ValueError(f"No bundled data release for country '{country_id}'") from exc
-
     release_payload = _apply_dataset_overlays(country_id, release_payload, bundle)
     manifest = CountryReleaseManifest.model_validate(release_payload)
     manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
@@ -322,15 +371,10 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
 def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     country_manifest = get_release_manifest(country_id)
 
-    headers = {}
-    token = os.environ.get("HUGGING_FACE_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     try:
         response = requests.get(
             https_release_manifest_uri(country_manifest.data_package),
-            headers=headers,
+            headers=hugging_face_auth_headers(),
             timeout=HF_REQUEST_TIMEOUT_SECONDS,
         )
     except requests.RequestException as exc:
@@ -380,10 +424,32 @@ def _specifier_matches(version: str, specifier: str) -> bool:
         return False
 
 
+def _runtime_core_is_certified(
+    certification: DataCertification, runtime_core_version: Optional[str]
+) -> bool:
+    """Whether the running core is the one an exact-pair certificate tested.
+
+    Other bases make no claim about the core at run time. An exact pair was
+    tested with one core, so it holds only for that core.
+    """
+
+    if certification.compatibility_basis != "qualified_exact_pair":
+        return True
+    if runtime_core_version is None:
+        from importlib import metadata
+
+        try:
+            runtime_core_version = metadata.version("policyengine-core")
+        except metadata.PackageNotFoundError:
+            return False
+    return certification.certified_for_core_version == runtime_core_version
+
+
 def certify_data_release_compatibility(
     country_id: str,
     runtime_model_version: str,
     runtime_data_build_fingerprint: Optional[str] = None,
+    runtime_core_version: Optional[str] = None,
 ) -> DataCertification:
     country_manifest = get_release_manifest(country_id)
     try:
@@ -395,7 +461,7 @@ def certify_data_release_compatibility(
                 runtime_data_build_fingerprint is not None
                 and bundled_certification.data_build_fingerprint is not None
                 and bundled_certification.compatibility_basis
-                != "legacy_compatible_model_package"
+                not in CLAIM_BASED_COMPATIBILITY
                 and runtime_data_build_fingerprint
                 != bundled_certification.data_build_fingerprint
             ):
@@ -406,6 +472,9 @@ def certify_data_release_compatibility(
             if (
                 bundled_certification.certified_for_model_version
                 == runtime_model_version
+                and _runtime_core_is_certified(
+                    bundled_certification, runtime_core_version
+                )
             ):
                 return bundled_certification
             return DataCertification(
@@ -422,6 +491,40 @@ def certify_data_release_compatibility(
                 certified_by=bundled_certification.certified_by,
             )
         raise exc
+
+    # A remote build-model, fingerprint or publisher claim cannot broaden an
+    # exact-pair certificate beyond the model, core and recorded data build
+    # that qualification tested. Check them before any acceptance path returns.
+    bundled_certification = country_manifest.certification
+    # Named as certification names it: the cut tag when the release has one.
+    remote_build_id = release_build_id(data_release_manifest.build)
+    if (
+        bundled_certification is not None
+        and bundled_certification.compatibility_basis == "qualified_exact_pair"
+    ):
+        if bundled_certification.certified_for_model_version != runtime_model_version:
+            raise ValueError(
+                "Data release manifest is not certified for the runtime model "
+                f"version {runtime_model_version} in country '{country_id}'; "
+                "the exact pair requires "
+                f"{bundled_certification.certified_for_model_version}."
+            )
+        if not _runtime_core_is_certified(bundled_certification, runtime_core_version):
+            raise ValueError(
+                "Data release manifest is not certified for the runtime core "
+                f"version {runtime_core_version} in country '{country_id}'; "
+                "the exact pair requires "
+                f"{bundled_certification.certified_for_core_version}."
+            )
+        if (
+            bundled_certification.data_build_id is not None
+            and bundled_certification.data_build_id != remote_build_id
+        ):
+            raise ValueError(
+                "Data release manifest is not certified for the remote data "
+                f"build {remote_build_id} in country '{country_id}'; the exact "
+                f"pair requires {bundled_certification.data_build_id}."
+            )
     built_with_model = (
         data_release_manifest.build.built_with_model_package
         if data_release_manifest.build is not None
@@ -445,11 +548,7 @@ def certify_data_release_compatibility(
         return DataCertification(
             compatibility_basis="exact_build_model_version",
             certified_for_model_version=runtime_model_version,
-            data_build_id=(
-                data_release_manifest.build.build_id
-                if data_release_manifest.build is not None
-                else None
-            ),
+            data_build_id=release_build_id(data_release_manifest.build),
             built_with_model_version=built_with_model.version,
             built_with_model_git_sha=built_with_model.git_sha,
             data_build_fingerprint=built_with_model.data_build_fingerprint,
@@ -464,11 +563,7 @@ def certify_data_release_compatibility(
         return DataCertification(
             compatibility_basis="matching_data_build_fingerprint",
             certified_for_model_version=runtime_model_version,
-            data_build_id=(
-                data_release_manifest.build.build_id
-                if data_release_manifest.build is not None
-                else None
-            ),
+            data_build_id=release_build_id(data_release_manifest.build),
             built_with_model_version=built_with_model.version,
             built_with_model_git_sha=built_with_model.git_sha,
             data_build_fingerprint=built_with_model.data_build_fingerprint,
@@ -484,11 +579,7 @@ def certify_data_release_compatibility(
             return DataCertification(
                 compatibility_basis="legacy_compatible_model_package",
                 certified_for_model_version=runtime_model_version,
-                data_build_id=(
-                    data_release_manifest.build.build_id
-                    if data_release_manifest.build is not None
-                    else None
-                ),
+                data_build_id=release_build_id(data_release_manifest.build),
                 built_with_model_version=(
                     built_with_model.version if built_with_model is not None else None
                 ),
@@ -501,6 +592,20 @@ def certify_data_release_compatibility(
                     else None
                 ),
             )
+
+    # An automated qualification of exactly this model and data build: the
+    # bundled certificate names the pair, and the ledger evidence for it is
+    # enforced when the bundle is built (tests/test_certification_evidence.py).
+    bundled_certification = country_manifest.certification
+    if (
+        bundled_certification is not None
+        and bundled_certification.compatibility_basis == "qualified_exact_pair"
+        and bundled_certification.certified_for_model_version == runtime_model_version
+        and bundled_certification.qualification_pair_id is not None
+        and bundled_certification.data_build_id == remote_build_id
+        and _runtime_core_is_certified(bundled_certification, runtime_core_version)
+    ):
+        return bundled_certification
 
     raise ValueError(
         "Data release manifest is not certified for the runtime model version "
@@ -585,68 +690,14 @@ def resolve_managed_dataset_reference(
             "bypass bundle enforcement."
         )
 
-    return resolve_dataset_reference(country_id, dataset)
-
-
-def resolve_local_managed_dataset_source(
-    country_id: str,
-    dataset_uri: str,
-    *,
-    allow_local_mirror: bool = True,
-) -> str:
-    """Resolve a local mirror of a managed dataset when available.
-
-    This preserves the bundled dataset URI for provenance while allowing local
-    development environments with sibling data-repo checkouts to load the
-    exact certified artifact from disk rather than re-downloading it.
-    """
-
-    if not allow_local_mirror or not dataset_uri.startswith("hf://"):
-        return dataset_uri
-
-    local_hint = LOCAL_DATA_REPO_HINTS.get(country_id)
-    if local_hint is None:
-        return dataset_uri
-
-    path_without_revision = dataset_uri[5:].rsplit("@", 1)[0]
-    parts = path_without_revision.split("/", 2)
-    if len(parts) != 3:
-        return dataset_uri
-    _, _, path_in_repo = parts
-
-    model_module_name, data_repo_name, data_package_name = local_hint
-    explicit_repo_roots = []
-    country_env = f"POLICYENGINE_{country_id.upper()}_DATA_REPO"
-    for env_name in (country_env, "POLICYENGINE_LOCAL_DATA_REPO_ROOT"):
-        env_value = os.environ.get(env_name)
-        if env_value:
-            explicit_repo_roots.extend(
-                [
-                    Path(env_value).expanduser(),
-                    Path(env_value).expanduser() / data_repo_name,
-                ]
-            )
-
-    for candidate_repo_root in explicit_repo_roots:
-        local_path = candidate_repo_root / data_package_name / "storage" / path_in_repo
-        if local_path.exists():
-            return str(local_path)
-
-    try:
-        model_module = import_module(model_module_name)
-    except ImportError:
-        return dataset_uri
-
-    repo_root = Path(model_module.__file__).resolve().parents[1]
-    local_path = (
-        repo_root.with_name(data_repo_name)
-        / data_package_name
-        / "storage"
-        / path_in_repo
+    if allow_unmanaged:
+        return resolve_dataset_reference(country_id, dataset)
+    raise ValueError(
+        f"Unknown managed dataset {dataset!r} for country {country_id!r}. "
+        f"Known bundled datasets: {sorted(manifest.datasets)}. Set "
+        "`allow_unmanaged=True` only if you intend to resolve a dataset "
+        "outside the policyengine.py release bundle."
     )
-    if local_path.exists():
-        return str(local_path)
-    return dataset_uri
 
 
 def dataset_logical_name(dataset: str) -> str:
@@ -656,6 +707,43 @@ def dataset_logical_name(dataset: str) -> str:
 def resolve_default_datasets(country_id: str) -> list[str]:
     manifest = get_release_manifest(country_id)
     return list(manifest.datasets.keys())
+
+
+def region_dataset_name(country_id: str, region_type: str) -> Optional[str]:
+    """The certified dataset that ``region_type`` regions are routed to, if any."""
+
+    manifest = get_release_manifest(country_id)
+    template = manifest.region_datasets.get(region_type)
+    if template is None:
+        return None
+    return next(
+        (
+            name
+            for name, reference in manifest.datasets.items()
+            if reference.path == template.path_template
+        ),
+        None,
+    )
+
+
+def uk_area_dataset_hint(region_type: str) -> str:
+    """A sentence naming the dataset whose households carry an area's codes.
+
+    The Microcosm national default has no constituency or local-authority
+    codes; the local-area release the bundle routes those regions to does.
+    """
+
+    try:
+        name = region_dataset_name("uk", region_type)
+    except ValueError:
+        return ""
+    if name is None:
+        return ""
+    return (
+        f"The certified bundle routes {region_type} regions to the dataset "
+        f"{name!r}, whose households carry these codes: run the simulations "
+        "on that dataset."
+    )
 
 
 def resolve_region_dataset_path(

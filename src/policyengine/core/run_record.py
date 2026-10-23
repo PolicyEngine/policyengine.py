@@ -20,7 +20,7 @@ emitting a false certificate.
 
 from __future__ import annotations
 
-import hashlib
+import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -31,6 +31,7 @@ from policyengine.provenance.trace import (
     extract_bundle_tro_reference,
     serialize_trace_tro,
 )
+from policyengine.utils.hashing import sha256_file
 
 if TYPE_CHECKING:
     from .dynamic import Dynamic
@@ -49,14 +50,6 @@ class SimulationRunRecord:
     paths: dict[str, Path] = field(default_factory=dict)
     composition_fingerprint: str = ""
     tro: dict = field(default_factory=dict)
-
-
-def _sha256_file(path: Union[str, Path]) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def reform_specification(
@@ -119,7 +112,7 @@ def _dataset_reference(dataset: Any) -> dict[str, Any]:
     return {
         "name": dataset.name,
         "file": filepath.name,
-        "sha256": _sha256_file(filepath),
+        "sha256": sha256_file(filepath),
         "year": dataset.year,
     }
 
@@ -182,6 +175,56 @@ def build_simulation_run_record_payloads(
     output = _dataset_reference(simulation.output_dataset)
     output["tables"] = _table_summaries(simulation.output_dataset)
     results_payload = {"output_dataset": output}
+
+    if simulation.spm_config is not None:
+        recorded_config = simulation.output_dataset.metadata.get("spm_config")
+        if recorded_config != simulation.spm_config:
+            raise ValueError(
+                "SPM settings changed since this output was calculated; run again before writing a run record"
+            )
+        input_payload["spm"] = simulation.spm_config
+        results_payload["spm"] = simulation.spm_provenance()
+
+    # Stored inputs the country loader mapped onto renamed live inputs (for
+    # example the US WIC take-up draw) change the results, so the record
+    # binds them. See ``policyengine.tax_benefit_models.us.legacy_inputs``.
+    renames = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+        "legacy_input_renames"
+    )
+    if renames is not None:
+        results_payload["legacy_input_renames"] = dict(renames)
+
+    # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+    # US run applied, which change its SPM results. See
+    # ``policyengine.tax_benefit_models.us.legacy_spm``.
+    legacy_spm_declarations = (
+        getattr(simulation.output_dataset, "metadata", None) or {}
+    ).get("legacy_spm_declarations")
+    if legacy_spm_declarations is not None:
+        results_payload["legacy_spm_declarations"] = dict(legacy_spm_declarations)
+
+    # The capital gains realisation response a UK run applied: the model
+    # resolves its default, so the record binds the assumption itself. See
+    # ``policyengine.tax_benefit_models.uk.capital_gains_responses``.
+    capital_gains_responses = (
+        getattr(simulation.output_dataset, "metadata", None) or {}
+    ).get("capital_gains_responses")
+    if capital_gains_responses is not None:
+        from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+            simulation_request,
+        )
+
+        if (
+            capital_gains_responses["request"]["digest"]
+            != simulation_request(simulation)["digest"]
+        ):
+            raise ValueError(
+                "Capital gains response settings changed since this output was "
+                "calculated; run again before writing a run record"
+            )
+        results_payload["capital_gains_responses"] = copy.deepcopy(
+            capital_gains_responses
+        )
 
     return {"reform": reform, "input": input_payload, "results": results_payload}
 

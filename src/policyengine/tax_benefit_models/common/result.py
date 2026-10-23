@@ -63,8 +63,8 @@ class HouseholdResult(dict):
         """Return a plain ``dict[str, Any]`` copy suitable for JSON dumps."""
 
         def _convert(value: Any) -> Any:
-            if isinstance(value, EntityResult):
-                return dict(value)
+            if isinstance(value, dict):
+                return {key: _convert(item) for key, item in value.items()}
             if isinstance(value, list):
                 return [_convert(v) for v in value]
             return value
