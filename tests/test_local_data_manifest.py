@@ -97,6 +97,18 @@ def _install_bundle(tmp_path, monkeypatch, payload=None, certification=_DEFAULT)
             "release_manifest_revision": "f" * 40,
         },
         "default_dataset": "test_dataset",
+        "certified_data_artifact": {
+            "dataset": "test_dataset",
+            "uri": f"hf://policyengine/test-data/test_dataset.h5@{'f' * 40}",
+            "sha256": "d" * 64,
+        },
+        "datasets": {
+            "test_dataset": {
+                "path": "test_dataset.h5",
+                "revision": "f" * 40,
+                "sha256": "d" * 64,
+            }
+        },
         "certification": (
             _qualified_certification() if certification is _DEFAULT else certification
         ),
@@ -397,6 +409,193 @@ def _response(raw_bytes):
     response.content = raw_bytes
     response.text = raw_bytes.decode("utf-8")
     return response
+
+
+def _edit_bundle(trace_path, edit):
+    bundle_path = trace_path.with_name("manifest.json")
+    bundle = json.loads(bundle_path.read_text())
+    edit(bundle["data_releases"]["uk"])
+    bundle_path.write_text(json.dumps(bundle))
+    manifests.get_release_manifest.cache_clear()
+
+
+@pytest.mark.parametrize("transport", ["local", "fetched"])
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("repo_id", "adversary/elsewhere"),
+        ("path", "elsewhere.h5"),
+        ("revision", "unqualified-revision"),
+        ("sha256", "0" * 64),
+        ("sha256", None),
+        ("repo_type", "dataset"),
+        ("location", "adversary/elsewhere/elsewhere.h5"),
+    ],
+)
+def test_pinned_manifest_cannot_change_the_bundled_default_artifact(
+    tmp_path, monkeypatch, transport, field, value
+):
+    payload = _payload()
+    artifact = payload["artifacts"]["test_dataset"]
+    if field == "location":
+        artifact.update(repo_id="adversary/elsewhere", path="elsewhere.h5")
+    else:
+        artifact[field] = value
+    # Install a TRO matching these exact conflicting bytes while keeping the
+    # bundle's original certified URI, build, model and fingerprint unchanged.
+    local_path, _, raw_bytes = _install_bundle(tmp_path, monkeypatch, payload)
+    if transport == "local":
+        monkeypatch.setenv(ENVIRONMENT_VARIABLE, str(local_path))
+
+    with patch.object(
+        manifests.requests, "get", return_value=_response(raw_bytes)
+    ) as network:
+        with pytest.raises(ValueError, match="artifact.*installed bundle"):
+            _certify()
+    assert network.call_count == (transport == "fetched")
+
+
+@pytest.mark.parametrize("transport", ["local", "fetched"])
+@pytest.mark.parametrize("failure", ["missing-artifact", "other-default"])
+def test_manifest_requires_the_bundled_default_dataset(
+    tmp_path, monkeypatch, transport, failure
+):
+    payload = _payload()
+    if failure == "missing-artifact":
+        payload["artifacts"].clear()
+    else:
+        payload["default_datasets"]["national"] = "another_dataset"
+    local_path, _, raw_bytes = _install_bundle(tmp_path, monkeypatch, payload)
+    if transport == "local":
+        monkeypatch.setenv(ENVIRONMENT_VARIABLE, str(local_path))
+    with patch.object(manifests.requests, "get", return_value=_response(raw_bytes)):
+        with pytest.raises(ValueError, match="artifact.*installed bundle"):
+            _certify()
+
+
+@pytest.mark.parametrize("transport", ["local", "fetched"])
+@pytest.mark.parametrize("certified_record", [True, False])
+def test_consistent_default_uses_rewritten_revision(
+    tmp_path, monkeypatch, transport, certified_record
+):
+    local_path, trace_path, raw_bytes = _install_bundle(tmp_path, monkeypatch)
+    if not certified_record:
+        _edit_bundle(trace_path, lambda country: country.pop("certified_data_artifact"))
+    if transport == "local":
+        monkeypatch.setenv(ENVIRONMENT_VARIABLE, str(local_path))
+    with patch.object(manifests.requests, "get", return_value=_response(raw_bytes)):
+        assert _certify().compatibility_basis == (
+            "exact_build_model_version"
+            + ("_local_manifest" if transport == "local" else "")
+        )
+        assert (
+            manifests.get_data_release_manifest("uk").artifacts["test_dataset"].revision
+            == "f" * 40
+        )
+
+
+@pytest.mark.parametrize("transport", ["local", "fetched"])
+def test_a_different_certified_artifact_cannot_leave_the_default_unpinned(
+    tmp_path, monkeypatch, transport
+):
+    payload = _payload()
+    payload["artifacts"]["certified_other"] = dict(payload["artifacts"]["test_dataset"])
+    local_path, trace_path, raw_bytes = _install_bundle(tmp_path, monkeypatch, payload)
+
+    def edit(country):
+        country["datasets"].clear()
+        country["certified_data_artifact"]["dataset"] = "certified_other"
+
+    _edit_bundle(trace_path, edit)
+    if transport == "local":
+        monkeypatch.setenv(ENVIRONMENT_VARIABLE, str(local_path))
+    with patch.object(manifests.requests, "get", return_value=_response(raw_bytes)):
+        with pytest.raises(ValueError, match="missing bundled default artifact record"):
+            _certify()
+
+
+@pytest.mark.parametrize("transport", ["local", "fetched"])
+@pytest.mark.parametrize(
+    "difference", ["none", "repo_id", "path", "revision", "sha256", "repo_type"]
+)
+def test_every_overlapping_managed_artifact_must_match(
+    tmp_path, monkeypatch, transport, difference
+):
+    payload = _payload()
+    payload["artifacts"]["supplement"] = {
+        "kind": "microdata",
+        "path": "inherited.h5",
+        "repo_id": "policyengine/inherited-data",
+        "revision": "inherited-release",
+        "repo_type": "dataset",
+        "sha256": "b" * 64,
+    }
+    reference = dict(payload["artifacts"]["supplement"])
+    reference.pop("kind")
+    if difference != "none":
+        payload["artifacts"]["supplement"][difference] = (
+            "model" if difference == "repo_type" else "conflicting-pin"
+        )
+    local_path, trace_path, raw_bytes = _install_bundle(tmp_path, monkeypatch, payload)
+    _edit_bundle(
+        trace_path,
+        lambda country: country["datasets"].update(
+            supplement=reference,
+            regional_only={"path": "regional.h5", "revision": "regional-release"},
+        ),
+    )
+    if transport == "local":
+        monkeypatch.setenv(ENVIRONMENT_VARIABLE, str(local_path))
+    with patch.object(manifests.requests, "get", return_value=_response(raw_bytes)):
+        if difference == "none":
+            _certify()
+        else:
+            with pytest.raises(
+                ValueError, match="artifact 'supplement'.*installed bundle"
+            ):
+                _certify()
+
+
+@pytest.mark.parametrize("kind", ["diagnostics", "evidence"])
+@pytest.mark.parametrize("prefixed", [False, True])
+def test_release_relative_paths_match_certification_normalization(
+    tmp_path, monkeypatch, kind, prefixed
+):
+    payload = _payload()
+    relative_path = "report.json"
+    bundled_path = "releases/test-release/report.json"
+    payload["artifacts"]["report"] = {
+        "kind": kind,
+        "path": bundled_path if prefixed else relative_path,
+        "repo_id": "policyengine/test-data",
+        "revision": "test-release",
+        "sha256": "b" * 64,
+    }
+    local_path, trace_path, _ = _install_bundle(tmp_path, monkeypatch, payload)
+
+    def edit(country):
+        country["data_package"]["release_manifest_path"] = (
+            "releases/test-release/release_manifest.json"
+        )
+        country["datasets"]["report"] = {
+            "path": bundled_path,
+            "revision": "f" * 40,
+            "sha256": "b" * 64,
+        }
+
+    _edit_bundle(trace_path, edit)
+    tro = json.loads(trace_path.read_text())
+    tro["@graph"][0]["trov:hasArrangement"][0]["trov:hasArtifactLocation"][0][
+        "trov:hasLocation"
+    ] = (
+        "https://huggingface.co/policyengine/test-data/resolve/"
+        f"{'f' * 40}/releases/test-release/release_manifest.json"
+    )
+    trace_path.write_text(json.dumps(tro))
+    monkeypatch.setenv(ENVIRONMENT_VARIABLE, str(local_path))
+    with patch.object(manifests.requests, "get") as network:
+        _certify()
+    network.assert_not_called()
 
 
 def test_setting_local_manifest_after_a_cached_fetch_still_checks_its_pin(

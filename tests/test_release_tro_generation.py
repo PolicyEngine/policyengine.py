@@ -253,7 +253,7 @@ def test_strict_missing_remote_dataset_never_writes_limited_output(release, caps
     data = json.loads(release[1].content)
     del data["artifacts"][data["default_datasets"]["national"]]
     release[1]._content = json.dumps(data).encode()
-    with pytest.raises(ValueError, match="Default dataset"):
+    with pytest.raises(ValueError, match="missing default dataset artifact"):
         generator.regenerate_all(strict=True)
     assert path.read_bytes() == before
     assert "limited TRO" not in capsys.readouterr().err
