@@ -23,6 +23,13 @@ Estimating results by area from per-household arrays, checking the release, with
 ```{.python include="../examples/uk_geography_disclosure.py"}
 ```
 
+## UK household targeting rule
+
+Replicating a published analysis whose eligibility rule is not a PolicyEngine variable: the highest individual income in a household, passporting by reported or modelled benefit receipt, after-housing-costs deciles, benefit units joined to households, and the cost of a fixed budget. Needs access to the private UK data.
+
+```{.python include="../examples/household_targeting_uk.py"}
+```
+
 ## UK income bands
 
 Calculating net income and tax by income decile using representative microdata and `Aggregate` with quantile filters.

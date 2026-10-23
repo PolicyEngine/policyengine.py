@@ -87,6 +87,7 @@ before running UK population examples. To download the raw `.h5` file directly, 
 - `examples/income_distribution_us.py`: Analyse benefit distribution by decile
 - `examples/employment_income_variation_uk.py`: Model employment income phase-outs
 - `examples/policy_change_uk.py`: Analyse policy reform impacts
+- `examples/household_targeting_uk.py`: Replicate a published household-level targeting rule (UK)
 - `examples/paper_repro_uk.py`: Reproduce the UK reform analysis used in the JOSS paper draft
 
 ## Installation
