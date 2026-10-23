@@ -343,3 +343,33 @@ def test_audit_cli_writes_pydantic_evidence_json(tmp_path, model, monkeypatch):
     assert captured["artifact_paths"] == {"dense": path}
     assert captured["limitations"] == [LIMITATION]
     assert json.loads(output.read_text()) == result.model_dump(mode="json")
+
+
+def test_audit_cli_bootstraps_before_target_model_is_certified(tmp_path):
+    """The target must be auditable before it matches the current bundle."""
+    import subprocess
+
+    script = Path(__file__).parents[1] / "scripts" / "audit_regional_input_surface.py"
+    code = """
+import importlib.util
+import os
+import runpy
+import sys
+os.environ.pop('POLICYENGINE_SKIP_COUNTRY_IMPORTS', None)
+original = importlib.util.find_spec
+def refuse_country_autoload(name, *args, **kwargs):
+    if name in {'policyengine_uk', 'policyengine_us'}:
+        raise RuntimeError('audit triggered automatic country import')
+    return original(name, *args, **kwargs)
+importlib.util.find_spec = refuse_country_autoload
+sys.argv = [sys.argv[1], '--help']
+runpy.run_path(sys.argv[0], run_name='__main__')
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(script)],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--model-version" in result.stdout

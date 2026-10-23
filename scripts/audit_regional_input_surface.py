@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# The target model must be auditable before the current bundle certifies it.
+os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from policyengine.provenance.regional_input_surface import (  # noqa: E402
