@@ -15,12 +15,14 @@
 # full check, so a title edit cannot replace a failure with a skipped run.
 #
 # A skip instruction in a pushed commit's message skips pull_request and
-# push runs, and so can a merge that carries one to main. The daily schedule
-# is never skipped, so a note that reaches main that way is found within a
-# day. It uses pull_request, not pull_request_target, like the other pull
-# request workflows here (docs/release-bundles.md): GitHub blocks
-# pull_request_target in public repositories without an event policy from
-# 2 December 2026.
+# push runs, and so can a merge that carries one to main. No commit message
+# can skip the daily schedule, so a note that reaches main that way is found
+# by the next scheduled run, if it is still there; GitHub can delay or drop
+# a scheduled run.
+#
+# It uses pull_request, not pull_request_target, like the other pull request
+# workflows here (docs/release-bundles.md): GitHub blocks pull_request_target
+# in public repositories without an event policy from 2 December 2026.
 
 name: Agent notes
 on:
@@ -33,8 +35,9 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
-# A new push to a pull request supersedes the run on its previous head, so
-# cancel that run. Runs on main are never cancelled.
+# A newer run for the same pull request, after a push or an edit, supersedes
+# the one in progress, so cancel that one: the newer run checks the current
+# head in full. Runs on main are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
