@@ -48,7 +48,7 @@ titles. Use a plain descriptive title.
 
 Keep job state and working notes out of commits. The Agent notes workflow
 (`.github/workflows/pr_agent_notes.yaml`) runs `.github/check-agent-notes.sh`
-on every PR and fails when the merged tree contains:
+on every PR and fails when the PR's head commit contains:
 
 - a `.job/`, `.job-git/` or `.diag/` folder at any depth. Subfleet build jobs
   keep their state, hand-off and PR body in `.job/`.
@@ -57,3 +57,9 @@ on every PR and fails when the merged tree contains:
 
 Put their content in the PR description or a PR comment instead. `.gitignore`
 ignores the three folders, so `git add -A` leaves them out.
+
+The workflow runs on `pull_request_target`, so `[skip ci]` does not skip it
+and it runs main's copy of the check: a change to the workflow or the script
+takes effect only once it merges. Test such a change with
+`tests/test_check_agent_notes.py`, or run the script on a commit:
+`.github/check-agent-notes.sh <commit>`.
