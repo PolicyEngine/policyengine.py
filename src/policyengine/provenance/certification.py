@@ -62,6 +62,12 @@ from policyengine.provenance.manifest import (
     fetch_pypi_wheel_metadata,
     release_build_id,
 )
+from policyengine.provenance.manifest import (
+    RELEASE_SCOPED_ARTIFACT_KINDS as RELEASE_SCOPED_ARTIFACT_KINDS,
+)
+from policyengine.provenance.manifest import (
+    artifact_path_for_country_manifest as artifact_path_for_country_manifest,
+)
 
 MANIFEST_URI_PATTERN = re.compile(
     r"^hf://(?P<repo_type>dataset|model)/(?P<repo_id>[^@]+)@(?P<revision>[^/]+)"
@@ -113,9 +119,6 @@ UK_AREA_WEIGHT_MATRIX_PATHS = (
     CONSTITUENCY_ASSET_SPEC.weight_matrix_filename,
     LOCAL_AUTHORITY_ASSET_SPEC.weight_matrix_filename,
 )
-# Artifact kinds published beside the release manifest rather than at the repo
-# root, so their manifest paths are relative to the release directory.
-RELEASE_SCOPED_ARTIFACT_KINDS = frozenset({"diagnostics", "evidence"})
 US_STATE_CODES = (
     "AL",
     "AK",
@@ -524,19 +527,6 @@ def head_release_file(
     except requests.RequestException:
         return False
     return response.status_code == 200
-
-
-def artifact_path_for_country_manifest(artifact, uri_parts: dict) -> str:
-    path = artifact.path
-    release_dir = release_manifest_dir(uri_parts)
-    if (
-        artifact.kind in RELEASE_SCOPED_ARTIFACT_KINDS
-        and artifact.repo_id == uri_parts["repo_id"]
-        and artifact.revision == uri_parts["revision"]
-        and not path.startswith(f"{release_dir}/")
-    ):
-        return f"{release_dir}/{path}"
-    return path
 
 
 def artifact_reference_url(
