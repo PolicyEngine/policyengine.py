@@ -1,3 +1,10 @@
+## [6.10.2] - 2026-10-24
+
+### Changed
+
+- - CI test and check jobs can run on another runner pool named by the repository variables `CI_RUNNER_X64`, `CERTIFY_RUNNER_X64` and `CI_RUNNER_EVENTS`, and the jobs `CI_RUNNER_X64` can move now hold a read-only token. With no variable set, every job runs where it does today.
+
+
 ## [6.10.1] - 2026-10-22
 
 ### Fixed
