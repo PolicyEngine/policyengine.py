@@ -15,6 +15,7 @@ from policyengine.core.scoping_strategy import (
 )
 from policyengine.countries.uk.regions import (
     UK_COUNTRIES,
+    area_regions_routed_to_local_release,
     build_uk_region_registry,
     uk_region_registry,
 )
@@ -24,13 +25,19 @@ from policyengine.provenance.manifest import CountryReleaseManifest
 # release its constituency and local-authority regions are routed to.
 UK_CERTIFIED_NATIONAL_URI = (
     "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
-    "@microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+    "@microcosm-uk-2024-25-national-20261023T075039Z-a133f37a"
 )
 UK_CERTIFIED_LOCAL_AREA_URI = (
     "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
     "@microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe"
 )
 UK_AREA_REGION_COUNT = 650 + 361
+# Whether the packaged bundle routes constituency and local-authority regions
+# to a local-area release. A national-only cut (--drop-regional-release)
+# routes none, so the default registry holds only the national region and the
+# four countries, and area lookups find nothing.
+ROUTED_TO_LOCAL_RELEASE = area_regions_routed_to_local_release()
+ROUTED_AREA_REGION_COUNT = UK_AREA_REGION_COUNT if ROUTED_TO_LOCAL_RELEASE else 0
 
 
 class TestUKCountries:
@@ -180,65 +187,88 @@ class TestUKRegionRegistry:
         assert ni.requires_filter
         assert ni.scoping_strategy.variable_value == "NORTHERN_IRELAND"
 
-    def test__given_uk_national__then_children_are_countries_and_areas(self):
+    def test__given_uk_national__then_children_are_countries_and_routed_areas(
+        self,
+    ):
         """Given: UK national region
         When: Getting its children
-        Then: The 4 countries, 650 constituencies and 361 local authorities
+        Then: The 4 countries, and the 650 constituencies and 361 local
+        authorities only when the bundle routes them to a local-area release
         """
         # When
         uk_children = uk_region_registry.get_children("uk")
 
         # Then
-        assert Counter(c.region_type for c in uk_children) == {
-            "country": 4,
-            "constituency": 650,
-            "local_authority": 361,
-        }
+        expected = {"country": 4}
+        if ROUTED_TO_LOCAL_RELEASE:
+            expected |= {"constituency": 650, "local_authority": 361}
+        assert Counter(c.region_type for c in uk_children) == expected
 
     def test__given_uk_registry__then_national_and_area_regions_have_datasets(
         self,
     ):
-        """Given: UK region registry routed to a Microcosm local-area release
+        """Given: UK region registry
         When: Getting dataset regions
-        Then: National loads the national dataset, area regions the local one
+        Then: National loads the national dataset; area regions load the
+        local-area release only when the bundle routes them to one
         """
         # When
         dataset_regions = uk_region_registry.get_dataset_regions()
 
         # Then
-        assert len(dataset_regions) == 1 + UK_AREA_REGION_COUNT
+        assert len(dataset_regions) == 1 + ROUTED_AREA_REGION_COUNT
         paths = {r.region_type: set() for r in dataset_regions}
         for region in dataset_regions:
             paths[region.region_type].add(region.dataset_path)
-        assert paths == {
-            "national": {UK_CERTIFIED_NATIONAL_URI},
-            "constituency": {UK_CERTIFIED_LOCAL_AREA_URI},
-            "local_authority": {UK_CERTIFIED_LOCAL_AREA_URI},
-        }
+        expected = {"national": {UK_CERTIFIED_NATIONAL_URI}}
+        if ROUTED_TO_LOCAL_RELEASE:
+            expected |= {
+                "constituency": {UK_CERTIFIED_LOCAL_AREA_URI},
+                "local_authority": {UK_CERTIFIED_LOCAL_AREA_URI},
+            }
+        assert paths == expected
 
     def test__given_uk_registry__then_countries_and_areas_filter(self):
         """Given: UK region registry
         When: Getting filter regions
-        Then: The 4 countries and every area region require a filter
+        Then: The 4 countries, and every routed area region, require a filter
         """
         # When
         filter_regions = uk_region_registry.get_filter_regions()
 
         # Then
-        assert len(filter_regions) == 4 + UK_AREA_REGION_COUNT
-        assert {r.region_type for r in filter_regions} == {
-            "country",
-            "constituency",
-            "local_authority",
-        }
+        assert len(filter_regions) == 4 + ROUTED_AREA_REGION_COUNT
+        expected = {"country"}
+        if ROUTED_TO_LOCAL_RELEASE:
+            expected |= {"constituency", "local_authority"}
+        assert {r.region_type for r in filter_regions} == expected
 
-    def test__given_default_registry__then_has_1016_regions(self):
-        """Given: Default UK registry routed to a Microcosm local-area release
+    def test__given_default_registry__then_counts_the_routed_regions(self):
+        """Given: Default UK registry
         When: Counting regions
-        Then: 1 national + 4 countries + 650 constituencies + 361 LAs = 1,016
+        Then: 1 national + 4 countries, plus 650 constituencies + 361 LAs
+        (1,016 in all) when the bundle routes them to a local-area release
         """
         # Then
-        assert len(uk_region_registry) == 5 + UK_AREA_REGION_COUNT
+        assert len(uk_region_registry) == 5 + ROUTED_AREA_REGION_COUNT
+
+    def test__given_default_registry__then_area_lookups_follow_the_routing(self):
+        """Given: Default UK registry
+        When: Looking up a constituency and a local authority
+        Then: Both load the local-area release when the bundle routes them to
+        one; a national-only bundle has neither
+        """
+        # When
+        constituency = uk_region_registry.get("constituency/E14001063")
+        local_authority = uk_region_registry.get("local_authority/N09000011")
+
+        # Then
+        if ROUTED_TO_LOCAL_RELEASE:
+            assert constituency.dataset_path == UK_CERTIFIED_LOCAL_AREA_URI
+            assert local_authority.dataset_path == UK_CERTIFIED_LOCAL_AREA_URI
+        else:
+            assert constituency is None
+            assert local_authority is None
 
 
 class TestUKRegionRegistryBuilder:

@@ -73,11 +73,11 @@ US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
     f"@{US_LOCAL_AREA_RELEASE_ID}"
 )
-UK_MODEL_VERSION = "2.132.6"
-UK_BUILT_WITH_MODEL_VERSION = "2.132.6"
+UK_MODEL_VERSION = "2.147.2"
+UK_BUILT_WITH_MODEL_VERSION = "2.147.2"
 UK_DATA_RELEASE_VERSION = "0.1.0"
-UK_DATA_RELEASE_ID = "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
-UK_DATA_RELEASE_REVISION = "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+UK_DATA_RELEASE_ID = "microcosm-uk-2024-25-national-20261023T075039Z-a133f37a"
+UK_DATA_RELEASE_REVISION = "microcosm-uk-2024-25-national-20261023T075039Z-a133f37a"
 UK_DATA_RELEASE_PATH = "releases/microcosm-uk-2024-25-national/release_manifest.json"
 UK_LOCAL_AREA_RELEASE_ID = "microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe"
 # The prior certified default (policyengine-uk-data 1.58.1), kept resolvable
@@ -336,22 +336,31 @@ class TestReleaseManifests:
 
         assert resolved == UK_CERTIFIED_DATASET_URI
 
-    def test__given_uk_manifest__then_area_regions_route_to_local_release(self):
+    def test__given_uk_manifest__then_area_regions_follow_the_regional_release(
+        self,
+    ):
         manifest = get_release_manifest("uk")
-
-        assert manifest.regional_release_kind == "local_area"
-        assert {
+        region_paths = {
             region_type: template.path_template
             for region_type, template in manifest.region_datasets.items()
-        } == {
-            "national": "microcosm_uk_2024_25.h5",
-            "constituency": "microcosm_uk_2024_25_dense.h5",
-            "local_authority": "microcosm_uk_2024_25_dense.h5",
         }
-        assert (
-            resolve_dataset_reference("uk", "microcosm_uk_2024_25_dense")
-            == UK_LOCAL_AREA_DATASET_URI
-        )
+
+        if manifest.regional_release_kind == "local_area":
+            assert region_paths == {
+                "national": "microcosm_uk_2024_25.h5",
+                "constituency": "microcosm_uk_2024_25_dense.h5",
+                "local_authority": "microcosm_uk_2024_25_dense.h5",
+            }
+            assert (
+                resolve_dataset_reference("uk", "microcosm_uk_2024_25_dense")
+                == UK_LOCAL_AREA_DATASET_URI
+            )
+        else:
+            # A national-only cut (--drop-regional-release) routes no area
+            # regions and bundles no local-area dataset.
+            assert manifest.regional_release_kind is None
+            assert region_paths == {"national": "microcosm_uk_2024_25.h5"}
+            assert "microcosm_uk_2024_25_dense" not in manifest.datasets
 
     def test__given_uk_legacy_dataset_names__then_resolves_bundled_aliases(self):
         assert (
