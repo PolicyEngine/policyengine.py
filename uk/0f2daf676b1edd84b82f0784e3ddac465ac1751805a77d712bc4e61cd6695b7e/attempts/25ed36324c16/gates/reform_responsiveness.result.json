@@ -1,0 +1,7 @@
+{
+  "details": {},
+  "evidence_sha256": "229aa79a4e345c29849537566b327e64e0164aaa5314c63258dbdecbfa21131a",
+  "gate_id": "reform_responsiveness",
+  "status": "needs_review",
+  "summary": "Raise additional rate by 3pp (additional_rate_plus_3pp): the tool's responsive check passes but 2030-31, 2031-32 are withheld (fewer than 10 records), so it cannot be recomputed there"
+}

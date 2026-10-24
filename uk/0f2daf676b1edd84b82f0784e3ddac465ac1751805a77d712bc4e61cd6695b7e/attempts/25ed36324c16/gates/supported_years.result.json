@@ -1,0 +1,20 @@
+{
+  "details": {
+    "outside_projection": [],
+    "supported_years": [
+      2024,
+      2025,
+      2026,
+      2027,
+      2028,
+      2029,
+      2030,
+      2031,
+      2032
+    ]
+  },
+  "evidence_sha256": "742a9ab0571fefd55495a9a09ac0f7180df43076a567769eae1a24ac5434c8e6",
+  "gate_id": "supported_years",
+  "status": "pass",
+  "summary": "Supports 2024–2032, covering the required and horizon years."
+}

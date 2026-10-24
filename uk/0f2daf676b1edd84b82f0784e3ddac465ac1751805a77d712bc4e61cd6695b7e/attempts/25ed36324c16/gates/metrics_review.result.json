@@ -1,0 +1,10 @@
+{
+  "details": {
+    "data_only": "fail",
+    "model_only": "fail"
+  },
+  "evidence_sha256": "bbe6e22da9f0268083bb10d0d67c51afd2b7139081117f1f30d51cf3a954f643",
+  "gate_id": "metrics_review",
+  "status": "fail",
+  "summary": "model_only: checks the previous pair passed now fail: counted_once:working_tax_credit, counted_once:maternity_allowance, counted_once:widowed_parents_allowance; metrics disappeared: double_counts.corporate_sdlt 2025, double_counts.corporate_sdlt 2026, double_counts.corporate_sdlt 2027, double_counts.corporate_sdlt 2028, double_counts.corporate_sdlt 2029, double_counts.corporate_sdlt 2030, double_counts.corporate_sdlt 2031; data_only: checks the previous pair passed now fail: sign:vat"
+}
