@@ -336,22 +336,31 @@ class TestReleaseManifests:
 
         assert resolved == UK_CERTIFIED_DATASET_URI
 
-    def test__given_uk_manifest__then_area_regions_route_to_local_release(self):
+    def test__given_uk_manifest__then_area_regions_follow_the_regional_release(
+        self,
+    ):
         manifest = get_release_manifest("uk")
-
-        assert manifest.regional_release_kind == "local_area"
-        assert {
+        region_paths = {
             region_type: template.path_template
             for region_type, template in manifest.region_datasets.items()
-        } == {
-            "national": "microcosm_uk_2024_25.h5",
-            "constituency": "microcosm_uk_2024_25_dense.h5",
-            "local_authority": "microcosm_uk_2024_25_dense.h5",
         }
-        assert (
-            resolve_dataset_reference("uk", "microcosm_uk_2024_25_dense")
-            == UK_LOCAL_AREA_DATASET_URI
-        )
+
+        if manifest.regional_release_kind == "local_area":
+            assert region_paths == {
+                "national": "microcosm_uk_2024_25.h5",
+                "constituency": "microcosm_uk_2024_25_dense.h5",
+                "local_authority": "microcosm_uk_2024_25_dense.h5",
+            }
+            assert (
+                resolve_dataset_reference("uk", "microcosm_uk_2024_25_dense")
+                == UK_LOCAL_AREA_DATASET_URI
+            )
+        else:
+            # A national-only cut (--drop-regional-release) routes no area
+            # regions and bundles no local-area dataset.
+            assert manifest.regional_release_kind is None
+            assert region_paths == {"national": "microcosm_uk_2024_25.h5"}
+            assert "microcosm_uk_2024_25_dense" not in manifest.datasets
 
     def test__given_uk_legacy_dataset_names__then_resolves_bundled_aliases(self):
         assert (

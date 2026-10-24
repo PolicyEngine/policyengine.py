@@ -467,7 +467,10 @@ def test_the_adapter_is_exported_from_outputs():
 
 
 def test_a_missing_area_column_names_the_dataset_that_carries_it():
-    from policyengine.provenance.manifest import uk_area_dataset_hint
+    from policyengine.provenance.manifest import (
+        get_release_manifest,
+        uk_area_dataset_hint,
+    )
 
     baseline, reform = _households()
     for frame in (baseline, reform):
@@ -475,7 +478,41 @@ def test_a_missing_area_column_names_the_dataset_that_carries_it():
     with pytest.raises(ValueError, match="no household an area") as error:
         _compute(baseline, reform, levels=("constituency",))
     hint = uk_area_dataset_hint("constituency")
-    assert "microcosm_uk_2024_25_dense" in hint
+    if "constituency" in get_release_manifest("uk").region_datasets:
+        assert "microcosm_uk_2024_25_dense" in hint
+        assert hint in str(error.value)
+    else:
+        # A national-only cut routes no area regions, so there is no
+        # dataset to name.
+        assert hint == ""
+        assert "certified bundle routes" not in str(error.value)
+
+
+def test_a_routed_area_names_its_dataset_in_the_error(monkeypatch):
+    """Whatever the packaged routing, a routed area's error names its dataset."""
+    from policyengine.provenance import manifest
+
+    record = manifest.get_release_manifest("uk")
+    data = record.model_dump()
+    data["region_datasets"]["constituency"] = {
+        "path_template": "microcosm_uk_2024_25_dense.h5"
+    }
+    data["datasets"]["microcosm_uk_2024_25_dense"] = {
+        "path": "microcosm_uk_2024_25_dense.h5",
+        "repo_id": "policyengine/populace-uk-private",
+        "repo_type": "dataset",
+        "revision": "microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe",
+    }
+    routed = type(record).model_validate(data)
+    monkeypatch.setattr(manifest, "get_release_manifest", lambda country: routed)
+
+    baseline, reform = _households()
+    for frame in (baseline, reform):
+        del frame["constituency_code_oa"]
+    with pytest.raises(ValueError, match="no household an area") as error:
+        _compute(baseline, reform, levels=("constituency",))
+    hint = manifest.uk_area_dataset_hint("constituency")
+    assert "'microcosm_uk_2024_25_dense'" in hint
     assert hint in str(error.value)
 
 
