@@ -294,7 +294,7 @@ jobs:
   qualify:
     needs: [resolve, prepare]
     if: needs.prepare.outputs.duplicate == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CERTIFY_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CERTIFY_RUNNER_X64 || 'ubuntu-latest' }}
     # The local gates took 80-89 minutes while every wrapper.household
     # contract row errored at once. Since #651 those rows run the household
     # calculator, which takes the gates past two hours, so a 120-minute limit
@@ -355,7 +355,7 @@ jobs:
   replay:
     needs: [resolve, prepare, qualify]
     if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.duplicate == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CERTIFY_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CERTIFY_RUNNER_X64 || 'ubuntu-latest' }}
     timeout-minutes: 355
     permissions:
       contents: write
