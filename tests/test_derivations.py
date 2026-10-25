@@ -131,13 +131,16 @@ def test_narrate_passes_trace_to_litellm(monkeypatch):
     def fake_completion(**kwargs):
         captured["kwargs"] = kwargs
         message = types.SimpleNamespace(content="Stub narrative.")
-        choice = types.SimpleNamespace(message=message)
+        choice = types.SimpleNamespace(message=message, finish_reason="stop")
         return types.SimpleNamespace(choices=[choice])
 
     monkeypatch.setitem(
         __import__("sys").modules,
         "litellm",
-        types.SimpleNamespace(completion=fake_completion),
+        types.SimpleNamespace(
+            completion=fake_completion,
+            AnthropicConfig=types.SimpleNamespace(get_config=lambda: {}),
+        ),
     )
 
     derivation = Derivation(
@@ -165,6 +168,13 @@ def test_narrate_passes_trace_to_litellm(monkeypatch):
     assert "adjusted_gross_income = 81820.85" in prompt
     assert "TX, joint, 2 adults, ~$85k income" in prompt
     assert "COUNTRY: US" in prompt
+    assert captured["kwargs"]["model"] == "claude-sonnet-5-5"
+    assert captured["kwargs"]["custom_llm_provider"] == "anthropic"
+    assert captured["kwargs"]["max_tokens"] == 4096
+    assert captured["kwargs"]["output_config"] == {"effort": "low"}
+    assert "temperature" not in captured["kwargs"]
+    assert "thinking" not in captured["kwargs"]
+    assert "reasoning_effort" not in captured["kwargs"]
 
 
 def test_narrate_async_uses_litellm_acompletion(monkeypatch):
@@ -173,13 +183,16 @@ def test_narrate_async_uses_litellm_acompletion(monkeypatch):
     async def fake_acompletion(**kwargs):
         captured["kwargs"] = kwargs
         message = types.SimpleNamespace(content="Async stub.")
-        choice = types.SimpleNamespace(message=message)
+        choice = types.SimpleNamespace(message=message, finish_reason="stop")
         return types.SimpleNamespace(choices=[choice])
 
     monkeypatch.setitem(
         __import__("sys").modules,
         "litellm",
-        types.SimpleNamespace(acompletion=fake_acompletion),
+        types.SimpleNamespace(
+            acompletion=fake_acompletion,
+            AnthropicConfig=types.SimpleNamespace(get_config=lambda: {}),
+        ),
     )
 
     derivation = Derivation(
@@ -190,4 +203,263 @@ def test_narrate_async_uses_litellm_acompletion(monkeypatch):
     )
     result = asyncio.run(narrate_async(derivation))
     assert result == "Async stub."
-    assert captured["kwargs"]["model"] == "claude-sonnet-4-6"
+    assert captured["kwargs"]["model"] == "claude-sonnet-5-5"
+    assert captured["kwargs"]["custom_llm_provider"] == "anthropic"
+    assert captured["kwargs"]["max_tokens"] == 4096
+    assert captured["kwargs"]["output_config"] == {"effort": "low"}
+    assert "temperature" not in captured["kwargs"]
+    assert "thinking" not in captured["kwargs"]
+    assert "reasoning_effort" not in captured["kwargs"]
+
+
+@pytest.fixture
+def narration_derivation():
+    return Derivation(
+        variable="x", value=1.0, period=2026, trace=TraceNode(name="x", value=1.0)
+    )
+
+
+@pytest.fixture(params=[False, True], ids=["sync", "async"])
+def call_narration(request):
+    def call(derivation, **kwargs):
+        if request.param:
+            return asyncio.run(narrate_async(derivation, **kwargs))
+        return narrate(derivation, **kwargs)
+
+    return call
+
+
+@pytest.fixture
+def fake_narration_client(monkeypatch):
+    client = types.SimpleNamespace(
+        kwargs=None,
+        AnthropicConfig=types.SimpleNamespace(get_config=lambda: {}),
+        response=types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content=" Narrative. "),
+                    finish_reason="stop",
+                )
+            ]
+        ),
+    )
+
+    def completion(**kwargs):
+        client.kwargs = kwargs
+        return client.response
+
+    async def acompletion(**kwargs):
+        return completion(**kwargs)
+
+    client.completion = completion
+    client.acompletion = acompletion
+    monkeypatch.setitem(__import__("sys").modules, "litellm", client)
+    return client
+
+
+@pytest.mark.parametrize("model", ["claude-sonnet-5-5", "anthropic/claude-sonnet-5-5"])
+def test_narration_rejects_temperature_for_sonnet_55(
+    call_narration, narration_derivation, fake_narration_client, model
+):
+    with pytest.raises(ValueError, match="does not support temperature"):
+        call_narration(narration_derivation, model=model, temperature=0.0)
+    assert fake_narration_client.kwargs is None
+
+
+@pytest.mark.parametrize("model", ["claude-sonnet-5-5", "anthropic/claude-sonnet-5-5"])
+def test_narration_rejects_litellm_dropping_effort(
+    call_narration, narration_derivation, fake_narration_client, model
+):
+    fake_narration_client.drop_params = True
+    with pytest.raises(ValueError, match="Disable LITELLM_DROP_PARAMS"):
+        call_narration(narration_derivation, model=model)
+    assert fake_narration_client.kwargs is None
+
+
+@pytest.mark.parametrize("model", ["claude-sonnet-5-5", "anthropic/claude-sonnet-5-5"])
+@pytest.mark.parametrize(
+    ("sampling_parameter", "value"),
+    [
+        ("temperature", 0.2),
+        ("top_p", 0.5),
+        ("top_k", 10),
+        ("temperature", 0.0),
+        ("top_p", 0.0),
+        ("top_k", 0),
+    ],
+)
+def test_narration_rejects_global_anthropic_sampling(
+    monkeypatch, call_narration, narration_derivation, model, sampling_parameter, value
+):
+    """Global provider defaults must be rejected before calling LiteLLM."""
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    import litellm
+
+    monkeypatch.setattr(litellm, "drop_params", False)
+    monkeypatch.setattr(litellm.AnthropicConfig, sampling_parameter, value)
+    config_before = litellm.AnthropicConfig.get_config()
+    calls = []
+
+    def completion(**kwargs):
+        calls.append(kwargs)
+        return types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content="Narrative."),
+                    finish_reason="stop",
+                )
+            ]
+        )
+
+    async def acompletion(**kwargs):
+        return completion(**kwargs)
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    monkeypatch.setattr(litellm, "acompletion", acompletion)
+    with pytest.raises(ValueError, match=f"AnthropicConfig.*{sampling_parameter}"):
+        call_narration(narration_derivation, model=model)
+    assert calls == []
+    assert litellm.AnthropicConfig.get_config() == config_before
+
+
+def test_narration_preserves_custom_model_options(
+    call_narration, narration_derivation, fake_narration_client
+):
+    fake_narration_client.drop_params = True
+    fake_narration_client.AnthropicConfig.get_config = lambda: {
+        "temperature": 0.2,
+        "top_p": 0.5,
+        "top_k": 10,
+    }
+    result = call_narration(
+        narration_derivation,
+        model="custom-provider/custom-model",
+        temperature=0.2,
+        max_tokens=512,
+    )
+    assert result == "Narrative."
+    kwargs = fake_narration_client.kwargs
+    assert kwargs["model"] == "custom-provider/custom-model"
+    assert kwargs["temperature"] == 0.2
+    assert kwargs["max_tokens"] == 512
+    assert "output_config" not in kwargs
+    assert "custom_llm_provider" not in kwargs
+
+
+@pytest.mark.parametrize("finish_reason", ["refusal", "content_filter"])
+def test_narration_raises_on_refusal(
+    call_narration, narration_derivation, fake_narration_client, finish_reason
+):
+    fake_narration_client.response.choices[0].finish_reason = finish_reason
+    with pytest.raises(ValueError, match="refused"):
+        call_narration(narration_derivation)
+
+
+@pytest.mark.parametrize("content", [None, "", "  "])
+def test_narration_raises_when_response_has_no_text(
+    call_narration, narration_derivation, fake_narration_client, content
+):
+    fake_narration_client.response.choices[0].message.content = content
+    with pytest.raises(ValueError, match="no text"):
+        call_narration(narration_derivation)
+
+
+@pytest.mark.parametrize("stop_reason", ["end_turn", "refusal"])
+@pytest.mark.parametrize("model", ["claude-sonnet-5-5", "anthropic/claude-sonnet-5-5"])
+def test_narration_litellm_provider_translation_offline(
+    monkeypatch, call_narration, narration_derivation, stop_reason, model
+):
+    """Exercise the pinned wrapper through HTTPX's local mocked transport."""
+    import json
+    import socket
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("This test must not make a network connection")
+
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", no_network)
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+
+    import httpx
+    import litellm
+    from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
+
+    monkeypatch.setattr(litellm, "drop_params", False)
+    monkeypatch.setattr(litellm.AnthropicConfig, "max_tokens", 17)
+    config_before = litellm.AnthropicConfig.get_config()
+    monkeypatch.delenv("LITELLM_ANTHROPIC_DISABLE_URL_SUFFIX", raising=False)
+    real_completion = litellm.completion
+    real_acompletion = litellm.acompletion
+    requests = []
+
+    def handle_http_request(http_request):
+        assert http_request.method == "POST"
+        assert str(http_request.url) == "https://offline.invalid/v1/messages"
+        request = json.loads(http_request.content)
+        requests.append(request)
+        assert request["model"] == "claude-sonnet-5-5"
+        assert request["max_tokens"] == 4096
+        assert request["output_config"] == {"effort": "low"}
+        assert [message["role"] for message in request["messages"]] == ["user"]
+        assert not {
+            "temperature",
+            "top_p",
+            "top_k",
+            "thinking",
+            "tool_choice",
+            "tools",
+            "extra_body",
+        }.intersection(request)
+        raw = {
+            "id": "msg_offline_test",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-5-5",
+            "content": [
+                {"type": "thinking", "thinking": "", "signature": "mock-signature"},
+                {"type": "text", "text": "First sentence. "},
+                {"type": "text", "text": "Second sentence."},
+            ],
+            "stop_reason": stop_reason,
+            "stop_sequence": None,
+            "usage": {"input_tokens": 10, "output_tokens": 20},
+        }
+        return httpx.Response(200, json=raw)
+
+    def completion(**kwargs):
+        with httpx.Client(transport=httpx.MockTransport(handle_http_request)) as client:
+            return real_completion(
+                **kwargs,
+                api_key="offline-dummy-credential",
+                api_base="https://offline.invalid",
+                num_retries=0,
+                client=HTTPHandler(client=client),
+            )
+
+    async def acompletion(**kwargs):
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handle_http_request)
+        ) as client:
+            handler = AsyncHTTPHandler()
+            await handler.close()
+            handler.client = client
+            return await real_acompletion(
+                **kwargs,
+                api_key="offline-dummy-credential",
+                api_base="https://offline.invalid",
+                num_retries=0,
+                client=handler,
+            )
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    monkeypatch.setattr(litellm, "acompletion", acompletion)
+    if stop_reason == "refusal":
+        with pytest.raises(ValueError, match="refused"):
+            call_narration(narration_derivation, model=model)
+    else:
+        assert (
+            call_narration(narration_derivation, model=model)
+            == "First sentence. Second sentence."
+        )
+    assert len(requests) == 1
+    assert litellm.AnthropicConfig.get_config() == config_before
