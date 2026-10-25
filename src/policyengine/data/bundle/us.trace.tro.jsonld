@@ -17,18 +17,18 @@
         "schema:name": "PolicyEngine",
         "schema:url": "https://policyengine.org"
       },
-      "schema:description": "TRACE TRO for certified runtime bundle us-6.10.2 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
+      "schema:description": "TRACE TRO for certified runtime bundle us-6.11.0 covering the bundle manifest, the certified dataset artifact, the country model wheel, and the country data release manifest when it is available.",
       "schema:name": "policyengine us certified bundle TRO",
       "trov:createdWith": {
         "@type": "schema:SoftwareApplication",
         "schema:name": "policyengine",
-        "schema:softwareVersion": "6.10.2"
+        "schema:softwareVersion": "6.11.0"
       },
       "trov:hasArrangement": [
         {
           "@id": "arrangement/1",
           "@type": "trov:ArtifactArrangement",
-          "rdfs:comment": "Certified arrangement for bundle us-6.10.2.",
+          "rdfs:comment": "Certified arrangement for bundle us-6.11.0.",
           "trov:hasArtifactLocation": [
             {
               "@id": "arrangement/1/location/bundle_manifest",
@@ -74,7 +74,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "461fe51f720501eda986d09e35d779a96269aeff203d4cda17f611ee357b0a73"
+            "trov:sha256": "bccf23acde631aed4665757094c04f86e60993fb9d388e7dc958b90c876e5a80"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -101,7 +101,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "80646bd11604743ae8f2fa2dd5be66e68bacaf42e4e9397cd1376a05b8ba5aef"
+          "trov:sha256": "3c63dadd4e5c01ee40268ce3ba9ce433cf911b163adac88126ee6e8c6f4fb319"
         }
       },
       "trov:hasPerformance": {

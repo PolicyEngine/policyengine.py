@@ -1,3 +1,14 @@
+## [6.11.0] - 2026-10-25
+
+### Added
+
+- Support opt-in local data release manifests pinned by the installed bundle TRO, with fail-closed verification and a distinct runtime certification basis for offline Budget-day runners. Reject conflicting TRO hash assertions and require local and fetched manifest artifacts to agree with the installed bundle.
+
+### Fixed
+
+- UK runs now recalculate after each step that changes the built simulation: the policy's simulation modifier, the dynamic's parameter values written after it, and the dynamic's simulation modifier. Each step ends by dropping every value the simulation has calculated, keeping its inputs, including values a modifier stores with `set_input`, so the next step and the output read values calculated from the simulation as that step left it. Before, a value calculated before one of these steps kept its old value. A dynamic's parameter values written after a policy modifier missed every value the modifier had calculated, so a dynamic adding £1,000 a year to Child Benefit left a policy-warmed Child Benefit unchanged. Values a policy modifier calculated before storing an input with `set_input` did not include that input. A failed step still drops what it calculated, then ends the run. Runs without a simulation modifier are unchanged; with one, values the modifier calculated are calculated again afterwards. Labour supply responses to dynamic elasticities written after a policy modifier also need a policyengine-uk release with PolicyEngine/policyengine-uk#2673; on policyengine-uk 2.132.6 the response stays zero even without a modifier.
+
+
 ## [6.10.2] - 2026-10-24
 
 ### Changed
