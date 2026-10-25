@@ -116,6 +116,68 @@ policyengine bundle manifest 4.19.1
 `install` targeted. Use `--venv` or `--python` only to inspect a different
 target explicitly.
 
+## Local release manifests for Budget-day runners
+
+Set `POLICYENGINE_UK_DATA_MANIFEST_FILE` before starting a generation process to
+read the UK release manifest from that file. The same setting is available as
+`POLICYENGINE_<COUNTRY>_DATA_MANIFEST_FILE` for other bundled countries. When set,
+it always selects the local file, avoiding a Hugging Face request and its timeout.
+An unset setting preserves the existing fetch and certification behavior.
+
+The trust anchor is the `trov:sha256` on
+`composition/1/artifact/data_release_manifest` in the installed country's
+`data/bundle/{country}.trace.tro.jsonld`. The file's **raw bytes** must match that
+pin. A missing pin, unreadable file, altered bytes, or certification mismatch
+stops the process. Every definition of the artifact ID in the TRO must agree on
+one digest. After revision normalization, the manifest's certified/default
+artifact and all artifacts shared with the bundle must agree with the bundle's
+locations and pinned hashes. This artifact check also applies to fetched
+manifests. The model, core, build ID and fingerprint checks still apply;
+selecting a local file cannot extend the bundle's certification.
+
+At G0 each morning, while Hugging Face is available, use the exact installed
+release that the runner will use and download and verify the manifest before
+enabling the setting. Keep the Hugging Face token in `HUGGING_FACE_TOKEN`,
+`HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN`:
+
+```bash
+env -u POLICYENGINE_UK_DATA_MANIFEST_FILE POLICYENGINE_SKIP_COUNTRY_IMPORTS=1 python - <<'PY' &&
+import hashlib
+from pathlib import Path
+
+import requests
+from policyengine.provenance.manifest import (
+    bundled_data_release_manifest_sha256, get_release_manifest,
+    hugging_face_auth_headers, https_release_manifest_uri,
+)
+
+expected = bundled_data_release_manifest_sha256("uk")
+response = requests.get(
+    https_release_manifest_uri(get_release_manifest("uk").data_package),
+    headers=hugging_face_auth_headers(), timeout=30,
+)
+response.raise_for_status()
+actual = hashlib.sha256(response.content).hexdigest()
+if actual != expected:
+    raise RuntimeError(f"Manifest SHA-256: expected {expected}; actual {actual}")
+target = Path("data/uk-release-manifest.json")
+target.parent.mkdir(parents=True, exist_ok=True)
+staged = target.with_suffix(".json.tmp")
+staged.write_bytes(response.content)
+staged.replace(target)
+print(f"Verified {target}: {actual}")
+PY
+export POLICYENGINE_UK_DATA_MANIFEST_FILE="$PWD/data/uk-release-manifest.json"
+```
+
+Start a fresh runner process with that setting and record its receipt at G0.
+Runtime certification and TRACE output use a distinct basis ending in
+`_local_manifest`, such as `exact_build_model_version_local_manifest`; packaged
+execution receipts record it as `runtime.data_certification_basis`. The
+receipt's certificate keeps the bundle's published basis so certificate
+verification remains reproducible. See [execution receipts](receipts.md).
+Refresh and verify the file whenever the installed certified release changes.
+
 ## Bundle-only PRs
 
 Run:

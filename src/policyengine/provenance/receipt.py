@@ -76,6 +76,7 @@ import io
 import json
 import math
 import operator
+import os
 import platform
 import re
 import struct
@@ -113,7 +114,14 @@ from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 import psutil
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from policyengine.provenance.bytecode import code_shape as _code_shape
 from policyengine.provenance.bytecode import compile_source
@@ -488,6 +496,21 @@ class RuntimeContext(_Contract):
     python_version: str
     platform: str
     ci_run_url: Optional[str] = None
+    data_certification_basis: Optional[str] = Field(
+        default=None,
+        description=(
+            "Runtime certification basis when an opt-in local data manifest was "
+            "verified against the packaged bundle TRACE TRO. The certificate's "
+            "compatibility_basis remains the published bundle's assertion."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_local_basis(self, handler):
+        payload = handler(self)
+        if self.data_certification_basis is None:
+            payload.pop("data_certification_basis", None)
+        return payload
 
 
 class ExecutionReceipt(_Contract):
@@ -3871,6 +3894,21 @@ def _build(
     actual_sha256 = sha256_file(dataset_path)
     data = _data_identity(country_id, record, bundle, dataset_name, actual_sha256)
 
+    runtime_basis = None
+    if source == "packaged" and (
+        f"POLICYENGINE_{country_id.upper()}_DATA_MANIFEST_FILE" in os.environ
+    ):
+        from policyengine.provenance.manifest import (
+            certify_data_release_compatibility,
+        )
+
+        runtime_basis = certify_data_release_compatibility(
+            country_id,
+            model.version,
+            runtime_data_build_fingerprint=data.build_fingerprint,
+            runtime_core_version=core.version,
+        ).compatibility_basis
+
     fields = _certificate_fields(country_id, record, bundle)
     certified_artifact = record.get("certified_data_artifact") or {}
     certificate = None
@@ -3920,6 +3958,7 @@ def _build(
             python_version=platform.python_version(),
             platform=sys.platform,
             ci_run_url=ci_run_url,
+            data_certification_basis=runtime_basis,
         ),
     )
 
