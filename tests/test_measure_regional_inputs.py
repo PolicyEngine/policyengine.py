@@ -7,6 +7,7 @@ import importlib
 import importlib.metadata
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -302,6 +303,9 @@ def test_an_input_absent_under_both_models_is_not_reported(tmp_path, model):
 def test_build_model_is_read_at_its_manifest_pins_without_the_callers_settings(
     tmp_path, model, monkeypatch
 ):
+    # Start from no uv settings: CI's setup-uv sets kept ones of its own.
+    for name in [name for name in os.environ if name.startswith("UV_")]:
+        monkeypatch.delenv(name)
     for name in (
         "UV_FROZEN",
         "UV_PROJECT_ENVIRONMENT",
