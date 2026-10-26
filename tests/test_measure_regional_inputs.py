@@ -427,6 +427,24 @@ def test_a_failed_build_model_probe_refuses(tmp_path, model):
         _measure(model, paths, run=unresolvable)
 
 
+@pytest.mark.parametrize(
+    ("audited_by", "limitations"),
+    [("\u200b", [LIMITATION]), ("Budget operator", ["\u200b"]), (" ", [LIMITATION])],
+)
+def test_an_invisible_auditor_or_limitation_refuses(
+    tmp_path, model, audited_by, limitations
+):
+    paths = {"dense": _h5(tmp_path / "dense.h5")}
+    with patch(
+        "policyengine.provenance.certification.requests.get",
+        return_value=_response(paths),
+    ):
+        with pytest.raises(ValueError, match="a reader can see"):
+            model.measure_regional_input_surface(
+                URI, paths, MODEL_VERSION, audited_by, limitations, run=FakeRunner()
+            )
+
+
 def test_installed_model_must_be_the_requested_exact_version(
     tmp_path, model, monkeypatch
 ):

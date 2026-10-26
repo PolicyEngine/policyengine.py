@@ -366,11 +366,35 @@ def test_a_regional_release_without_build_versions_has_no_baseline(
         certify_with_evidence(_tmp_bundle(tmp_path), evidence, dense)
 
 
-def test_version_1_evidence_refuses(tmp_path):
+@pytest.mark.parametrize("version", [1, None], ids=["version_1", "unversioned"])
+def test_evidence_must_declare_schema_version_2(tmp_path, version):
     evidence = input_evidence()
-    evidence["schema_version"] = 1
+    if version is None:
+        del evidence["schema_version"]
+    else:
+        evidence["schema_version"] = version
     with pytest.raises(CertificationError, match="schema_version"):
         certify_with_evidence(_tmp_bundle(tmp_path), evidence)
+
+
+@pytest.mark.parametrize("field", ["audited_by", "limitations"])
+def test_invisible_auditor_or_limitations_refuse(tmp_path, field):
+    evidence = input_evidence()
+    evidence[field] = "\u200b" if field == "audited_by" else ["\u200b"]
+    with pytest.raises(CertificationError, match="a reader can see"):
+        certify_with_evidence(_tmp_bundle(tmp_path), evidence)
+
+
+@pytest.mark.parametrize("reason", ["   ", "\t\n"])
+def test_a_bundle_record_with_a_blank_reason_does_not_validate(tmp_path, reason):
+    from pydantic import ValidationError
+
+    bundle_path = _tmp_bundle(tmp_path)
+    certify_with_evidence(bundle_path, input_evidence())
+    release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+    release["regional_certification"]["accepted_reason"] = reason
+    with pytest.raises(ValidationError, match="accepted_reason"):
+        CountryReleaseManifest.model_validate(release)
 
 
 def test_an_h5_suffix_in_any_case_must_be_measured_as_the_audit_does():

@@ -240,7 +240,7 @@ class RegionalInputSurfaceEvidence(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[2]
     regional_manifest_uri: str = Field(min_length=1)
     regional_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_package: str = Field(min_length=1)
@@ -275,7 +275,7 @@ class RegionalCertification(BaseModel):
     compatibility_basis: Literal["accepted_model_mismatch"]
     certified_for_model_version: str
     built_with_model_version: Optional[str] = None
-    accepted_reason: str
+    accepted_reason: str = Field(min_length=1, pattern=r"\S")
     area_receipts: Literal["uncertified"] = "uncertified"
     regional_manifest_uri: str
     regional_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")

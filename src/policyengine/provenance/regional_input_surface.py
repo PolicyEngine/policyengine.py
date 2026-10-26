@@ -104,6 +104,16 @@ class RegionalInputSurfaceError(ValueError):
     """A complete, byte-bound regional surface cannot be established."""
 
 
+def readable(text: str) -> bool:
+    """Whether ``text`` shows a reader anything.
+
+    ``str.strip`` and a ``\\S`` pattern both accept text made only of
+    invisible format characters, such as a zero-width space, so this needs
+    one printable character that is not whitespace.
+    """
+    return any(char.isprintable() and not char.isspace() for char in text)
+
+
 def _names(values: list[str], label: str) -> set[str]:
     if not values or any(
         not isinstance(value, str) or not value.strip() or value != value.strip()
@@ -563,12 +573,12 @@ def measure_regional_input_surface(
     from policyengine.provenance.certification import fetch_release_manifest
 
     if (
-        not audited_by.strip()
+        not readable(audited_by)
         or not limitations
-        or any(not item.strip() for item in limitations)
+        or not all(readable(item) for item in limitations)
     ):
         raise RegionalInputSurfaceError(
-            "An auditor and nonblank limitations are required."
+            "An auditor and limitations a reader can see are required."
         )
     manifest, manifest_sha256, parts = fetch_release_manifest(
         regional_manifest_uri, token=token
@@ -633,6 +643,7 @@ def measure_regional_input_surface(
             f"acceptance: {comparison['dropped_columns']}."
         )
     return RegionalInputSurfaceEvidence(
+        schema_version=2,
         regional_manifest_uri=regional_manifest_uri,
         regional_manifest_sha256=manifest_sha256,
         model_package="policyengine-uk",

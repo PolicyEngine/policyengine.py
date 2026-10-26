@@ -1513,7 +1513,8 @@ class TestUKRegionalCertification:
                 regional_model_mismatch_reason="not needed",
             )
 
-    @pytest.mark.parametrize("reason", ["", "   "])
+    # A zero-width space is not whitespace, so strip() alone kept it.
+    @pytest.mark.parametrize("reason", ["", "   ", "\t\n", "\u200b", "\ufeff\u2060"])
     def test__given_an_empty_reason__then_refuses(self, tmp_path, reason):
         with pytest.raises(CertificationError, match="needs a reason"):
             _certify_uk(

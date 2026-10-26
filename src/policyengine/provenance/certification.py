@@ -488,8 +488,10 @@ def accepted_regional_mismatch(
     limitation. Returns ``(record, warning)``.
     """
 
+    from policyengine.provenance.regional_input_surface import readable
+
     reason = reason.strip()
-    if not reason:
+    if not readable(reason):
         raise CertificationError(
             "--accept-regional-model-mismatch needs a reason a reviewer can read."
         )
@@ -575,8 +577,12 @@ def accepted_regional_mismatch(
         raise CertificationError(
             "Evidence model inputs must belong to its variable surface."
         )
-    if not all(item.strip() for item in audit.limitations):
-        raise CertificationError("Regional evidence limitations must not be blank.")
+    if not readable(audit.audited_by) or not all(
+        readable(item) for item in audit.limitations
+    ):
+        raise CertificationError(
+            "Regional evidence needs an auditor and limitations a reader can see."
+        )
     from policyengine.provenance.regional_input_surface import (
         compare_input_surface,
         verify_model_surfaces,
