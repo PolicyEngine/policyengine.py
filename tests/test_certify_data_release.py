@@ -1576,7 +1576,7 @@ class TestUKRegionalCertification:
         )
 
     def test__given_bundle_wrapper_empty_reason__then_certifier_refuses_it(
-        self, monkeypatch, tmp_path
+        self, monkeypatch, tmp_path, capsys
     ):
         bundle_script = _load_bundle_script(monkeypatch)
         spec = importlib.util.spec_from_file_location(
@@ -1605,7 +1605,7 @@ class TestUKRegionalCertification:
                     _response(self._older_dense()),
                 ],
             ),
-            pytest.raises(CertificationError, match="needs a reason"),
+            pytest.raises(SystemExit) as error,
         ):
             bundle_script.main(
                 [
@@ -1625,6 +1625,11 @@ class TestUKRegionalCertification:
                     "--skip-artifact-check",
                 ]
             )
+        # bundle.py reports the certifier's refusal as a usage error.
+        assert error.value.code == 2
+        assert isinstance(error.value.__context__, CertificationError)
+        assert "needs a reason" in str(error.value.__context__)
+        assert capsys.readouterr().out == ""
         assert captured["regional_model_mismatch_reason"] == ""
         assert bundle_path.read_bytes() == original_bundle
 
