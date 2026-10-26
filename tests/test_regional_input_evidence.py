@@ -29,6 +29,14 @@ DEFAULTED_INPUTS = [
     "local_bus_uncapped_single_fare",
     "salary_sacrifice_returned_to_income",
 ]
+#: What certification adds to the limitations for input_evidence's defaults.
+DEFAULTS_LIMIT = (
+    f"area runs on policyengine-uk {UK_MODEL_VERSION} default 2 inputs that the "
+    "regional file does not store and its build model, policyengine-uk 2.120.0, "
+    "did not take as inputs, so area results for measures that read them use "
+    "those defaults: local_bus_uncapped_single_fare, "
+    "salary_sacrifice_returned_to_income"
+)
 
 
 def older_dense() -> dict:
@@ -420,7 +428,7 @@ def test_every_default_and_limitation_survives_validation_and_roundtrip(tmp_path
     record = manifest.regional_certification.model_dump(mode="json", exclude_none=True)
     assert record["defaulted_inputs"] == DEFAULTED_INPUTS
     assert record["dropped_columns"] == []
-    assert record["limitations"] == [VAT_LIMIT]
+    assert record["limitations"] == [VAT_LIMIT, DEFAULTS_LIMIT]
     assert record["evidence"] == evidence
     assert record["area_receipts"] == "uncertified"
     assert record["accepted_reason"] == REASON
@@ -431,6 +439,46 @@ def test_every_default_and_limitation_survives_validation_and_roundtrip(tmp_path
     rebuilt = CountryReleaseManifest.model_validate_json(manifest.model_dump_json())
     assert rebuilt.regional_certification == manifest.regional_certification
     assert release["certification"]["compatibility_basis"] == "built_with_model_package"
+
+
+def test_certification_names_the_defaulted_inputs_in_the_limitations(tmp_path):
+    """Review of #699: a reader of the limitations alone sees the defaults."""
+    evidence = input_evidence()
+    bundle_path = _tmp_bundle(tmp_path)
+    result = certify_with_evidence(bundle_path, evidence)
+    record = json.loads(bundle_path.read_text())["data_releases"]["uk"][
+        "regional_certification"
+    ]
+    assert record["limitations"] == [VAT_LIMIT, DEFAULTS_LIMIT]
+    assert record["evidence"]["limitations"] == [VAT_LIMIT]
+    (warning,) = [w for w in result.warnings if "accepted mismatch" in w]
+    assert "inputs defaulted since the build model: 2." in warning
+    assert DEFAULTS_LIMIT in warning
+
+
+def test_the_defaults_limitation_is_not_repeated(tmp_path):
+    evidence = input_evidence()
+    evidence["limitations"].append(DEFAULTS_LIMIT)
+    bundle_path = _tmp_bundle(tmp_path)
+    certify_with_evidence(bundle_path, evidence)
+    record = json.loads(bundle_path.read_text())["data_releases"]["uk"][
+        "regional_certification"
+    ]
+    assert record["limitations"] == [VAT_LIMIT, DEFAULTS_LIMIT]
+
+
+def test_no_defaults_limitation_when_nothing_defaults(tmp_path, model_surfaces):
+    for surface in ("variables", "inputs"):
+        model_surfaces["target"][surface] = ["employment_income"]
+    evidence = input_evidence()
+    evidence["model_variables"] = evidence["model_inputs"] = ["employment_income"]
+    evidence["defaulted_inputs"] = []
+    bundle_path = _tmp_bundle(tmp_path)
+    certify_with_evidence(bundle_path, evidence)
+    record = json.loads(bundle_path.read_text())["data_releases"]["uk"][
+        "regional_certification"
+    ]
+    assert record["limitations"] == [VAT_LIMIT]
 
 
 def test_evidence_digest_binds_original_manifest_bytes(tmp_path):

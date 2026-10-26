@@ -1442,6 +1442,9 @@ class TestUKRegionalCertification:
     ):
         bundle_path = _tmp_bundle(tmp_path)
         reason = "area receipts are uncertified; the dense cut lags one release"
+        from policyengine.provenance.certification import (
+            regional_defaults_limitation,
+        )
         from tests.test_regional_input_evidence import (
             fake_model_surfaces,
             input_evidence,
@@ -1474,7 +1477,15 @@ class TestUKRegionalCertification:
             "defaulted_inputs": evidence["defaulted_inputs"],
             "dropped_columns": [],
             "never_modelled_columns": [],
-            "limitations": evidence["limitations"],
+            "limitations": [
+                *evidence["limitations"],
+                regional_defaults_limitation(
+                    "policyengine-uk",
+                    UK_MODEL_VERSION,
+                    "2.120.0",
+                    evidence["defaulted_inputs"],
+                ),
+            ],
             "evidence": evidence,
         }
         # The national certificate itself is untouched by the regional record.

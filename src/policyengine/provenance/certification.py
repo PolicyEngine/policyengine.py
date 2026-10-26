@@ -425,6 +425,23 @@ REGIONAL_VAT_LIMITATION = (
 )
 
 
+def regional_defaults_limitation(
+    model_package: str, model_version: str, built_with: str, defaulted: list[str]
+) -> str:
+    """The limitation certification records for inputs area runs default.
+
+    Names every target input the regional file does not store that was not
+    an input of its build model, so a reader of the limitations alone knows
+    which area results rest on defaults.
+    """
+    return (
+        f"area runs on {model_package} {model_version} default {len(defaulted)} "
+        "inputs that the regional file does not store and its build model, "
+        f"{model_package} {built_with}, did not take as inputs, so area results "
+        f"for measures that read them use those defaults: {', '.join(defaulted)}"
+    )
+
+
 def _regional_build_model_version(
     regional_manifest: DataReleaseManifest, model_package: str
 ) -> Optional[str]:
@@ -467,8 +484,8 @@ def accepted_regional_mismatch(
     stored columns the build model defines and the target does not are
     dropped and always refuse; stored columns neither model defines are
     recorded as never modelled; and target inputs the file does not store
-    that were not build inputs are recorded as defaulted. Returns
-    ``(record, warning)``.
+    that were not build inputs are recorded as defaulted, and named in a
+    limitation. Returns ``(record, warning)``.
     """
 
     reason = reason.strip()
@@ -613,6 +630,12 @@ def accepted_regional_mismatch(
         ) from exc
     if predates_vat_fix and REGIONAL_VAT_LIMITATION not in limitations:
         limitations.append(REGIONAL_VAT_LIMITATION)
+    if comparison["defaulted_inputs"]:
+        defaults = regional_defaults_limitation(
+            model_package, model_version, built_with, comparison["defaulted_inputs"]
+        )
+        if defaults not in limitations:
+            limitations.append(defaults)
     record = {
         "compatibility_basis": REGIONAL_BASIS_ACCEPTED_MISMATCH,
         "certified_for_model_version": model_version,
@@ -633,8 +656,8 @@ def accepted_regional_mismatch(
         "are uncertified; audited dropped columns: none; never-modelled "
         "columns (stored, defined by neither model): "
         f"{len(comparison['never_modelled_columns'])}; inputs defaulted since "
-        f"the build model: {', '.join(comparison['defaulted_inputs']) or 'none'}. "
-        + " ".join(limitations)
+        f"the build model: {len(comparison['defaulted_inputs'])}. Limitations: "
+        + "; ".join(limitations)
     )
     return record, warning
 
