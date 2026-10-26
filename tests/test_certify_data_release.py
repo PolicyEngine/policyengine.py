@@ -1415,6 +1415,10 @@ class TestUKRegionalCertification:
     def _older_dense(self) -> dict:
         dense = _microcosm_uk_dense_payload()
         dense["build"]["built_with_model_package"]["version"] = "2.120.0"
+        dense["build"]["built_with_core_package"] = {
+            "name": "policyengine-core",
+            "version": "3.33.3",
+        }
         dense["compatible_model_packages"] = [
             {"name": "policyengine-uk", "specifier": "==2.120.0"}
         ]
@@ -1463,6 +1467,7 @@ class TestUKRegionalCertification:
             "regional_manifest_sha256": evidence["regional_manifest_sha256"],
             "defaulted_inputs": evidence["defaulted_inputs"],
             "dropped_columns": [],
+            "never_modelled_columns": [],
             "limitations": evidence["limitations"],
             "evidence": evidence,
         }

@@ -515,6 +515,13 @@
           "title": "Limitations",
           "type": "array"
         },
+        "never_modelled_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Never Modelled Columns",
+          "type": "array"
+        },
         "regional_manifest_sha256": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Regional Manifest Sha256",
@@ -533,6 +540,7 @@
         "regional_manifest_sha256",
         "defaulted_inputs",
         "dropped_columns",
+        "never_modelled_columns",
         "limitations",
         "evidence"
       ],
@@ -612,7 +620,7 @@
     },
     "RegionalInputSurfaceEvidence": {
       "additionalProperties": false,
-      "description": "An operator's audit of actual regional columns against an exact model.\n\nSurfaces are retained so certification recomputes the comparison rather\nthan trusting a declared zero-loss result. The artifact hashes identify\nthe bytes inspected by the auditor, not merely a model's possible inputs.",
+      "description": "An operator's audit of actual regional columns against two exact models.\n\nThe baseline is the regional release's build model and core, as its\nmanifest records them; the target is the model the bundle certifies. Both\nsurfaces are retained in full so certification recomputes the comparison\nrather than trusting a declared zero-loss result. The artifact hashes\nidentify the bytes inspected by the auditor, not merely a model's possible\ninputs. Schema version 2 made the comparison relative to the build model;\nversion 1 evidence, which counted columns no model defines as dropped, is\nrefused.",
       "properties": {
         "artifacts": {
           "additionalProperties": {
@@ -626,6 +634,32 @@
           "minLength": 1,
           "pattern": "\\S",
           "title": "Audited By",
+          "type": "string"
+        },
+        "build_core_version": {
+          "minLength": 1,
+          "title": "Build Core Version",
+          "type": "string"
+        },
+        "build_model_inputs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Build Model Inputs",
+          "type": "array"
+        },
+        "build_model_variables": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Build Model Variables",
+          "type": "array"
+        },
+        "build_model_version": {
+          "minLength": 1,
+          "title": "Build Model Version",
           "type": "string"
         },
         "defaulted_inputs": {
@@ -691,6 +725,13 @@
           "title": "Model Version",
           "type": "string"
         },
+        "never_modelled_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Never Modelled Columns",
+          "type": "array"
+        },
         "regional_manifest_sha256": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Regional Manifest Sha256",
@@ -702,8 +743,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
-          "default": 1,
+          "const": 2,
+          "default": 2,
           "title": "Schema Version",
           "type": "integer"
         }
@@ -713,10 +754,15 @@
         "regional_manifest_sha256",
         "model_package",
         "model_version",
+        "build_model_version",
+        "build_core_version",
         "artifacts",
         "model_variables",
         "model_inputs",
+        "build_model_variables",
+        "build_model_inputs",
         "dropped_columns",
+        "never_modelled_columns",
         "defaulted_inputs",
         "audited_by",
         "limitations"

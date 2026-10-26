@@ -453,6 +453,8 @@ def _bundle_with_regional_acceptance(dataset_file):
         "local_bus_uncapped_single_fare",
         "salary_sacrifice_returned_to_income",
     ]
+    built = ["employment_income", "household_weight"]
+    stored = ["constituency_code_oa", *built]
     limitations = [
         "The dense cut's VAT predates the policyengine-uk VAT factor fix "
         "(#2187, 2.135.7); the dashboard holds a VAT limit."
@@ -467,28 +469,29 @@ def _bundle_with_regional_acceptance(dataset_file):
         "regional_manifest_sha256": "b" * 64,
         "defaulted_inputs": defaulted,
         "dropped_columns": [],
+        "never_modelled_columns": ["constituency_code_oa"],
         "limitations": limitations,
         "evidence": {
+            "schema_version": 2,
             "model_package": "policyengine-uk",
             "model_version": INSTALLED_UK,
+            "build_model_version": "2.132.6",
+            "build_core_version": "3.33.3",
             "regional_manifest_uri": manifest_uri,
             "regional_manifest_sha256": "b" * 64,
             "artifacts": {
                 "area_file": {
                     **artifact,
-                    "columns": ["employment_income", "household_weight"],
-                    "columns_by_period": {
-                        "2025": ["employment_income", "household_weight"]
-                    },
+                    "columns": stored,
+                    "columns_by_period": {"2025": stored},
                 }
             },
-            "model_variables": sorted(
-                ["employment_income", "household_weight", *defaulted]
-            ),
-            "model_inputs": sorted(
-                ["employment_income", "household_weight", *defaulted]
-            ),
+            "model_variables": sorted([*built, *defaulted]),
+            "model_inputs": sorted([*built, *defaulted]),
+            "build_model_variables": built,
+            "build_model_inputs": built,
             "dropped_columns": [],
+            "never_modelled_columns": ["constituency_code_oa"],
             "defaulted_inputs": defaulted,
             "audited_by": "UK hub review",
             "limitations": limitations,

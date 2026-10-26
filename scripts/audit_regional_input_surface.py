@@ -2,7 +2,13 @@
 
 Run in an environment with the exact requested policyengine-uk version and
 PyTables installed. Supply the H5 files from the immutable regional manifest;
-the audit verifies their hashes without installing models or downloading data.
+the audit verifies their hashes and downloads no microdata. The baseline is the
+build model and core the regional manifest records: the audit reads their
+variables in a throwaway ``uv run --with`` environment, so it needs ``uv``
+and PyPI. Columns the build model defines and the target does not refuse;
+columns neither model defines are recorded as never modelled; and target
+inputs the files do not store that were not build inputs are recorded as
+defaulted.
 """
 
 from __future__ import annotations
@@ -48,7 +54,14 @@ def main(argv: list[str] | None = None) -> int:
         token=os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN"),
     )
     args.output.write_text(evidence.model_dump_json(indent=2) + "\n")
-    print(f"Saved {len(evidence.artifacts)} artifact input audits to {args.output}.")
+    print(
+        f"Saved {len(evidence.artifacts)} artifact input audits to {args.output}: "
+        f"policyengine-uk {evidence.model_version} against build model "
+        f"{evidence.build_model_version} (core {evidence.build_core_version}); "
+        f"{len(evidence.dropped_columns)} dropped, "
+        f"{len(evidence.never_modelled_columns)} never-modelled, "
+        f"{len(evidence.defaulted_inputs)} defaulted."
+    )
     return 0
 
 

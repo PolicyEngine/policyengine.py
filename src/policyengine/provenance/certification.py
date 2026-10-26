@@ -458,7 +458,14 @@ def accepted_regional_mismatch(
     covers the national dataset only, and the regional file was built and
     calibrated under another model version. The record names both versions
     and the reason so the bundle, its TRO and every consumer can say so.
-    Returns ``(record, warning)``.
+
+    The evidence must bind the regional cut, its raw manifest bytes, its H5
+    bytes, its recorded build model and core, and the exact target model.
+    Certification recomputes the comparison against the build model: stored
+    columns the build model defines and the target does not are dropped and
+    always refuse; stored columns neither model defines are recorded as never
+    modelled; and target inputs the file does not store that were not build
+    inputs are recorded as defaulted. Returns ``(record, warning)``.
     """
 
     reason = reason.strip()
@@ -488,10 +495,25 @@ def accepted_regional_mismatch(
             "Regional input-surface evidence must bind the exact regional cut, "
             "raw manifest bytes and target model package/version."
         )
+    built_with_core, _ = _core_claims(regional_manifest)
+    if built_with is None or built_with_core is None:
+        raise CertificationError(
+            "The regional release records no build model and core versions, "
+            "so an accepted mismatch has no baseline to audit against."
+        )
+    if (audit.build_model_version, audit.build_core_version) != (
+        built_with,
+        built_with_core,
+    ):
+        raise CertificationError(
+            "Regional input-surface evidence must be measured against the "
+            f"regional release's build model, {model_package} {built_with} with "
+            f"policyengine-core {built_with_core}."
+        )
     expected_artifacts = {
         name: artifact
         for name, artifact in regional_manifest.artifacts.items()
-        if artifact.kind == "microdata" and artifact.path.endswith(".h5")
+        if artifact.kind == "microdata" and Path(artifact.path).suffix.lower() == ".h5"
     }
     if not expected_artifacts or set(audit.artifacts) != set(expected_artifacts):
         raise CertificationError(
@@ -543,6 +565,8 @@ def accepted_regional_mismatch(
             audit.model_variables,
             audit.model_inputs,
             audit.input_aliases,
+            build_model_variables=audit.build_model_variables,
+            build_model_inputs=audit.build_model_inputs,
         )
     except ValueError as exc:
         raise CertificationError(
@@ -550,6 +574,7 @@ def accepted_regional_mismatch(
         ) from exc
     if (
         audit.dropped_columns != comparison["dropped_columns"]
+        or audit.never_modelled_columns != comparison["never_modelled_columns"]
         or audit.defaulted_inputs != comparison["defaulted_inputs"]
     ):
         raise CertificationError(
@@ -557,14 +582,15 @@ def accepted_regional_mismatch(
         )
     if comparison["dropped_columns"]:
         raise CertificationError(
-            "Dropped regional input columns are refused: "
+            f"Dropped regional input columns are refused ({model_package} "
+            f"{built_with} defines them and {model_version} does not): "
             + ", ".join(comparison["dropped_columns"])
         )
     limitations = list(audit.limitations)
     try:
-        predates_vat_fix = built_with is not None and Version(built_with) < Version(
-            "2.135.7"
-        ) <= Version(model_version)
+        predates_vat_fix = (
+            Version(built_with) < Version("2.135.7") <= Version(model_version)
+        )
     except InvalidVersion as exc:
         raise CertificationError(
             "Regional model versions must be valid versions."
@@ -581,15 +607,17 @@ def accepted_regional_mismatch(
         "regional_manifest_sha256": regional_manifest_sha256,
         "defaulted_inputs": comparison["defaulted_inputs"],
         "dropped_columns": comparison["dropped_columns"],
+        "never_modelled_columns": comparison["never_modelled_columns"],
         "limitations": limitations,
         "evidence": audit.model_dump(mode="json", exclude_none=True),
     }
     warning = (
-        f"regional release: built with {model_package} "
-        f"{built_with or 'an unrecorded version'} and routed under "
-        f"{model_version} on an accepted mismatch ({reason}); area runs are "
-        f"uncertified; audited dropped columns: none; defaulted inputs: "
-        f"{', '.join(comparison['defaulted_inputs']) or 'none'}. "
+        f"regional release: built with {model_package} {built_with} and routed "
+        f"under {model_version} on an accepted mismatch ({reason}); area runs "
+        "are uncertified; audited dropped columns: none; never-modelled "
+        "columns (stored, defined by neither model): "
+        f"{len(comparison['never_modelled_columns'])}; inputs defaulted since "
+        f"the build model: {', '.join(comparison['defaulted_inputs']) or 'none'}. "
         + " ".join(limitations)
     )
     return record, warning
@@ -1613,9 +1641,11 @@ def certify_data_release(
     ``regional_manifest_uri`` is refused unless ``drop_regional_release``.
 
     ``regional_model_mismatch_reason`` (UK only) requires
-    ``regional_input_surface_evidence`` audited against the exact target model
-    and regional manifest/artifact bytes. Dropped columns are always refused;
-    every defaulted input and limitation is recorded in
+    ``regional_input_surface_evidence`` (``scripts/audit_regional_input_surface.py``)
+    bound to the regional manifest and artifact bytes, the regional build
+    model and core, and the exact target model. Dropped columns, which the
+    build model defines and the target does not, are always refused. Every
+    never-modelled column, defaulted input and limitation is recorded in
     ``regional_certification`` alongside the reason and both model versions.
     The core must still be covered; area receipts remain uncertified.
     """

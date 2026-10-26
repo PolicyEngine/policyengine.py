@@ -123,14 +123,18 @@ def main(argv=None) -> int:
             "UK only: route regions to a regional release that does not cover "
             "the pinned model, recording this reviewed reason in the bundle "
             "instead of refusing. Requires --regional-input-surface-evidence; "
-            "dropped columns refuse. The core must still be covered."
+            "dropped columns (defined by the regional build model, not by the "
+            "pinned model) refuse. The core must still be covered."
         ),
     )
     parser.add_argument("--no-generate", action="store_true")
     parser.add_argument(
         "--regional-input-surface-evidence",
         type=Path,
-        help="Audited JSON evidence bound to the regional bytes and exact target model.",
+        help=(
+            "Audit JSON from scripts/audit_regional_input_surface.py, bound to "
+            "the regional bytes, its build model and the exact target model."
+        ),
     )
     parser.add_argument("--no-changelog", action="store_true")
     parser.add_argument(

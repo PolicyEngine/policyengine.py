@@ -226,26 +226,40 @@ class RegionalInputArtifactEvidence(BaseModel):
 
 
 class RegionalInputSurfaceEvidence(BaseModel):
-    """An operator's audit of actual regional columns against an exact model.
+    """An operator's audit of actual regional columns against two exact models.
 
-    Surfaces are retained so certification recomputes the comparison rather
-    than trusting a declared zero-loss result. The artifact hashes identify
-    the bytes inspected by the auditor, not merely a model's possible inputs.
+    The baseline is the regional release's build model and core, as its
+    manifest records them; the target is the model the bundle certifies. Both
+    surfaces are retained in full so certification recomputes the comparison
+    rather than trusting a declared zero-loss result. The artifact hashes
+    identify the bytes inspected by the auditor, not merely a model's possible
+    inputs. Schema version 2 made the comparison relative to the build model;
+    version 1 evidence, which counted columns no model defines as dropped, is
+    refused.
     """
 
     model_config = {"extra": "forbid"}
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     regional_manifest_uri: str = Field(min_length=1)
     regional_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_package: str = Field(min_length=1)
     model_version: str = Field(min_length=1)
+    build_model_version: str = Field(min_length=1)
+    build_core_version: str = Field(min_length=1)
     artifacts: dict[str, RegionalInputArtifactEvidence] = Field(min_length=1)
     model_variables: list[str] = Field(min_length=1)
     model_inputs: list[str] = Field(min_length=1)
+    build_model_variables: list[str] = Field(min_length=1)
+    build_model_inputs: list[str] = Field(min_length=1)
     input_aliases: Optional[dict[str, str]] = None
     dropped_columns: list[str]
+    """Stored columns the build model defines and the target model does not."""
+    never_modelled_columns: list[str]
+    """Stored columns neither model defines; no model loads them."""
     defaulted_inputs: list[str]
+    """Target inputs the file does not store, after the target's input
+    aliases, that were not inputs of the build model."""
     audited_by: str = Field(min_length=1, pattern=r"\S")
     limitations: list[str] = Field(min_length=1)
 
@@ -267,6 +281,7 @@ class RegionalCertification(BaseModel):
     regional_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     defaulted_inputs: list[str]
     dropped_columns: list[str]
+    never_modelled_columns: list[str]
     limitations: list[str]
     evidence: RegionalInputSurfaceEvidence
 

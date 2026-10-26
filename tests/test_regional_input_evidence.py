@@ -23,6 +23,8 @@ VAT_LIMIT = (
     "the dense cut's VAT predates the policyengine-uk VAT factor fix "
     "(#2187, 2.135.7); the dashboard holds a VAT limit"
 )
+DENSE = "microcosm_uk_2024_25_dense"
+BUILD_CORE_VERSION = "3.33.3"
 DEFAULTED_INPUTS = [
     "local_bus_uncapped_single_fare",
     "salary_sacrifice_returned_to_income",
@@ -32,26 +34,36 @@ DEFAULTED_INPUTS = [
 def older_dense() -> dict:
     dense = _microcosm_uk_dense_payload()
     dense["build"]["built_with_model_package"]["version"] = "2.120.0"
+    dense["build"]["built_with_core_package"] = {
+        "name": "policyengine-core",
+        "version": BUILD_CORE_VERSION,
+    }
     dense["compatible_model_packages"] = [
         {"name": "policyengine-uk", "specifier": "==2.120.0"}
     ]
     return dense
 
 
+def manifest_sha256(dense: dict) -> str:
+    """The digest of the bytes ``_response`` serves for ``dense``."""
+    return hashlib.sha256(json.dumps(dense).encode()).hexdigest()
+
+
 def input_evidence(dense: dict | None = None) -> dict:
+    """An audit whose build model lacks the two inputs the target adds."""
     dense = older_dense() if dense is None else dense
-    name = "microcosm_uk_2024_25_dense"
-    artifact = dense["artifacts"][name]
+    artifact = dense["artifacts"][DENSE]
+    build = dense["build"]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "regional_manifest_uri": UK_DENSE_URI,
-        "regional_manifest_sha256": hashlib.sha256(
-            json.dumps(dense).encode()
-        ).hexdigest(),
+        "regional_manifest_sha256": manifest_sha256(dense),
         "model_package": "policyengine-uk",
         "model_version": UK_MODEL_VERSION,
+        "build_model_version": build["built_with_model_package"]["version"],
+        "build_core_version": build["built_with_core_package"]["version"],
         "artifacts": {
-            name: {
+            DENSE: {
                 key: artifact[key] for key in ("repo_id", "path", "revision", "sha256")
             }
             | {
@@ -61,11 +73,20 @@ def input_evidence(dense: dict | None = None) -> dict:
         },
         "model_variables": ["employment_income", *DEFAULTED_INPUTS],
         "model_inputs": ["employment_income", *DEFAULTED_INPUTS],
+        "build_model_variables": ["employment_income"],
+        "build_model_inputs": ["employment_income"],
         "dropped_columns": [],
+        "never_modelled_columns": [],
         "defaulted_inputs": DEFAULTED_INPUTS.copy(),
         "audited_by": "Budget regional input-surface review",
         "limitations": [VAT_LIMIT],
     }
+
+
+def store_column(evidence: dict, column: str) -> None:
+    measured = evidence["artifacts"][DENSE]
+    measured["columns"] = sorted([*measured["columns"], column])
+    measured["columns_by_period"]["2025"] = measured["columns"]
 
 
 def certify_with_evidence(bundle_path, evidence: dict, dense: dict | None = None):
@@ -149,25 +170,122 @@ def test_evidence_for_another_cut_bytes_or_model_refuses(tmp_path, field, wrong)
 )
 def test_evidence_for_other_artifact_bytes_or_identity_refuses(tmp_path, field, wrong):
     evidence = input_evidence()
-    evidence["artifacts"]["microcosm_uk_2024_25_dense"][field] = wrong
+    evidence["artifacts"][DENSE][field] = wrong
     with pytest.raises(CertificationError):
         certify_with_evidence(_tmp_bundle(tmp_path), evidence)
 
 
 def test_a_dropped_column_refuses_even_with_an_acceptance_reason(tmp_path):
+    """The build model defines the stored column and the target does not."""
     evidence = input_evidence()
-    evidence["artifacts"]["microcosm_uk_2024_25_dense"]["columns"].append(
-        "removed_model_variable"
-    )
-    evidence["artifacts"]["microcosm_uk_2024_25_dense"]["columns_by_period"][
-        "2025"
-    ].append("removed_model_variable")
+    store_column(evidence, "removed_model_variable")
+    evidence["build_model_variables"].append("removed_model_variable")
+    evidence["build_model_inputs"].append("removed_model_variable")
     evidence["dropped_columns"] = ["removed_model_variable"]
-    with pytest.raises(CertificationError, match="[Dd]ropped|removed_model_variable"):
+    with pytest.raises(CertificationError, match="[Dd]ropped.*removed_model_variable"):
         certify_with_evidence(_tmp_bundle(tmp_path), evidence)
 
 
-@pytest.mark.parametrize("field", ["dropped_columns", "defaulted_inputs"])
+def test_a_column_neither_model_defines_is_recorded_not_refused(tmp_path):
+    evidence = input_evidence()
+    store_column(evidence, "constituency_code_oa")
+    evidence["never_modelled_columns"] = ["constituency_code_oa"]
+    bundle_path = _tmp_bundle(tmp_path)
+
+    result = certify_with_evidence(bundle_path, evidence)
+
+    release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+    record = release["regional_certification"]
+    assert record["never_modelled_columns"] == ["constituency_code_oa"]
+    assert record["dropped_columns"] == []
+    assert record["evidence"] == evidence
+    (warning,) = [w for w in result.warnings if "accepted mismatch" in w]
+    assert "never-modelled columns (stored, defined by neither model): 1" in warning
+
+
+def test_an_input_absent_under_both_models_is_not_reported(tmp_path):
+    evidence = input_evidence()
+    for field in (
+        "model_variables",
+        "model_inputs",
+        "build_model_variables",
+        "build_model_inputs",
+    ):
+        evidence[field].append("legacy_input")
+    bundle_path = _tmp_bundle(tmp_path)
+    certify_with_evidence(bundle_path, evidence)
+    record = json.loads(bundle_path.read_text())["data_releases"]["uk"][
+        "regional_certification"
+    ]
+    assert record["defaulted_inputs"] == DEFAULTED_INPUTS
+
+    evidence["defaulted_inputs"] = sorted([*DEFAULTED_INPUTS, "legacy_input"])
+    with pytest.raises(CertificationError, match="disagrees"):
+        certify_with_evidence(_tmp_bundle(tmp_path), evidence)
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong"),
+    [("build_model_version", "2.120.1"), ("build_core_version", "3.33.4")],
+)
+def test_evidence_against_another_build_model_refuses(tmp_path, field, wrong):
+    evidence = input_evidence()
+    evidence[field] = wrong
+    with pytest.raises(CertificationError, match="build model"):
+        certify_with_evidence(_tmp_bundle(tmp_path), evidence)
+
+
+@pytest.mark.parametrize(
+    "unrecorded", ["built_with_model_package", "built_with_core_package"]
+)
+def test_a_regional_release_without_build_versions_has_no_baseline(
+    tmp_path, unrecorded
+):
+    dense = older_dense()
+    evidence = input_evidence(dense)
+    del dense["build"][unrecorded]
+    evidence["regional_manifest_sha256"] = manifest_sha256(dense)
+    with pytest.raises(CertificationError, match="baseline"):
+        certify_with_evidence(_tmp_bundle(tmp_path), evidence, dense)
+
+
+def test_version_1_evidence_refuses(tmp_path):
+    evidence = input_evidence()
+    evidence["schema_version"] = 1
+    with pytest.raises(CertificationError, match="schema_version"):
+        certify_with_evidence(_tmp_bundle(tmp_path), evidence)
+
+
+def test_an_h5_suffix_in_any_case_must_be_measured_as_the_audit_does():
+    from policyengine.provenance.certification import accepted_regional_mismatch
+    from policyengine.provenance.manifest import DataReleaseManifest
+
+    dense = older_dense()
+    dense["artifacts"][DENSE]["path"] = "microcosm_uk_2024_25_dense.H5"
+    evidence = input_evidence(dense)
+    manifest = DataReleaseManifest.model_validate(dense)
+
+    def accept(evidence):
+        return accepted_regional_mismatch(
+            manifest,
+            "policyengine-uk",
+            UK_MODEL_VERSION,
+            REASON,
+            regional_manifest_uri=UK_DENSE_URI,
+            regional_manifest_sha256=manifest_sha256(dense),
+            evidence=evidence,
+        )
+
+    record, _ = accept(evidence)
+    assert set(record["evidence"]["artifacts"]) == {DENSE}
+    evidence["artifacts"] = {"another_file": evidence["artifacts"][DENSE]}
+    with pytest.raises(CertificationError, match="every regional microdata"):
+        accept(evidence)
+
+
+@pytest.mark.parametrize(
+    "field", ["dropped_columns", "never_modelled_columns", "defaulted_inputs"]
+)
 def test_the_declared_comparison_must_match_the_measured_surfaces(tmp_path, field):
     evidence = input_evidence()
     evidence[field] = ["invented_variable"]
@@ -275,7 +393,7 @@ def test_limitations_and_evidence_are_in_hashed_bundle_material(tmp_path):
 
 def test_missing_period_measurements_refuse(tmp_path):
     evidence = input_evidence()
-    del evidence["artifacts"]["microcosm_uk_2024_25_dense"]["columns_by_period"]
+    del evidence["artifacts"][DENSE]["columns_by_period"]
     with pytest.raises(CertificationError):
         certify_with_evidence(_tmp_bundle(tmp_path), evidence)
 
