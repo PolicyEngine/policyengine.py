@@ -17,10 +17,13 @@ Microcosm PR #1348's handoff comparison, the build model is the baseline:
   them where the build model did not.
 
 Columns neither model defines, and inputs absent under both, are not changes.
-The build model is read in a throwaway ``uv run`` environment, so the audit
-needs ``uv`` and PyPI. Input moves are read from the installed target model's
-constructor, so an alias cannot make a supplied input look defaulted. No
-household values are included in the resulting audit.
+The build model is read in a throwaway ``uv run`` environment, from PyPI as it
+was when the release was built, so the audit needs ``uv`` and PyPI. Input
+moves are read from the installed target model's constructor, so an alias
+cannot make a supplied input look defaulted. Certification reads both models
+again (``verify_model_surfaces``); only the stored columns rest on the
+auditor's word, bound to each H5's SHA-256. No household values are included
+in the resulting audit.
 
 policyengine-uk 2.147.2 silently skips unknown columns in both dataset loaders;
 the audit must detect that loss before certification. See the ``continue``
@@ -40,6 +43,7 @@ import re
 import subprocess
 import textwrap
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -55,9 +59,24 @@ from policyengine.provenance.manifest import (
 UK_ENTITIES = ("person", "benunit", "household")
 #: The interpreter of the throwaway environment that reads the build model.
 BUILD_MODEL_PYTHON = "3.13"
-#: The caller's uv project settings, which must not reach that environment.
-BUILD_MODEL_STRIPPED_ENV = frozenset(
-    {"UV_FROZEN", "UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV"}
+#: The only index that environment resolves from.
+BUILD_MODEL_INDEX = "https://pypi.org/simple"
+#: uv settings that environment keeps: where uv caches and how it connects,
+#: none of which changes what resolves. Every other ``UV_*`` setting (indexes,
+#: constraints, overrides, the caller's project) and ``VIRTUAL_ENV`` are
+#: removed.
+BUILD_MODEL_KEPT_UV_SETTINGS = frozenset(
+    {
+        "UV_CACHE_DIR",
+        "UV_CONCURRENT_DOWNLOADS",
+        "UV_CONCURRENT_INSTALLS",
+        "UV_HTTP_TIMEOUT",
+        "UV_LINK_MODE",
+        "UV_NATIVE_TLS",
+        "UV_NO_PROGRESS",
+        "UV_PYTHON_CACHE_DIR",
+        "UV_PYTHON_INSTALL_DIR",
+    }
 )
 #: Runs in the build model's environment: the model API ``_model_surface``
 #: uses, and the package versions it actually imported.
@@ -281,16 +300,43 @@ def regional_build_versions(manifest: DataReleaseManifest) -> tuple[str, str]:
     return model.version, core.version
 
 
+def regional_build_cutoff(manifest: DataReleaseManifest) -> str | None:
+    """Return when the regional release was built, as a UTC ``--exclude-newer``.
+
+    The build model is read with the packages PyPI had then, so its other
+    dependencies resolve as they did at the build however they move on.
+    Rounded up to the second; ``None`` when the manifest records no
+    ``build.built_at``.
+    """
+    built_at = manifest.build.built_at if manifest.build is not None else None
+    if built_at is None:
+        return None
+    try:
+        moment = datetime.fromisoformat(built_at)
+    except ValueError as exc:
+        raise RegionalInputSurfaceError(
+            f"The regional manifest's build.built_at {built_at!r} is not a timestamp."
+        ) from exc
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    moment = moment.astimezone(UTC)
+    if moment.microsecond:
+        moment = moment.replace(microsecond=0) + timedelta(seconds=1)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _build_model_surface(
     model_version: str,
     core_version: str,
     run: Callable[..., Any] | None = None,
+    exclude_newer: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """Read the build model's variables and inputs in a throwaway environment.
 
-    ``uv run --no-project`` installs exactly the two pins from PyPI, without
-    the caller's uv project settings. The probe reports the versions it
-    imported, and any other resolution refuses.
+    ``uv run --no-project --no-config`` installs exactly the two pins from
+    PyPI, with packages uploaded before ``exclude_newer`` when it is given,
+    and without the caller's uv settings or project. The probe reports the
+    versions it imported, and any other resolution refuses.
     """
     run = run if run is not None else subprocess.run
     label = f"policyengine-uk {model_version} with policyengine-core {core_version}"
@@ -298,6 +344,10 @@ def _build_model_surface(
         "uv",
         "run",
         "--no-project",
+        "--no-config",
+        "--default-index",
+        BUILD_MODEL_INDEX,
+        *(["--exclude-newer", exclude_newer] if exclude_newer else []),
         "--python",
         BUILD_MODEL_PYTHON,
         "--with",
@@ -312,7 +362,8 @@ def _build_model_surface(
     env = {
         key: value
         for key, value in os.environ.items()
-        if key not in BUILD_MODEL_STRIPPED_ENV
+        if key != "VIRTUAL_ENV"
+        and (not key.startswith("UV_") or key in BUILD_MODEL_KEPT_UV_SETTINGS)
     }
     try:
         result = run(command, capture_output=True, text=True, check=True, env=env)
@@ -350,6 +401,65 @@ def _build_model_surface(
         sorted(_names(variables, "build_model_variables")),
         sorted(_names(inputs, "build_model_inputs")),
     )
+
+
+def _surface_difference(claimed: list[str], actual: list[str]) -> str:
+    extra = sorted(set(claimed) - set(actual))
+    missing = sorted(set(actual) - set(claimed))
+    shown = [f"+{name}" for name in extra[:5]] + [f"-{name}" for name in missing[:5]]
+    return ", ".join(shown) or "order or duplicates"
+
+
+def verify_model_surfaces(
+    evidence: RegionalInputSurfaceEvidence,
+    regional_manifest: DataReleaseManifest,
+    *,
+    run: Callable[..., Any] | None = None,
+) -> None:
+    """Refuse evidence whose model surfaces are not the models' own.
+
+    Certification calls this, so editing the evidence cannot hide a dropped
+    column. The target model must be installed at ``evidence.model_version``:
+    its variables, inputs and input aliases are read in process, as the audit
+    reads them. The build model is read again in a throwaway ``uv run``
+    environment, as the audit reads it. The stored columns cannot be re-read
+    without the H5: the auditor attests them, and the evidence binds them to
+    each H5's SHA-256.
+    """
+    variables, inputs, aliases = _model_surface(evidence.model_version)
+    target = f"policyengine-uk {evidence.model_version}"
+    for field, claimed, actual in (
+        ("model_variables", evidence.model_variables, variables),
+        ("model_inputs", evidence.model_inputs, inputs),
+    ):
+        if claimed != actual:
+            raise RegionalInputSurfaceError(
+                f"The evidence's {field} are not {target}'s "
+                f"({_surface_difference(claimed, actual)})."
+            )
+    if (evidence.input_aliases or {}) != aliases:
+        raise RegionalInputSurfaceError(
+            f"The evidence's input_aliases are not {target}'s."
+        )
+    build_variables, build_inputs = _build_model_surface(
+        evidence.build_model_version,
+        evidence.build_core_version,
+        run=run,
+        exclude_newer=regional_build_cutoff(regional_manifest),
+    )
+    build = (
+        f"policyengine-uk {evidence.build_model_version} with policyengine-core "
+        f"{evidence.build_core_version}"
+    )
+    for field, claimed, actual in (
+        ("build_model_variables", evidence.build_model_variables, build_variables),
+        ("build_model_inputs", evidence.build_model_inputs, build_inputs),
+    ):
+        if claimed != actual:
+            raise RegionalInputSurfaceError(
+                f"The evidence's {field} are not {build}'s "
+                f"({_surface_difference(claimed, actual)})."
+            )
 
 
 def _sha256_file(path: Path) -> str:
@@ -445,8 +555,9 @@ def measure_regional_input_surface(
     before and after metadata inspection. The installed policyengine-uk must
     be ``model_version``. The build model and core named by the manifest are
     read in a throwaway ``uv run`` environment through ``run``
-    (``subprocess.run`` by default). Dropped columns refuse. This reads no
-    unit values for output.
+    (``subprocess.run`` by default), resolving as of the manifest's
+    ``build.built_at``. Dropped columns refuse. This reads no unit values for
+    output.
     """
     # Imported lazily: the certification gate reuses compare_input_surface.
     from policyengine.provenance.certification import fetch_release_manifest
@@ -463,6 +574,7 @@ def measure_regional_input_surface(
         regional_manifest_uri, token=token
     )
     build_model_version, build_core_version = regional_build_versions(manifest)
+    build_cutoff = regional_build_cutoff(manifest)
     expected = {
         name: artifact
         for name, artifact in manifest.artifacts.items()
@@ -475,7 +587,7 @@ def measure_regional_input_surface(
         )
     variables, inputs, aliases = _model_surface(model_version)
     build_variables, build_inputs = _build_model_surface(
-        build_model_version, build_core_version, run=run
+        build_model_version, build_core_version, run=run, exclude_newer=build_cutoff
     )
     artifacts = {}
     for name, artifact in sorted(expected.items()):

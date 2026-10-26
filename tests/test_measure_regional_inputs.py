@@ -21,6 +21,9 @@ from policyengine.provenance.manifest import RegionalInputArtifactEvidence
 MODEL_VERSION = "2.147.2"
 BUILD_VERSION = "2.132.6"
 BUILD_CORE_VERSION = "3.33.3"
+BUILT_AT = "2026-10-19T02:07:51.099627+00:00"
+#: BUILT_AT in UTC, rounded up to the second: the probe's --exclude-newer.
+BUILD_CUTOFF = "2026-10-19T02:07:52Z"
 URI = (
     "hf://dataset/policyengine/regional@dense-cut/releases/dense/release_manifest.json"
 )
@@ -124,6 +127,7 @@ def _response(artifact_paths, build=None):
         "is_default": False,
         "default_datasets": {},
         "build": {
+            "built_at": BUILT_AT,
             "built_with_model_package": {
                 "name": "policyengine-uk",
                 "version": BUILD_VERSION,
@@ -295,11 +299,21 @@ def test_an_input_absent_under_both_models_is_not_reported(tmp_path, model):
     assert ABSENT_UNDER_BOTH in _measure(model, paths, run=computed).defaulted_inputs
 
 
-def test_build_model_is_read_at_its_manifest_pins_without_the_callers_project(
+def test_build_model_is_read_at_its_manifest_pins_without_the_callers_settings(
     tmp_path, model, monkeypatch
 ):
-    for name in ("UV_FROZEN", "UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV"):
-        monkeypatch.setenv(name, "from the caller's project")
+    for name in (
+        "UV_FROZEN",
+        "UV_PROJECT_ENVIRONMENT",
+        "VIRTUAL_ENV",
+        "UV_INDEX_URL",
+        "UV_EXTRA_INDEX_URL",
+        "UV_CONSTRAINT",
+        "UV_OVERRIDE",
+        "UV_CONFIG_FILE",
+    ):
+        monkeypatch.setenv(name, "from the caller")
+    monkeypatch.setenv("UV_CACHE_DIR", "/kept/cache")
     monkeypatch.setenv("KEPT_SETTING", "1")
     run = FakeRunner()
     _measure(model, {"dense": _h5(tmp_path / "dense.h5")}, run=run)
@@ -308,6 +322,11 @@ def test_build_model_is_read_at_its_manifest_pins_without_the_callers_project(
         "uv",
         "run",
         "--no-project",
+        "--no-config",
+        "--default-index",
+        "https://pypi.org/simple",
+        "--exclude-newer",
+        BUILD_CUTOFF,
         "--python",
         "3.13",
         "--with",
@@ -320,10 +339,49 @@ def test_build_model_is_read_at_its_manifest_pins_without_the_callers_project(
     ]
     assert command[-1] == model.BUILD_MODEL_PROBE
     assert kwargs["check"] is True
-    assert not {"UV_FROZEN", "UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV"} & set(
-        kwargs["env"]
-    )
+    assert "VIRTUAL_ENV" not in kwargs["env"]
+    assert {name for name in kwargs["env"] if name.startswith("UV_")} == {
+        "UV_CACHE_DIR"
+    }
     assert kwargs["env"]["KEPT_SETTING"] == "1"
+
+
+@pytest.mark.parametrize(
+    ("built_at", "cutoff"),
+    [
+        (BUILT_AT, BUILD_CUTOFF),
+        ("2026-10-19T03:07:51+01:00", "2026-10-19T02:07:51Z"),
+        ("2026-10-19T02:07:51", "2026-10-19T02:07:51Z"),
+        (None, None),
+    ],
+)
+def test_the_build_model_resolves_as_of_the_release_build_in_utc(
+    tmp_path, model, built_at, cutoff
+):
+    paths = {"dense": _h5(tmp_path / "dense.h5")}
+    response = _response(paths)
+    payload = json.loads(response.content)
+    payload["build"]["built_at"] = built_at
+    response.content = json.dumps(payload).encode()
+    run = FakeRunner()
+    _measure(model, paths, response, run=run)
+    ((command, _),) = run.calls
+    if cutoff is None:
+        assert "--exclude-newer" not in command
+    else:
+        assert command[command.index("--exclude-newer") + 1] == cutoff
+
+
+def test_an_unreadable_build_time_refuses_before_any_model_is_read(tmp_path, model):
+    paths = {"dense": _h5(tmp_path / "dense.h5")}
+    response = _response(paths)
+    payload = json.loads(response.content)
+    payload["build"]["built_at"] = "the day before the Budget"
+    response.content = json.dumps(payload).encode()
+    run = FakeRunner()
+    with pytest.raises(ValueError, match="built_at"):
+        _measure(model, paths, response, run=run)
+    assert run.calls == []
 
 
 @pytest.mark.parametrize(
@@ -494,6 +552,68 @@ def test_conditional_alias_cannot_silently_claim_a_supplied_input(
     paths = {"dense": _h5(tmp_path / "dense.h5")}
     with pytest.raises(ValueError, match="alias|move_values|conditional"):
         _measure(model, paths)
+
+
+def _manifest_with_build_time():
+    from policyengine.provenance.manifest import DataReleaseManifest
+
+    return DataReleaseManifest.model_validate(
+        {
+            "schema_version": 1,
+            "data_package": {"name": "microcosm-data", "version": "1"},
+            "build": {"built_at": BUILT_AT},
+        }
+    )
+
+
+def test_certification_rereads_both_models_and_accepts_their_own_surfaces(
+    tmp_path, model
+):
+    evidence = _measure(model, {"dense": _h5(tmp_path / "dense.h5")})
+    run = FakeRunner()
+    model.verify_model_surfaces(evidence, _manifest_with_build_time(), run=run)
+    ((command, _),) = run.calls
+    assert f"policyengine-uk=={BUILD_VERSION}" in command
+    assert command[command.index("--exclude-newer") + 1] == BUILD_CUTOFF
+
+
+@pytest.mark.parametrize(
+    ("field", "edit"),
+    [
+        # A stored column the build model defines, claimed as never modelled.
+        ("build_model_variables", lambda names: [n for n in names if n != REMOVED]),
+        # The same column claimed as a target variable, so not dropped.
+        ("model_variables", lambda names: sorted([*names, REMOVED])),
+        # New defaults claimed as build inputs, so not defaulted.
+        ("build_model_inputs", lambda names: sorted([*names, *DEFAULTS])),
+        ("model_inputs", lambda names: names[1:]),
+    ],
+)
+def test_an_edited_model_surface_refuses_at_certification(tmp_path, model, field, edit):
+    evidence = _measure(model, {"dense": _h5(tmp_path / "dense.h5")})
+    edited = evidence.model_copy(update={field: edit(getattr(evidence, field))})
+    with pytest.raises(ValueError, match=field):
+        model.verify_model_surfaces(
+            edited, _manifest_with_build_time(), run=FakeRunner()
+        )
+
+
+def test_edited_input_aliases_refuse_at_certification(tmp_path, model):
+    evidence = _measure(model, {"dense": _h5(tmp_path / "dense.h5")})
+    edited = evidence.model_copy(update={"input_aliases": {}})
+    with pytest.raises(ValueError, match="input_aliases"):
+        model.verify_model_surfaces(
+            edited, _manifest_with_build_time(), run=FakeRunner()
+        )
+
+
+def test_certification_needs_the_target_model_installed(tmp_path, model, monkeypatch):
+    evidence = _measure(model, {"dense": _h5(tmp_path / "dense.h5")})
+    monkeypatch.setattr(model, "version", lambda name: BUILD_VERSION)
+    with pytest.raises(ValueError, match=f"{BUILD_VERSION}.*{MODEL_VERSION}"):
+        model.verify_model_surfaces(
+            evidence, _manifest_with_build_time(), run=FakeRunner()
+        )
 
 
 def test_the_build_model_probe_reads_the_model_api_the_audit_uses():

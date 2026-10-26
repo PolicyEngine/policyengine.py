@@ -89,6 +89,44 @@ def store_column(evidence: dict, column: str) -> None:
     measured["columns_by_period"]["2025"] = measured["columns"]
 
 
+def fake_model_surfaces(monkeypatch) -> dict:
+    """Stand in for the two models certification re-reads, installing neither.
+
+    The surfaces match ``input_evidence``. Returns them, for a test to change
+    what a model reports, and the reads made.
+    """
+    from policyengine.provenance import regional_input_surface
+
+    surfaces: dict = {
+        "target": {
+            "variables": ["employment_income", *DEFAULTED_INPUTS],
+            "inputs": ["employment_income", *DEFAULTED_INPUTS],
+            "aliases": {},
+        },
+        "build": {"variables": ["employment_income"], "inputs": ["employment_income"]},
+        "reads": [],
+    }
+
+    def target_surface(model_version):
+        surfaces["reads"].append(("target", model_version))
+        target = surfaces["target"]
+        return sorted(target["variables"]), sorted(target["inputs"]), target["aliases"]
+
+    def build_surface(model_version, core_version, run=None, exclude_newer=None):
+        surfaces["reads"].append(("build", model_version, core_version, exclude_newer))
+        build = surfaces["build"]
+        return sorted(build["variables"]), sorted(build["inputs"])
+
+    monkeypatch.setattr(regional_input_surface, "_model_surface", target_surface)
+    monkeypatch.setattr(regional_input_surface, "_build_model_surface", build_surface)
+    return surfaces
+
+
+@pytest.fixture(autouse=True)
+def model_surfaces(monkeypatch):
+    return fake_model_surfaces(monkeypatch)
+
+
 def certify_with_evidence(bundle_path, evidence: dict, dense: dict | None = None):
     dense = older_dense() if dense is None else dense
     return _certify_uk(
@@ -175,15 +213,83 @@ def test_evidence_for_other_artifact_bytes_or_identity_refuses(tmp_path, field, 
         certify_with_evidence(_tmp_bundle(tmp_path), evidence)
 
 
-def test_a_dropped_column_refuses_even_with_an_acceptance_reason(tmp_path):
+def test_a_dropped_column_refuses_even_with_an_acceptance_reason(
+    tmp_path, model_surfaces
+):
     """The build model defines the stored column and the target does not."""
     evidence = input_evidence()
     store_column(evidence, "removed_model_variable")
-    evidence["build_model_variables"].append("removed_model_variable")
-    evidence["build_model_inputs"].append("removed_model_variable")
+    for field, surface in (
+        ("build_model_variables", "variables"),
+        ("build_model_inputs", "inputs"),
+    ):
+        evidence[field] = sorted([*evidence[field], "removed_model_variable"])
+        model_surfaces["build"][surface].append("removed_model_variable")
     evidence["dropped_columns"] = ["removed_model_variable"]
     with pytest.raises(CertificationError, match="[Dd]ropped.*removed_model_variable"):
         certify_with_evidence(_tmp_bundle(tmp_path), evidence)
+
+
+@pytest.mark.parametrize(
+    ("claim", "refused_field"),
+    [
+        ("never_modelled", "build_model_variables"),
+        ("a_target_variable", "model_variables"),
+    ],
+)
+def test_an_edited_evidence_file_cannot_hide_a_dropped_column(
+    tmp_path, model_surfaces, claim, refused_field
+):
+    """The lists in the file are checked against the models, not just each other."""
+    model_surfaces["build"]["variables"].append("removed_model_variable")
+    evidence = input_evidence()
+    store_column(evidence, "removed_model_variable")
+    if claim == "never_modelled":
+        evidence["never_modelled_columns"] = ["removed_model_variable"]
+    else:
+        for field in ("build_model_variables", "model_variables"):
+            evidence[field] = sorted([*evidence[field], "removed_model_variable"])
+    bundle_path = _tmp_bundle(tmp_path)
+    before = bundle_path.read_bytes()
+    with pytest.raises(CertificationError, match=f"re-reads.*{refused_field}"):
+        certify_with_evidence(bundle_path, evidence)
+    assert bundle_path.read_bytes() == before
+
+
+def test_an_edited_evidence_file_cannot_hide_a_default(tmp_path):
+    evidence = input_evidence()
+    for field in ("build_model_variables", "build_model_inputs"):
+        evidence[field] = sorted([*evidence[field], *DEFAULTED_INPUTS])
+    evidence["defaulted_inputs"] = []
+    with pytest.raises(CertificationError, match="re-reads.*build_model"):
+        certify_with_evidence(_tmp_bundle(tmp_path), evidence)
+
+
+def test_certification_reads_the_build_model_as_of_the_regional_build(
+    tmp_path, model_surfaces
+):
+    dense = older_dense()
+    dense["build"]["built_at"] = "2026-10-19T02:07:51.099627+00:00"
+    certify_with_evidence(_tmp_bundle(tmp_path), input_evidence(dense), dense)
+    assert model_surfaces["reads"] == [
+        ("target", UK_MODEL_VERSION),
+        ("build", "2.120.0", BUILD_CORE_VERSION, "2026-10-19T02:07:52Z"),
+    ]
+
+
+def test_certification_refuses_without_the_target_model_installed(
+    tmp_path, monkeypatch
+):
+    from policyengine.provenance import regional_input_surface
+
+    def not_installed(model_version):
+        raise regional_input_surface.RegionalInputSurfaceError(
+            f"Installed policyengine-uk 2.132.6 differs from requested {model_version}."
+        )
+
+    monkeypatch.setattr(regional_input_surface, "_model_surface", not_installed)
+    with pytest.raises(CertificationError, match="re-reads.*2.132.6 differs"):
+        certify_with_evidence(_tmp_bundle(tmp_path), input_evidence())
 
 
 def test_a_column_neither_model_defines_is_recorded_not_refused(tmp_path):
@@ -203,7 +309,7 @@ def test_a_column_neither_model_defines_is_recorded_not_refused(tmp_path):
     assert "never-modelled columns (stored, defined by neither model): 1" in warning
 
 
-def test_an_input_absent_under_both_models_is_not_reported(tmp_path):
+def test_an_input_absent_under_both_models_is_not_reported(tmp_path, model_surfaces):
     evidence = input_evidence()
     for field in (
         "model_variables",
@@ -211,7 +317,10 @@ def test_an_input_absent_under_both_models_is_not_reported(tmp_path):
         "build_model_variables",
         "build_model_inputs",
     ):
-        evidence[field].append("legacy_input")
+        evidence[field] = sorted([*evidence[field], "legacy_input"])
+    for model in ("target", "build"):
+        for surface in ("variables", "inputs"):
+            model_surfaces[model][surface].append("legacy_input")
     bundle_path = _tmp_bundle(tmp_path)
     certify_with_evidence(bundle_path, evidence)
     record = json.loads(bundle_path.read_text())["data_releases"]["uk"][

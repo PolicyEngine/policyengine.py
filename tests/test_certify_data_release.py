@@ -1437,11 +1437,17 @@ class TestUKRegionalCertification:
                 regional_manifest_uri=UK_DENSE_URI,
             )
 
-    def test__given_accepted_mismatch__then_routes_and_records_it(self, tmp_path):
+    def test__given_accepted_mismatch__then_routes_and_records_it(
+        self, tmp_path, monkeypatch
+    ):
         bundle_path = _tmp_bundle(tmp_path)
         reason = "area receipts are uncertified; the dense cut lags one release"
-        from tests.test_regional_input_evidence import input_evidence
+        from tests.test_regional_input_evidence import (
+            fake_model_surfaces,
+            input_evidence,
+        )
 
+        fake_model_surfaces(monkeypatch)
         evidence = input_evidence(self._older_dense())
 
         result = _certify_uk(
@@ -1510,10 +1516,14 @@ class TestUKRegionalCertification:
             )
 
     def test__given_an_accepted_mismatch__then_the_core_must_still_be_covered(
-        self, tmp_path
+        self, tmp_path, monkeypatch
     ):
-        from tests.test_regional_input_evidence import input_evidence
+        from tests.test_regional_input_evidence import (
+            fake_model_surfaces,
+            input_evidence,
+        )
 
+        fake_model_surfaces(monkeypatch)
         national = _microcosm_uk_national_payload()
         national["compatible_core_packages"] = [
             {"name": "policyengine-core", "specifier": "==3.33.0"}

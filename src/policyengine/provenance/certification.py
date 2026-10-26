@@ -461,11 +461,14 @@ def accepted_regional_mismatch(
 
     The evidence must bind the regional cut, its raw manifest bytes, its H5
     bytes, its recorded build model and core, and the exact target model.
-    Certification recomputes the comparison against the build model: stored
-    columns the build model defines and the target does not are dropped and
-    always refuse; stored columns neither model defines are recorded as never
-    modelled; and target inputs the file does not store that were not build
-    inputs are recorded as defaulted. Returns ``(record, warning)``.
+    Both models' surfaces in it are re-read from the models (the target must
+    be installed); the stored columns are the auditor's, bound to the H5
+    bytes. Certification recomputes the comparison against the build model:
+    stored columns the build model defines and the target does not are
+    dropped and always refuse; stored columns neither model defines are
+    recorded as never modelled; and target inputs the file does not store
+    that were not build inputs are recorded as defaulted. Returns
+    ``(record, warning)``.
     """
 
     reason = reason.strip()
@@ -557,8 +560,21 @@ def accepted_regional_mismatch(
         )
     if not all(item.strip() for item in audit.limitations):
         raise CertificationError("Regional evidence limitations must not be blank.")
-    from policyengine.provenance.regional_input_surface import compare_input_surface
+    from policyengine.provenance.regional_input_surface import (
+        compare_input_surface,
+        verify_model_surfaces,
+    )
 
+    try:
+        # The lists are re-read from the models themselves, so an edited
+        # evidence file cannot hide a drop; only the stored columns rest on
+        # the auditor's word, bound to each H5's SHA-256.
+        verify_model_surfaces(audit, regional_manifest)
+    except ValueError as exc:
+        raise CertificationError(
+            "Certifying an accepted regional mismatch re-reads both models' "
+            f"surfaces: {exc}"
+        ) from exc
     try:
         comparison = compare_input_surface(
             audit.artifacts,
