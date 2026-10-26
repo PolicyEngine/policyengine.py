@@ -28,7 +28,7 @@ UK_CERTIFIED_NATIONAL_URI = (
 )
 UK_CERTIFIED_LOCAL_AREA_URI = (
     "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
-    "@microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe"
+    "@microcosm-uk-2024-25-dense-20261026T105309Z-c9df4b86"
 )
 UK_AREA_REGION_COUNT = 650 + 361
 

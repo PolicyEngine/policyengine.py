@@ -65,6 +65,13 @@
           "revision": "microcosm-uk-2024-25-national-20261025T091414Z-a6299504",
           "sha256": "96756884d719fa969c2fbdf548f4e56b8311c0c3765c66b1bf9bc8fe862f718f"
         },
+        "microcosm_uk_2024_25_dense": {
+          "path": "microcosm_uk_2024_25_dense.h5",
+          "repo_id": "policyengine/populace-uk-private",
+          "repo_type": "dataset",
+          "revision": "microcosm-uk-2024-25-dense-20261026T105309Z-c9df4b86",
+          "sha256": "cb3712f25b76109ad27b7b0cdf5dee78c55d3b7f55ce7bf207ef1a191da2ae9a"
+        },
         "release_certification": {
           "path": "releases/microcosm-uk-2024-25-national/release_certification.json",
           "repo_id": "policyengine/populace-uk-private",
@@ -106,10 +113,19 @@
       },
       "policyengine_version": "6.11.0",
       "region_datasets": {
+        "constituency": {
+          "path_template": "microcosm_uk_2024_25_dense.h5"
+        },
+        "local_authority": {
+          "path_template": "microcosm_uk_2024_25_dense.h5"
+        },
         "national": {
           "path_template": "microcosm_uk_2024_25.h5"
         }
       },
+      "regional_release_kind": "local_area",
+      "regional_release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-uk-private/resolve/microcosm-uk-2024-25-dense-20261026T105309Z-c9df4b86/releases/microcosm-uk-2024-25-dense/release_manifest.json",
+      "regional_source_manifest_uri": "hf://dataset/policyengine/populace-uk-private@microcosm-uk-2024-25-dense-20261026T105309Z-c9df4b86/releases/microcosm-uk-2024-25-dense/release_manifest.json",
       "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-uk-private/resolve/microcosm-uk-2024-25-national-20261025T091414Z-a6299504/releases/microcosm-uk-2024-25-national/release_manifest.json",
       "schema_version": 1,
       "source_manifest_uri": "hf://dataset/policyengine/populace-uk-private@microcosm-uk-2024-25-national-20261025T091414Z-a6299504/releases/microcosm-uk-2024-25-national/release_manifest.json",
