@@ -24,7 +24,7 @@ from policyengine.provenance.manifest import CountryReleaseManifest
 # release its constituency and local-authority regions are routed to.
 UK_CERTIFIED_NATIONAL_URI = (
     "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
-    "@microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+    "@microcosm-uk-2024-25-national-20261025T091414Z-a6299504"
 )
 UK_CERTIFIED_LOCAL_AREA_URI = (
     "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
