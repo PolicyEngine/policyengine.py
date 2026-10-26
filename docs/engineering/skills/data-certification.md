@@ -83,7 +83,8 @@ Microcosm national release with one of:
   cut moves to a new policyengine-uk before a local-area cut on that version
   exists, a reviewer can accept retaining the older regional route. A reason
   and a byte-bound input-surface audit are both required. First audit the
-  actual local H5 with the exact target model installed:
+  actual local H5 with the exact target model installed. The audit also needs
+  `uv` and access to PyPI (see below):
 
   ```bash
   .venv/bin/python scripts/audit_regional_input_surface.py \
@@ -102,15 +103,38 @@ Microcosm national release with one of:
     --model-version 2.147.2
   ```
 
-  The comparison is ported from Microcosm #1348's
-  `tools/certify_uk_cut_in_policyengine_py.py`, and strengthened to inspect the
-  persisted entity-table columns, including each period and country-loader
-  aliases. Comparing the old model's input inventory alone cannot prove which
-  columns the file carries. The audit binds the regional release identity,
-  original manifest bytes, actual H5 bytes and exact target model version.
-  Certification refuses missing or mismatched evidence and **any dropped
-  column**. It records every defaulted input and the free-text limitations in
-  the validated `regional_certification`; the bundle hash binds that record.
+  The audit compares the entity-table columns the H5 actually stores, in each
+  period, with two models: the build model and core the regional manifest
+  records (`build.built_with_model_package` and
+  `build.built_with_core_package`), and the target. As in Microcosm #1348's
+  `tools/certify_uk_cut_in_policyengine_py.py`, the build model is the
+  baseline:
+
+  - **Dropped columns** are stored columns the build model defines and the
+    target does not. The target's loaders skip them. Certification refuses
+    **any dropped column**; there is no override.
+  - **Never-modelled columns** are stored columns neither model defines:
+    Microcosm's own area codes (among them `constituency_code_oa` and
+    `la_code_oa`), build and source ids, clone indices and SPI donor fields.
+    No model ever loaded them, so they are recorded, not refused.
+  - **Defaulted inputs** are target inputs the file does not store, after the
+    target's input aliases, that were not inputs of the build model. Area runs
+    default them where the build model did not. Inputs absent under both
+    models are not changes.
+
+  The audit reads the build model's variables and inputs in a throwaway
+  `uv run --no-project --with policyengine-uk==<build> --with
+  policyengine-core==<core>` environment, so it needs `uv` and access to
+  PyPI. A regional manifest that does not record both build versions has no
+  baseline, and the audit refuses it. The evidence binds the regional release
+  identity, original manifest bytes, actual H5 bytes, both build versions and
+  the exact target model version, and keeps both models' full variable and
+  input lists. Certification recomputes all three lists from them and refuses
+  missing or mismatched evidence, including schema-version-1 evidence from
+  before the comparison was relative to the build model. It records the
+  never-modelled columns, every defaulted input and the free-text limitations
+  in the validated `regional_certification`; the bundle hash binds that
+  record.
 
   The policyengine-uk 2.147.2 dataset loaders silently skip columns absent
   from the model's variables: both the
@@ -130,23 +154,33 @@ Microcosm national release with one of:
   The regional core checks still apply. Re-certifying with
   `--drop-regional-release` removes the regional record, routes and artifact.
 
-  For the Budget route, the measured **model-inventory comparison** from
-  2.132.6 to 2.147.2 has no dropped names and these 16 new pure inputs:
-  `additional_residential_property_purchased`, `defined_benefit_pension_share`,
-  `directly_held_shares`, `early_years_school_start_deferred`,
-  `is_full_year_category_a_director`, `local_bus_uncapped_single_fare`,
-  `non_residential_property_purchased`, `non_residential_property_secured_debt`,
-  `other_residential_property_secured_debt`,
-  `pension_annual_allowance_taxable_lump_sum_death_benefits`,
-  `pension_contributions_via_salary_sacrifice_pre_2015`, `pip_dl_points`,
-  `pip_m_points`, `salary_sacrifice_returned_to_income`,
-  `unit_and_investment_trusts`, and `war_widows_pension_reported`.
-  Both `salary_sacrifice_returned_to_income` and
-  `local_bus_uncapped_single_fare` default in that comparison. This is not an
-  audit of cut `microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe`:
-  its private H5 was unavailable to this implementation job without
-  authentication. Certification must use the complete list measured from the
-  actual cut by the audit above, including any further missing stored inputs.
+  For the Budget route, the audit of dense cut
+  `microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe`, built with
+  policyengine-uk 2.132.6 and policyengine-core 3.33.3, measured in #699:
+
+  - **83 never-modelled columns**, and **no dropped column** under either
+    2.147.2 or 2.151.0. The first version of this audit counted those 83 as
+    dropped and refused the cut, even against its own build model.
+  - **16 new defaults under 2.147.2:**
+    `additional_residential_property_purchased`,
+    `defined_benefit_pension_share`, `directly_held_shares`,
+    `early_years_school_start_deferred`, `is_full_year_category_a_director`,
+    `local_bus_uncapped_single_fare`, `non_residential_property_purchased`,
+    `non_residential_property_secured_debt`,
+    `other_residential_property_secured_debt`,
+    `pension_annual_allowance_taxable_lump_sum_death_benefits`,
+    `pension_contributions_via_salary_sacrifice_pre_2015`, `pip_dl_points`,
+    `pip_m_points`, `salary_sacrifice_returned_to_income`,
+    `unit_and_investment_trusts`, and `war_widows_pension_reported`.
+  - **37 new defaults under 2.151.0:** those 16 and 21 more. The 21 include
+    the gambling duty inputs, liquid and solid fuel consumption, and bonus
+    sacrifice (`pension_contributions_via_bonus_sacrifice`), so area
+    breakdowns of those measures use defaults on 2.151.0. Record that as a
+    `--limitation` if the route is used on 2.151.0.
+  - Another **123 inputs already defaulted under 2.132.6**. They are absent
+    under both models, so they are not changes; the first version listed
+    them too, giving 139 defaults under 2.147.2 and 160 under 2.151.0.
+
   Record the pre-fix VAT limitation shown above for this dense cut.
 
   After the receipt schema changes, refresh the Budget dashboard's vendored
