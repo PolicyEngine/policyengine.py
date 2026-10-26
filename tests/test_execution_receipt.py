@@ -500,39 +500,78 @@ def _bundle_with_regional_acceptance(dataset_file):
     return bundle
 
 
-@pytest.mark.parametrize("area", [False, True], ids=["national", "area"])
-def test_receipt_exposes_regional_acceptance_without_widening_certification(
-    dataset_file, schema_validator, area
+def test_an_area_receipt_carries_a_digest_bound_summary_of_the_exception(
+    dataset_file, schema_validator
 ):
-    from policyengine.provenance.manifest import RegionalCertification
+    from policyengine.provenance.receipt import regional_certification_identity
 
     bundle = _bundle_with_regional_acceptance(dataset_file)
-    record = bundle["data_releases"]["uk"]
+    record = bundle["data_releases"]["uk"]["regional_certification"]
 
-    receipt = _build(dataset_file, bundle, dataset="area_file" if area else None)
+    receipt = _build(dataset_file, bundle, dataset="area_file")
 
     payload = json.loads(receipt.model_dump_json(exclude_none=True))
-    assert payload["regional_certification"] == RegionalCertification.model_validate(
-        record["regional_certification"]
-    ).model_dump(mode="json", exclude_none=True)
-    assert receipt.certification_status == ("uncertified" if area else "certified")
-    assert (receipt.certificate is None) is area
-    assert receipt.data.build_model_version == (
-        "2.132.6" if area else record["certification"]["built_with_model_version"]
-    )
+    summary = payload["regional_certification"]
+    assert summary == regional_certification_identity(record).canonical_payload()
+    assert summary["record_sha256"] == content_sha256(record)
+    assert summary["never_modelled_columns"] == ["constituency_code_oa"]
+    assert summary["limitations"] == record["limitations"]
+    # The evidence's model surfaces stay in the bundle and TRACE.
+    assert "evidence" not in summary
+    assert "model_variables" not in json.dumps(payload)
+    assert receipt.certification_status == "uncertified"
+    assert receipt.certificate is None
+    assert receipt.data.build_model_version == "2.132.6"
     schema_validator.validate(payload)
     restored = ExecutionReceipt.model_validate_json(receipt.model_dump_json())
     assert restored.regional_certification == receipt.regional_certification
     assert restored.receipt_sha256 == receipt.receipt_sha256
 
 
-def test_regional_limitations_are_bound_to_receipt_identity(dataset_file):
+def test_a_national_receipt_leaves_the_exception_to_its_certificate(dataset_file):
+    """Review of #699: certificate_sha256 already digests the regional record."""
+    bundle = _bundle_with_regional_acceptance(dataset_file)
+    record = bundle["data_releases"]["uk"]
+
+    receipt = _build(dataset_file, bundle)
+
+    assert receipt.certification_status == "certified"
+    assert "regional_certification" not in receipt.canonical_payload()
+    assert receipt.certificate.certificate_sha256 == certificate_sha256(record)
+    assert verify_certificate(receipt, bundle) == []
+    changed = copy.deepcopy(bundle)
+    changed["data_releases"]["uk"]["regional_certification"]["limitations"].append(
+        "Additional accepted area limitation."
+    )
+    assert any(
+        "certificate_sha256" in problem
+        for problem in verify_certificate(receipt, changed)
+    )
+
+
+def test_a_certified_receipt_cannot_carry_the_regional_exception(dataset_file):
+    bundle = _bundle_with_regional_acceptance(dataset_file)
+    area = _build(dataset_file, bundle, dataset="area_file")
+    payload = _build(dataset_file, bundle).model_dump(mode="json")
+    payload["regional_certification"] = area.regional_certification.model_dump(
+        mode="json"
+    )
+    with pytest.raises(ValidationError, match="regional_certification"):
+        ExecutionReceipt.model_validate(payload)
+
+
+@pytest.mark.parametrize("change", ["limitations", "evidence"])
+def test_the_regional_record_is_bound_to_area_receipt_identity(dataset_file, change):
     bundle = _bundle_with_regional_acceptance(dataset_file)
     receipt = _build(dataset_file, bundle, dataset="area_file")
     changed_bundle = copy.deepcopy(bundle)
     record = changed_bundle["data_releases"]["uk"]["regional_certification"]
-    record["limitations"].append("Additional accepted area limitation.")
-    record["evidence"]["limitations"].append("Additional accepted area limitation.")
+    if change == "limitations":
+        record["limitations"].append("Additional accepted area limitation.")
+        record["evidence"]["limitations"].append("Additional accepted area limitation.")
+    else:
+        # Not in the summary, but in the record its digest covers.
+        record["evidence"]["audited_by"] = "Another reviewer"
 
     changed = _build(dataset_file, changed_bundle, dataset="area_file")
 
@@ -540,17 +579,32 @@ def test_regional_limitations_are_bound_to_receipt_identity(dataset_file):
     assert changed.receipt_sha256 != receipt.receipt_sha256
 
 
-def test_certificate_verification_checks_the_exposed_regional_record(dataset_file):
+def test_regional_verification_checks_an_area_receipt_against_the_bundle(
+    dataset_file,
+):
+    from policyengine.provenance.receipt import verify_regional_certification
+
     bundle = _bundle_with_regional_acceptance(dataset_file)
-    receipt = _build(dataset_file, bundle)
+    receipt = _build(dataset_file, bundle, dataset="area_file")
+    assert verify_regional_certification(receipt, bundle) == []
+
     payload = receipt.model_dump(mode="json")
     payload["regional_certification"]["accepted_reason"] = "A different acceptance."
-    changed = ExecutionReceipt.model_validate(payload)
+    claimed = ExecutionReceipt.model_validate(payload)
+    assert verify_regional_certification(claimed, bundle) == [
+        "regional_certification.accepted_reason differs from the bundle's record"
+    ]
 
-    assert any(
-        "regional_certification" in issue
-        for issue in verify_certificate(changed, bundle)
-    )
+    edited = copy.deepcopy(bundle)
+    edited["data_releases"]["uk"]["regional_certification"]["evidence"][
+        "audited_by"
+    ] = "Another reviewer"
+    assert verify_regional_certification(receipt, edited) == [
+        "regional_certification.record_sha256 differs from the bundle's record"
+    ]
+    assert verify_regional_certification(_build(dataset_file, bundle), bundle) == [
+        "the receipt carries no regional_certification"
+    ]
 
 
 def test_trace_exposes_regional_acceptance_separately_from_national(dataset_file):

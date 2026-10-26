@@ -457,8 +457,9 @@
       "title": "ReformIdentity",
       "type": "object"
     },
-    "RegionalCertification": {
-      "description": "A reviewer's acceptance of a regional release on another model version.\n\nWritten only by ``certify-data --accept-regional-model-mismatch``: the\nregional release neither was built with nor claims the certified model,\nand area runs on it are uncertified.",
+    "RegionalCertificationIdentity": {
+      "additionalProperties": false,
+      "description": "The accepted regional model mismatch an area run used, bound by digest.\n\nIt summarises the bundle's ``regional_certification`` record. The record's\nevidence (both models' variable and input lists and the measured columns)\nstays in the bundle and its TRACE TRO; ``record_sha256`` binds it.",
       "properties": {
         "accepted_reason": {
           "title": "Accepted Reason",
@@ -466,7 +467,6 @@
         },
         "area_receipts": {
           "const": "uncertified",
-          "default": "uncertified",
           "title": "Area Receipts",
           "type": "string"
         },
@@ -480,9 +480,11 @@
             }
           ],
           "default": null,
+          "description": "The model the regional release was built with.",
           "title": "Built With Model Version"
         },
         "certified_for_model_version": {
+          "description": "The model the national certificate covers and area runs use.",
           "title": "Certified For Model Version",
           "type": "string"
         },
@@ -492,6 +494,7 @@
           "type": "string"
         },
         "defaulted_inputs": {
+          "description": "Inputs area runs default that the regional file does not store and its build model did not take as inputs.",
           "items": {
             "type": "string"
           },
@@ -505,9 +508,6 @@
           "title": "Dropped Columns",
           "type": "array"
         },
-        "evidence": {
-          "$ref": "#/$defs/RegionalInputSurfaceEvidence"
-        },
         "limitations": {
           "items": {
             "type": "string"
@@ -516,11 +516,18 @@
           "type": "array"
         },
         "never_modelled_columns": {
+          "description": "Stored columns neither model defines.",
           "items": {
             "type": "string"
           },
           "title": "Never Modelled Columns",
           "type": "array"
+        },
+        "record_sha256": {
+          "description": "RFC 8785 SHA-256 of the bundle manifest's data_releases.<country>.regional_certification record, its evidence included (see regional_certification_identity()).",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Record Sha256",
+          "type": "string"
         },
         "regional_manifest_sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -536,238 +543,16 @@
         "compatibility_basis",
         "certified_for_model_version",
         "accepted_reason",
+        "area_receipts",
         "regional_manifest_uri",
         "regional_manifest_sha256",
         "defaulted_inputs",
         "dropped_columns",
         "never_modelled_columns",
         "limitations",
-        "evidence"
+        "record_sha256"
       ],
-      "title": "RegionalCertification",
-      "type": "object"
-    },
-    "RegionalInputArtifactEvidence": {
-      "additionalProperties": false,
-      "description": "Measured columns of one byte-verified regional H5 artifact.",
-      "properties": {
-        "columns": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Columns",
-          "type": "array"
-        },
-        "columns_by_period": {
-          "additionalProperties": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "minProperties": 1,
-          "title": "Columns By Period",
-          "type": "object"
-        },
-        "path": {
-          "minLength": 1,
-          "title": "Path",
-          "type": "string"
-        },
-        "repo_id": {
-          "minLength": 1,
-          "title": "Repo Id",
-          "type": "string"
-        },
-        "repo_type": {
-          "anyOf": [
-            {
-              "enum": [
-                "model",
-                "dataset"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Repo Type"
-        },
-        "revision": {
-          "minLength": 1,
-          "title": "Revision",
-          "type": "string"
-        },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Sha256",
-          "type": "string"
-        }
-      },
-      "required": [
-        "repo_id",
-        "path",
-        "revision",
-        "sha256",
-        "columns",
-        "columns_by_period"
-      ],
-      "title": "RegionalInputArtifactEvidence",
-      "type": "object"
-    },
-    "RegionalInputSurfaceEvidence": {
-      "additionalProperties": false,
-      "description": "An operator's audit of actual regional columns against two exact models.\n\nThe baseline is the regional release's build model and core, as its\nmanifest records them; the target is the model the bundle certifies. Both\nsurfaces are retained in full so certification recomputes the comparison\nrather than trusting a declared zero-loss result. The artifact hashes\nidentify the bytes inspected by the auditor, not merely a model's possible\ninputs. Schema version 2 made the comparison relative to the build model;\nversion 1 evidence, which counted columns no model defines as dropped, is\nrefused.",
-      "properties": {
-        "artifacts": {
-          "additionalProperties": {
-            "$ref": "#/$defs/RegionalInputArtifactEvidence"
-          },
-          "minProperties": 1,
-          "title": "Artifacts",
-          "type": "object"
-        },
-        "audited_by": {
-          "minLength": 1,
-          "pattern": "\\S",
-          "title": "Audited By",
-          "type": "string"
-        },
-        "build_core_version": {
-          "minLength": 1,
-          "title": "Build Core Version",
-          "type": "string"
-        },
-        "build_model_inputs": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Build Model Inputs",
-          "type": "array"
-        },
-        "build_model_variables": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Build Model Variables",
-          "type": "array"
-        },
-        "build_model_version": {
-          "minLength": 1,
-          "title": "Build Model Version",
-          "type": "string"
-        },
-        "defaulted_inputs": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Defaulted Inputs",
-          "type": "array"
-        },
-        "dropped_columns": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Dropped Columns",
-          "type": "array"
-        },
-        "input_aliases": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Input Aliases"
-        },
-        "limitations": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Limitations",
-          "type": "array"
-        },
-        "model_inputs": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Model Inputs",
-          "type": "array"
-        },
-        "model_package": {
-          "minLength": 1,
-          "title": "Model Package",
-          "type": "string"
-        },
-        "model_variables": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Model Variables",
-          "type": "array"
-        },
-        "model_version": {
-          "minLength": 1,
-          "title": "Model Version",
-          "type": "string"
-        },
-        "never_modelled_columns": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Never Modelled Columns",
-          "type": "array"
-        },
-        "regional_manifest_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Regional Manifest Sha256",
-          "type": "string"
-        },
-        "regional_manifest_uri": {
-          "minLength": 1,
-          "title": "Regional Manifest Uri",
-          "type": "string"
-        },
-        "schema_version": {
-          "const": 2,
-          "default": 2,
-          "title": "Schema Version",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "regional_manifest_uri",
-        "regional_manifest_sha256",
-        "model_package",
-        "model_version",
-        "build_model_version",
-        "build_core_version",
-        "artifacts",
-        "model_variables",
-        "model_inputs",
-        "build_model_variables",
-        "build_model_inputs",
-        "dropped_columns",
-        "never_modelled_columns",
-        "defaulted_inputs",
-        "audited_by",
-        "limitations"
-      ],
-      "title": "RegionalInputSurfaceEvidence",
+      "title": "RegionalCertificationIdentity",
       "type": "object"
     },
     "RuntimeContext": {
@@ -971,14 +756,14 @@
     "regional_certification": {
       "anyOf": [
         {
-          "$ref": "#/$defs/RegionalCertification"
+          "$ref": "#/$defs/RegionalCertificationIdentity"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "The bundle's accepted regional model mismatch, including its exact regional manifest and artifact identity, measured input surface, acceptance reason and limitations. This records an exception for uncertified area runs and does not widen the national certificate."
+      "description": "Present only on a run of the dataset the bundle routes area regions to on an accepted model mismatch (an area run), which is uncertified: the exception's model versions, reason, audited lists and limitations, and the digest of its full record, evidence included. It does not widen the national certificate."
     },
     "runtime": {
       "anyOf": [
@@ -1039,7 +824,8 @@
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?, regional_certification?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "outputs_sha256": "the canonical output payload the receipt binds",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
-    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {\"$nonfinite\": \"Infinity\"} or {\"$nonfinite\": \"-Infinity\"}, and a payload may not use the key $nonfinite itself"
+    "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {\"$nonfinite\": \"Infinity\"} or {\"$nonfinite\": \"-Infinity\"}, and a payload may not use the key $nonfinite itself",
+    "regional_certification.record_sha256": "the bundle manifest's data_releases.<country_id>.regional_certification record, its evidence included"
   },
   "x-policyengine-rules": [
     "years is sorted ascending with no duplicates, and each year is written as an integer (2027, not 2027.0).",
@@ -1053,6 +839,8 @@
     "reform/baseline kind current_law has no representation or reform_sha256 and binding content; kind reform has both.",
     "wheel_sha256 and wheel_sha256_evidence are present together or not at all.",
     "certification_status certified requires each of wrapper, model and core to have install_origin absent or archive, or install_origin directory or vcs with wheel_sha256_evidence installed_record_verified; an editable install is never certified.",
-    "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing."
+    "A consumer trusts a certificate only after checking it against the data_releases.<country_id> record of the published policyengine manifest for certificate.bundle_version (verify_certificate()): certificate_sha256 is that record's digest, every other member of certificate except certificate_source, qualification_receipt_sha256 and tro_composition_fingerprint equals what the record states, and data equals the data identity the record determines. certificate_source is the producer's statement and proves nothing.",
+    "regional_certification is present only when data is the artifact that the bundle's accepted regional model mismatch (data_releases.<country_id>.regional_certification) covers: an area run, which is uncertified. A certified receipt carries none.",
+    "A consumer checks regional_certification against the data_releases.<country_id>.regional_certification record of the manifest the run used (verify_regional_certification()): record_sha256 is that record's digest, every other member equals what the record states, and data is the regional artifact the record covers."
   ]
 }
