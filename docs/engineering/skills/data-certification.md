@@ -123,18 +123,29 @@ Microcosm national release with one of:
     models are not changes.
 
   The audit reads the build model's variables and inputs in a throwaway
-  `uv run --no-project --with policyengine-uk==<build> --with
+  `uv run --no-project --no-config --default-index https://pypi.org/simple
+  --exclude-newer <build.built_at> --with policyengine-uk==<build> --with
   policyengine-core==<core>` environment, so it needs `uv` and access to
-  PyPI. A regional manifest that does not record both build versions has no
-  baseline, and the audit refuses it. The evidence binds the regional release
-  identity, original manifest bytes, actual H5 bytes, both build versions and
-  the exact target model version, and keeps both models' full variable and
-  input lists. Certification recomputes all three lists from them and refuses
-  missing or mismatched evidence, including schema-version-1 evidence from
-  before the comparison was relative to the build model. It records the
-  never-modelled columns, every defaulted input and the free-text limitations
-  in the validated `regional_certification`; the bundle hash binds that
-  record.
+  PyPI. `--exclude-newer` is the manifest's build time, so the build model's
+  other dependencies resolve as they did then, and every `UV_*` setting
+  except the cache, Python-install and connection ones is removed. A regional
+  manifest that does not record both build versions has no baseline, and the
+  audit refuses it. The evidence binds the regional release identity,
+  original manifest bytes, actual H5 bytes, both build versions and the exact
+  target model version, and keeps both models' full variable and input lists.
+
+  Certification does not trust those lists. It reads the target model in
+  process, so the environment that runs `certify-data` must have the target
+  policyengine-uk installed, as the audit's does, and reads the build model
+  again with `uv`; any list or input alias that differs refuses. Only the
+  stored columns rest on the auditor's word: they cannot be re-read without
+  the H5, and the evidence binds them to its SHA-256. Certification then
+  recomputes all three lists and refuses missing or mismatched evidence,
+  including evidence without `schema_version: 2`, from before the comparison
+  was relative to the build model. It records the never-modelled columns,
+  every defaulted input and the free-text limitations in the validated
+  `regional_certification`, and adds one limitation naming the defaulted
+  inputs; the bundle hash binds that record.
 
   The policyengine-uk 2.147.2 dataset loaders silently skip columns absent
   from the model's variables: both the
@@ -146,11 +157,15 @@ Microcosm national release with one of:
   certification.
 
   The national certificate never widens. Area status remains `uncertified`:
-  the certificate still covers the national dataset only (#685). TRACE and
-  execution receipts expose the regional identity, build model, acceptance,
-  reason, input-surface result and limitations separately from the national
-  certification. The flag remains UK only; an empty reason, a release that
-  already covers the target model, or a missing regional release refuses.
+  the certificate still covers the national dataset only (#685). TRACE
+  carries the whole regional record, evidence included, separately from the
+  national certification. An area run's execution receipt carries a summary
+  of it (both model versions, the reason, the three lists and the
+  limitations) and `record_sha256`, the digest of the whole record; check it
+  with `verify_regional_certification`. A national receipt carries none: its
+  `certificate_sha256` already digests the record. The flag remains UK only;
+  an empty or invisible reason, a release that already covers the target
+  model, or a missing regional release refuses.
   The regional core checks still apply. Re-certifying with
   `--drop-regional-release` removes the regional record, routes and artifact.
 
@@ -175,8 +190,8 @@ Microcosm national release with one of:
   - **37 new defaults under 2.151.0:** those 16 and 21 more. The 21 include
     the gambling duty inputs, liquid and solid fuel consumption, and bonus
     sacrifice (`pension_contributions_via_bonus_sacrifice`), so area
-    breakdowns of those measures use defaults on 2.151.0. Record that as a
-    `--limitation` if the route is used on 2.151.0.
+    breakdowns of those measures use defaults on 2.151.0. Certification
+    names every defaulted input in the limitations.
   - Another **123 inputs already defaulted under 2.132.6**. They are absent
     under both models, so they are not changes; the first version listed
     them too, giving 139 defaults under 2.147.2 and 160 under 2.151.0.

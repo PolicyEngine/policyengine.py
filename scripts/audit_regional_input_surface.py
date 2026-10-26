@@ -4,11 +4,12 @@ Run in an environment with the exact requested policyengine-uk version and
 PyTables installed. Supply the H5 files from the immutable regional manifest;
 the audit verifies their hashes and downloads no microdata. The baseline is the
 build model and core the regional manifest records: the audit reads their
-variables in a throwaway ``uv run --with`` environment, so it needs ``uv``
-and PyPI. Columns the build model defines and the target does not refuse;
-columns neither model defines are recorded as never modelled; and target
-inputs the files do not store that were not build inputs are recorded as
-defaulted.
+variables in a throwaway ``uv run --with`` environment, resolved from PyPI as
+of the manifest's build time, so it needs ``uv`` and PyPI. Certification reads
+both models again. Columns the build model defines and the target does not
+refuse; columns neither model defines are recorded as never modelled; and
+target inputs the files do not store that were not build inputs are recorded
+as defaulted.
 """
 
 from __future__ import annotations
