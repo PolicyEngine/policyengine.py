@@ -438,6 +438,13 @@ class RegionalCertificationIdentity(_Contract):
     never_modelled_columns: list[str] = Field(
         description="Stored columns neither model defines."
     )
+    stored_columns: Literal["auditor_attested"] = Field(
+        description=(
+            "How the stored-column lists are known: auditor_attested means "
+            "certification re-read both models but not the H5s, so the lists "
+            "are the auditor's, bound to each H5's SHA-256."
+        )
+    )
     limitations: list[str]
     record_sha256: str = Field(
         pattern=SHA256_PATTERN,

@@ -470,6 +470,7 @@ def _bundle_with_regional_acceptance(dataset_file):
         "defaulted_inputs": defaulted,
         "dropped_columns": [],
         "never_modelled_columns": ["constituency_code_oa"],
+        "stored_columns": "auditor_attested",
         "limitations": limitations,
         "evidence": {
             "schema_version": 2,
@@ -515,6 +516,7 @@ def test_an_area_receipt_carries_a_digest_bound_summary_of_the_exception(
     assert summary == regional_certification_identity(record).canonical_payload()
     assert summary["record_sha256"] == content_sha256(record)
     assert summary["never_modelled_columns"] == ["constituency_code_oa"]
+    assert summary["stored_columns"] == "auditor_attested"
     assert summary["limitations"] == record["limitations"]
     # The evidence's model surfaces stay in the bundle and TRACE.
     assert "evidence" not in summary

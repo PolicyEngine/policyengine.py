@@ -1419,6 +1419,7 @@ class TestUKRegionalCertification:
             "name": "policyengine-core",
             "version": "3.33.3",
         }
+        dense["build"]["built_at"] = "2026-10-19T02:07:51+00:00"
         dense["compatible_model_packages"] = [
             {"name": "policyengine-uk", "specifier": "==2.120.0"}
         ]
@@ -1477,6 +1478,7 @@ class TestUKRegionalCertification:
             "defaulted_inputs": evidence["defaulted_inputs"],
             "dropped_columns": [],
             "never_modelled_columns": [],
+            "stored_columns": "auditor_attested",
             "limitations": [
                 *evidence["limitations"],
                 regional_defaults_limitation(

@@ -46,6 +46,7 @@ def older_dense() -> dict:
         "name": "policyengine-core",
         "version": BUILD_CORE_VERSION,
     }
+    dense["build"]["built_at"] = "2026-10-19T02:07:51+00:00"
     dense["compatible_model_packages"] = [
         {"name": "policyengine-uk", "specifier": "==2.120.0"}
     ]
@@ -366,6 +367,14 @@ def test_a_regional_release_without_build_versions_has_no_baseline(
         certify_with_evidence(_tmp_bundle(tmp_path), evidence, dense)
 
 
+def test_a_regional_release_without_a_build_time_refuses(tmp_path):
+    """Without build.built_at the build model's read is not reproducible."""
+    dense = older_dense()
+    del dense["build"]["built_at"]
+    with pytest.raises(CertificationError, match="re-reads.*built_at"):
+        certify_with_evidence(_tmp_bundle(tmp_path), input_evidence(dense), dense)
+
+
 @pytest.mark.parametrize("version", [1, None], ids=["version_1", "unversioned"])
 def test_evidence_must_declare_schema_version_2(tmp_path, version):
     evidence = input_evidence()
@@ -452,6 +461,7 @@ def test_every_default_and_limitation_survives_validation_and_roundtrip(tmp_path
     record = manifest.regional_certification.model_dump(mode="json", exclude_none=True)
     assert record["defaulted_inputs"] == DEFAULTED_INPUTS
     assert record["dropped_columns"] == []
+    assert record["stored_columns"] == "auditor_attested"
     assert record["limitations"] == [VAT_LIMIT, DEFAULTS_LIMIT]
     assert record["evidence"] == evidence
     assert record["area_receipts"] == "uncertified"

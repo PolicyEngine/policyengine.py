@@ -266,7 +266,9 @@ def _model_surface(model_version: str) -> tuple[list[str], list[str], dict[str, 
         raise RegionalInputSurfaceError(
             f"Installed policyengine-uk {installed} differs from requested {model_version}."
         )
-    # Keep country-model loading out of certification's evidence-validation path.
+    # Imported here, not at module level: importing this module must not load
+    # the country model. The audit and certification's verify_model_surfaces
+    # load it on purpose.
     import policyengine_uk
 
     system = policyengine_uk.CountryTaxBenefitSystem()
@@ -310,17 +312,21 @@ def regional_build_versions(manifest: DataReleaseManifest) -> tuple[str, str]:
     return model.version, core.version
 
 
-def regional_build_cutoff(manifest: DataReleaseManifest) -> str | None:
+def regional_build_cutoff(manifest: DataReleaseManifest) -> str:
     """Return when the regional release was built, as a UTC ``--exclude-newer``.
 
     The build model is read with the packages PyPI had then, so its other
     dependencies resolve as they did at the build however they move on.
-    Rounded up to the second; ``None`` when the manifest records no
-    ``build.built_at``.
+    Rounded up to the second. A manifest that records no ``build.built_at``
+    refuses, as one without build versions does: the read would not be
+    reproducible.
     """
     built_at = manifest.build.built_at if manifest.build is not None else None
     if built_at is None:
-        return None
+        raise RegionalInputSurfaceError(
+            "The regional manifest records no build.built_at, so the build model "
+            "cannot be read as of its build."
+        )
     try:
         moment = datetime.fromisoformat(built_at)
     except ValueError as exc:
@@ -343,16 +349,20 @@ def _build_model_surface(
 ) -> tuple[list[str], list[str]]:
     """Read the build model's variables and inputs in a throwaway environment.
 
-    ``uv run --no-project --no-config`` installs exactly the two pins from
-    PyPI, with packages uploaded before ``exclude_newer`` when it is given,
-    and without the caller's uv settings or project. The probe reports the
-    versions it imported, and any other resolution refuses.
+    ``uv run --isolated --no-project --no-config`` installs exactly the two
+    pins from PyPI into a fresh environment, with packages uploaded before
+    ``exclude_newer`` when it is given, and without the caller's uv settings,
+    project or environment. Without ``--isolated``, uv would reuse an
+    environment that already meets both pins, such as a ``.venv`` in the
+    working directory, and neither the index nor the cutoff would apply. The
+    probe reports the versions it imported, and any other resolution refuses.
     """
     run = run if run is not None else subprocess.run
     label = f"policyengine-uk {model_version} with policyengine-core {core_version}"
     command = [
         "uv",
         "run",
+        "--isolated",
         "--no-project",
         "--no-config",
         "--default-index",

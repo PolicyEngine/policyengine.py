@@ -537,6 +537,12 @@
         "regional_manifest_uri": {
           "title": "Regional Manifest Uri",
           "type": "string"
+        },
+        "stored_columns": {
+          "const": "auditor_attested",
+          "description": "How the stored-column lists are known: auditor_attested means certification re-read both models but not the H5s, so the lists are the auditor's, bound to each H5's SHA-256.",
+          "title": "Stored Columns",
+          "type": "string"
         }
       },
       "required": [
@@ -549,6 +555,7 @@
         "defaulted_inputs",
         "dropped_columns",
         "never_modelled_columns",
+        "stored_columns",
         "limitations",
         "record_sha256"
       ],

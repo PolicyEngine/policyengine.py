@@ -653,6 +653,8 @@ def accepted_regional_mismatch(
         "defaulted_inputs": comparison["defaulted_inputs"],
         "dropped_columns": comparison["dropped_columns"],
         "never_modelled_columns": comparison["never_modelled_columns"],
+        # Certification re-reads both models, but not the H5s.
+        "stored_columns": "auditor_attested",
         "limitations": limitations,
         "evidence": audit.model_dump(mode="json", exclude_none=True),
     }

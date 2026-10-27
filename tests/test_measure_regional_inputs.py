@@ -325,6 +325,7 @@ def test_build_model_is_read_at_its_manifest_pins_without_the_callers_settings(
     assert command[:-1] == [
         "uv",
         "run",
+        "--isolated",
         "--no-project",
         "--no-config",
         "--default-index",
@@ -356,7 +357,6 @@ def test_build_model_is_read_at_its_manifest_pins_without_the_callers_settings(
         (BUILT_AT, BUILD_CUTOFF),
         ("2026-10-19T03:07:51+01:00", "2026-10-19T02:07:51Z"),
         ("2026-10-19T02:07:51", "2026-10-19T02:07:51Z"),
-        (None, None),
     ],
 )
 def test_the_build_model_resolves_as_of_the_release_build_in_utc(
@@ -370,17 +370,17 @@ def test_the_build_model_resolves_as_of_the_release_build_in_utc(
     run = FakeRunner()
     _measure(model, paths, response, run=run)
     ((command, _),) = run.calls
-    if cutoff is None:
-        assert "--exclude-newer" not in command
-    else:
-        assert command[command.index("--exclude-newer") + 1] == cutoff
+    assert command[command.index("--exclude-newer") + 1] == cutoff
 
 
-def test_an_unreadable_build_time_refuses_before_any_model_is_read(tmp_path, model):
+@pytest.mark.parametrize("built_at", ["the day before the Budget", None])
+def test_a_missing_or_unreadable_build_time_refuses_before_any_model_is_read(
+    tmp_path, model, built_at
+):
     paths = {"dense": _h5(tmp_path / "dense.h5")}
     response = _response(paths)
     payload = json.loads(response.content)
-    payload["build"]["built_at"] = "the day before the Budget"
+    payload["build"]["built_at"] = built_at
     response.content = json.dumps(payload).encode()
     run = FakeRunner()
     with pytest.raises(ValueError, match="built_at"):
