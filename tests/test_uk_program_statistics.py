@@ -9,6 +9,8 @@ from policyengine.tax_benefit_models.uk import analysis as uk_analysis
 from policyengine.tax_benefit_models.uk.analysis import (
     UK_PROGRAMS,
     _validate_program_statistics_config,
+    configure_uk_budget_component_variables,
+    uk_budget_component_programs,
 )
 from policyengine.tax_benefit_models.uk.datasets import (
     PolicyEngineUKDataset,
@@ -60,9 +62,10 @@ def _weights(row_count: int) -> list[float]:
 def _program_columns_by_entity(
     multiplier: float,
     row_count: int,
+    component_values: dict[str, list[float]] | None = None,
 ) -> dict[str, dict[str, list[float]]]:
     program_columns_by_entity = {entity: {} for entity in uk_latest.entity_variables}
-    for program, values in PROGRAM_VALUES.items():
+    for program, values in {**PROGRAM_VALUES, **(component_values or {})}.items():
         entity = uk_latest.get_variable(program).entity
         program_columns_by_entity[entity][program] = _weighted_values(
             values,
@@ -77,10 +80,15 @@ def _make_uk_output_simulation(
     simulation_id: str,
     multiplier: float,
     row_count: int = 2,
+    component_values: dict[str, list[float]] | None = None,
 ):
     ids = list(range(1, row_count + 1))
     weights = _weights(row_count)
-    program_columns_by_entity = _program_columns_by_entity(multiplier, row_count)
+    program_columns_by_entity = _program_columns_by_entity(
+        multiplier,
+        row_count,
+        component_values,
+    )
     data = UKYearData(
         person=_microdf(
             {
@@ -176,6 +184,11 @@ def test_uk_economic_impact_analysis_returns_configured_program_statistics(
     monkeypatch.setattr(Simulation, "ensure", lambda self: None)
     monkeypatch.setattr(
         uk_analysis,
+        "uk_budget_component_programs",
+        lambda model_version: {},
+    )
+    monkeypatch.setattr(
+        uk_analysis,
         "calculate_decile_impacts",
         lambda **kwargs: OutputCollection(outputs=[], dataframe=pd.DataFrame()),
     )
@@ -259,3 +272,145 @@ def test_uk_programs_entities_match_model_metadata():
 
     for program_name, entity in expected_entities.items():
         assert uk_latest.get_variable(program_name).entity == entity
+
+
+def _stub_non_program_outputs(monkeypatch):
+    monkeypatch.setattr(Simulation, "ensure", lambda self: None)
+    for name in ("calculate_decile_impacts", "compute_intra_decile_impacts"):
+        monkeypatch.setattr(
+            uk_analysis,
+            name,
+            lambda **kwargs: OutputCollection(outputs=[], dataframe=pd.DataFrame()),
+        )
+    monkeypatch.setattr(
+        uk_analysis,
+        "calculate_uk_poverty_rates",
+        lambda simulation: OutputCollection(outputs=[], dataframe=pd.DataFrame()),
+    )
+    monkeypatch.setattr(
+        uk_analysis,
+        "calculate_uk_inequality",
+        lambda simulation: Inequality(
+            simulation=simulation,
+            income_variable="household_net_income",
+        ),
+    )
+    monkeypatch.setattr(
+        uk_analysis,
+        "configure_labor_supply_response_variables",
+        lambda baseline_simulation, reform_simulation, country_code: None,
+    )
+    monkeypatch.setattr(
+        uk_analysis,
+        "calculate_labor_supply_response",
+        lambda baseline_simulation, reform_simulation, country_code: (
+            _empty_labor_supply_response()
+        ),
+    )
+
+
+def test_uk_budget_component_programs_cover_the_budget_totals_beyond_the_fixed_list():
+    from policyengine_uk.variables.gov.hmrc.household_tax import (
+        HOUSEHOLD_TAX_VARIABLES,
+    )
+    from policyengine_uk.variables.household.income.household_benefits import (
+        HOUSEHOLD_BENEFIT_VARIABLES,
+    )
+
+    programs = uk_budget_component_programs(uk_latest)
+
+    # Report 4738's missing £25.0m was Scottish Child Payment; a PIP cut had
+    # no row at all.
+    assert programs["scottish_child_payment"] == {"is_tax": False}
+    assert programs["pip"] == {"is_tax": False}
+    assert programs["capital_gains_tax"] == {"is_tax": True}
+    assert not set(programs) & set(UK_PROGRAMS)
+    defined = set(uk_latest.variables_by_name)
+    expected = (
+        set(HOUSEHOLD_TAX_VARIABLES) | set(HOUSEHOLD_BENEFIT_VARIABLES)
+    ) & defined
+    assert set(programs) | (expected & set(UK_PROGRAMS)) == expected
+
+
+def test_uk_budget_components_are_materialized_on_their_own_entities(tmp_path):
+    baseline = _make_uk_output_simulation(tmp_path, "baseline", 1.0)
+    reform = _make_uk_output_simulation(tmp_path, "reform", 2.0)
+
+    programs = configure_uk_budget_component_variables(baseline, reform)
+
+    for simulation in (baseline, reform):
+        assert "scottish_child_payment" in simulation.extra_variables["person"]
+        assert "vat_change" in simulation.extra_variables["household"]
+    assert "scottish_child_payment" in programs
+
+
+def test_uk_analysis_adds_a_row_for_each_budget_component_the_reform_changes(
+    tmp_path,
+    monkeypatch,
+):
+    # Given: a reform that changes Scottish Child Payment but not PIP.
+    components = {"scottish_child_payment": [50.0, 0.0], "pip": [70.0, 0.0]}
+    baseline = _make_uk_output_simulation(
+        tmp_path, "baseline", 1.0, row_count=101, component_values=components
+    )
+    reform = _make_uk_output_simulation(
+        tmp_path,
+        "reform",
+        2.0,
+        row_count=101,
+        # The reform simulation doubles every value, so 10 becomes 20 (a
+        # change) and 35 becomes 70 (no change).
+        component_values={
+            "scottish_child_payment": [10.0, 0.0],
+            "pip": [35.0, 0.0],
+        },
+    )
+    monkeypatch.setattr(
+        uk_analysis,
+        "uk_budget_component_programs",
+        lambda model_version: {
+            "scottish_child_payment": {"is_tax": False},
+            "pip": {"is_tax": False},
+        },
+    )
+    _stub_non_program_outputs(monkeypatch)
+
+    # When
+    result = uk_analysis.economic_impact_analysis(baseline, reform)
+
+    # Then: every fixed row, plus Scottish Child Payment; PIP is unchanged.
+    rows = {p.program_name: p for p in result.program_statistics.outputs}
+    assert set(rows) == set(UK_PROGRAMS) | {"scottish_child_payment"}
+    # 51 of the 101 households get 50 in the baseline and 20 in the reform.
+    assert rows["scottish_child_payment"].change == -1_530.0
+    assert rows["scottish_child_payment"].is_tax is False
+    assert set(result.program_statistics.dataframe["program_name"]) == set(rows)
+
+
+def test_uk_analysis_adds_no_component_rows_when_no_component_changes(
+    tmp_path,
+    monkeypatch,
+):
+    components = {"pip": [70.0, 0.0]}
+    baseline = _make_uk_output_simulation(
+        tmp_path, "baseline", 1.0, row_count=101, component_values=components
+    )
+    reform = _make_uk_output_simulation(
+        tmp_path,
+        "reform",
+        2.0,
+        row_count=101,
+        component_values={"pip": [35.0, 0.0]},
+    )
+    monkeypatch.setattr(
+        uk_analysis,
+        "uk_budget_component_programs",
+        lambda model_version: {"pip": {"is_tax": False}},
+    )
+    _stub_non_program_outputs(monkeypatch)
+
+    result = uk_analysis.economic_impact_analysis(baseline, reform)
+
+    assert {p.program_name for p in result.program_statistics.outputs} == set(
+        UK_PROGRAMS
+    )
