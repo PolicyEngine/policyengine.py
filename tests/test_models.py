@@ -43,13 +43,13 @@ class TestUKModel:
         assert uk_latest.release_manifest is not None
         assert uk_latest.release_manifest.country_id == "uk"
         assert uk_latest.model_package.name == "policyengine-uk"
-        assert uk_latest.model_package.version == "2.132.6"
+        assert uk_latest.model_package.version == "2.151.0"
         assert uk_latest.data_package.name == "microcosm-data"
         assert uk_latest.data_package.version == "0.1.0"
         assert (
             uk_latest.default_dataset_uri
             == "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
-            "@microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+            "@microcosm-uk-2024-25-national-20261025T091414Z-a6299504"
         )
 
     def test_has_hundreds_of_parameters(self):
