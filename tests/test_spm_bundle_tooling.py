@@ -2,9 +2,7 @@
 
 import copy
 import hashlib
-import sys
 import zipfile
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -16,19 +14,23 @@ from policyengine.provenance.bundle_validation import (
     validate_bundle_measurements,
 )
 from policyengine.provenance.spm_configuration import SPMMeasurementConfiguration
+from tests.fixtures.import_path import scripts_importable
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import bundle as maintenance  # noqa: E402
-from generate_bundle_artifacts import (  # noqa: E402
-    load_bundle_manifest,
-    normalized_manifest,
-)
-from spm_bundle import (  # noqa: E402
-    configure_spm,
-    development_manifest,
-    published_calculator_component,
-    write_development_manifest,
-)
+with scripts_importable():
+    import bundle as maintenance
+    from generate_bundle_artifacts import (
+        load_bundle_manifest,
+        normalized_manifest,
+    )
+    from spm_bundle import (
+        configure_spm,
+        development_manifest,
+        published_calculator_component,
+        write_development_manifest,
+    )
+
+# The maintenance CLI imports its sibling scripts when a command runs.
+pytestmark = pytest.mark.usefixtures("scripts_on_path")
 
 
 @pytest.fixture

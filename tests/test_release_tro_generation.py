@@ -6,7 +6,6 @@ import hashlib
 import importlib.util
 import json
 import shutil
-import sys
 from pathlib import Path
 
 import pytest
@@ -14,12 +13,18 @@ import requests
 
 from policyengine.provenance import manifest
 from policyengine.provenance.trace import compute_trace_composition_fingerprint
+from tests.fixtures.import_path import scripts_importable
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "release_tros"
-sys.path.insert(0, str(ROOT / "scripts"))
-import bundle as maintenance  # noqa: E402
-import generate_trace_tros as generator  # noqa: E402
+
+with scripts_importable():
+    import bundle as maintenance
+    import generate_trace_tros as generator
+
+# Tests import sibling scripts, and the maintenance CLI imports them when a
+# command runs.
+pytestmark = pytest.mark.usefixtures("scripts_on_path")
 
 
 @pytest.mark.parametrize("country", ["us", "uk"])
