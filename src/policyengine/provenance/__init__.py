@@ -108,6 +108,9 @@ from .receipt import (
 from .receipt import (
     verify_certificate as verify_certificate,
 )
+from .receipt import (
+    verify_regional_certification as verify_regional_certification,
+)
 from .trace import (
     build_simulation_trace_tro as build_simulation_trace_tro,
 )

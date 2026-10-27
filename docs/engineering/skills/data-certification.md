@@ -79,6 +79,134 @@ Microcosm national release with one of:
   claim first. Its `frs_2024_25` is not carried, so keep it loadable with a
   `dataset_overlays.uk` entry.
 
+- **An older local-area release, on an accepted mismatch.** When the national
+  cut moves to a new policyengine-uk before a local-area cut on that version
+  exists, a reviewer can accept retaining the older regional route. A reason
+  and a byte-bound input-surface audit are both required. First audit the
+  actual local H5 with the exact target model installed. The audit also needs
+  `uv` and access to PyPI (see below):
+
+  ```bash
+  .venv/bin/python scripts/audit_regional_input_surface.py \
+    --regional-manifest-uri "<the routed local-area release_manifest.json URI>" \
+    --artifact "microcosm_uk_2024_25_dense=/local/dense.h5" \
+    --model-version 2.147.2 \
+    --audited-by "<reviewer>" \
+    --limitation "the dense cut's VAT predates the policyengine-uk VAT factor fix (#2187, 2.135.7); the dashboard holds a VAT limit" \
+    --output regional-input-surface.json
+
+  .venv/bin/python scripts/bundle.py certify-data --country uk --data-producer populace \
+    --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
+    --regional-manifest-uri "<the routed local-area release_manifest.json URI>" \
+    --accept-regional-model-mismatch "<who accepted it and why>" \
+    --regional-input-surface-evidence regional-input-surface.json \
+    --model-version 2.147.2
+  ```
+
+  The audit compares the entity-table columns the H5 actually stores, in each
+  period, with two models: the build model and core the regional manifest
+  records (`build.built_with_model_package` and
+  `build.built_with_core_package`), and the target. As in Microcosm #1348's
+  `tools/certify_uk_cut_in_policyengine_py.py`, the build model is the
+  baseline:
+
+  - **Dropped columns** are stored columns the build model defines and the
+    target does not. The target's loaders skip them. Certification refuses
+    **any dropped column**; there is no override.
+  - **Never-modelled columns** are stored columns neither model defines:
+    Microcosm's own area codes (among them `constituency_code_oa` and
+    `la_code_oa`), build and source ids, clone indices and SPI donor fields.
+    No model ever loaded them, so they are recorded, not refused.
+  - **Defaulted inputs** are target inputs the file does not store, after the
+    target's input aliases, that were not inputs of the build model. Area runs
+    default them where the build model did not. Inputs absent under both
+    models are not changes.
+
+  The audit reads the build model's variables and inputs in a throwaway
+  `uv run --isolated --no-project --no-config --default-index
+  https://pypi.org/simple --exclude-newer <build.built_at> --with
+  policyengine-uk==<build> --with policyengine-core==<core>` environment, so
+  it needs `uv` and access to PyPI. `--isolated` makes the environment fresh:
+  without it, uv reuses an environment that already meets both pins, such as
+  a `.venv` in the working directory, and neither the index nor the cutoff
+  applies. `--exclude-newer` is the manifest's build time, so the build
+  model's other dependencies resolve as they did then, and every `UV_*`
+  setting except the cache, Python-install and connection ones is removed. A
+  regional manifest that does not record both build versions has no
+  baseline, and one without `build.built_at` cannot be read as of its build;
+  the audit refuses both. The evidence binds the regional release identity,
+  original manifest bytes, actual H5 bytes, both build versions and the exact
+  target model version, and keeps both models' full variable and input lists.
+
+  Certification does not trust those lists. It reads the target model in
+  process, so the environment that runs `certify-data` must have the target
+  policyengine-uk installed, as the audit's does, and reads the build model
+  again with `uv`; any list or input alias that differs refuses. Only the
+  stored columns rest on the auditor's word: they cannot be re-read without
+  the H5, and the evidence binds them to its SHA-256. The record says so,
+  with `stored_columns: auditor_attested`. Certification then
+  recomputes all three lists and refuses missing or mismatched evidence,
+  including evidence without `schema_version: 2`, from before the comparison
+  was relative to the build model. It records the never-modelled columns,
+  every defaulted input and the free-text limitations in the validated
+  `regional_certification`, and adds one limitation naming the defaulted
+  inputs; the bundle hash binds that record.
+
+  The policyengine-uk 2.147.2 dataset loaders silently skip columns absent
+  from the model's variables: both the
+  [generic dataset loader](https://github.com/PolicyEngine/policyengine-uk/blob/fe0b99a36bd309a722b19937345e34290cb6dd73/policyengine_uk/simulation.py#L1113-L1127)
+  and the
+  [UK multi-year loader](https://github.com/PolicyEngine/policyengine-uk/blob/fe0b99a36bd309a722b19937345e34290cb6dd73/policyengine_uk/simulation.py#L1186-L1196)
+  use `continue` without warning. A removed or renamed input can therefore
+  disappear silently at runtime; the audit must catch that column loss before
+  certification.
+
+  The national certificate never widens. Area status remains `uncertified`:
+  the certificate still covers the national dataset only (#685). TRACE
+  carries the whole regional record, evidence included, separately from the
+  national certification. An area run's execution receipt carries a summary
+  of it (both model versions, the reason, the three lists and the
+  limitations) and `record_sha256`, the digest of the whole record; check it
+  with `verify_regional_certification`. A national receipt carries none: its
+  `certificate_sha256` already digests the record. The flag remains UK only;
+  an empty or invisible reason, a release that already covers the target
+  model, or a missing regional release refuses.
+  The regional core checks still apply. Re-certifying with
+  `--drop-regional-release` removes the regional record, routes and artifact.
+
+  For the Budget route, the audit of dense cut
+  `microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe`, built with
+  policyengine-uk 2.132.6 and policyengine-core 3.33.3, measured in #699:
+
+  - **83 never-modelled columns**, and **no dropped column** under either
+    2.147.2 or 2.151.0. The first version of this audit counted those 83 as
+    dropped and refused the cut, even against its own build model.
+  - **16 new defaults under 2.147.2:**
+    `additional_residential_property_purchased`,
+    `defined_benefit_pension_share`, `directly_held_shares`,
+    `early_years_school_start_deferred`, `is_full_year_category_a_director`,
+    `local_bus_uncapped_single_fare`, `non_residential_property_purchased`,
+    `non_residential_property_secured_debt`,
+    `other_residential_property_secured_debt`,
+    `pension_annual_allowance_taxable_lump_sum_death_benefits`,
+    `pension_contributions_via_salary_sacrifice_pre_2015`, `pip_dl_points`,
+    `pip_m_points`, `salary_sacrifice_returned_to_income`,
+    `unit_and_investment_trusts`, and `war_widows_pension_reported`.
+  - **37 new defaults under 2.151.0:** those 16 and 21 more. The 21 include
+    the gambling duty inputs, liquid and solid fuel consumption, and bonus
+    sacrifice (`pension_contributions_via_bonus_sacrifice`), so area
+    breakdowns of those measures use defaults on 2.151.0. Certification
+    names every defaulted input in the limitations.
+  - Another **123 inputs already defaulted under 2.132.6**. They are absent
+    under both models, so they are not changes; the first version listed
+    them too, giving 139 defaults under 2.147.2 and 160 under 2.151.0.
+
+  Record the pre-fix VAT limitation shown above for this dense cut.
+
+  After the receipt schema changes, refresh the Budget dashboard's vendored
+  `tests/fixtures/w4/execution_receipt.v1.schema.json` from
+  `src/policyengine/data/schemas/execution_receipt.v1.schema.json`.
+
 Either way, certification checks that the regional release serves the pinned
 model by its own build or compatibility claims (a `--qualified-pair-id` names
 the primary release only), checks its core claims as for the primary release

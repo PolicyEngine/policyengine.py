@@ -1412,6 +1412,256 @@ class TestUKRegionalCertification:
                 regional_release_kind="area_coded_national",
             )
 
+    def _older_dense(self) -> dict:
+        dense = _microcosm_uk_dense_payload()
+        dense["build"]["built_with_model_package"]["version"] = "2.120.0"
+        dense["build"]["built_with_core_package"] = {
+            "name": "policyengine-core",
+            "version": "3.33.3",
+        }
+        dense["build"]["built_at"] = "2026-10-19T02:07:51+00:00"
+        dense["compatible_model_packages"] = [
+            {"name": "policyengine-uk", "specifier": "==2.120.0"}
+        ]
+        return dense
+
+    def test__given_older_dense_cut__then_refuses_without_an_accepted_mismatch(
+        self, tmp_path
+    ):
+        with pytest.raises(CertificationError, match="Regional release .*2.126.12"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [
+                    _response(_microcosm_uk_national_payload()),
+                    _response(self._older_dense()),
+                ],
+                regional_manifest_uri=UK_DENSE_URI,
+            )
+
+    def test__given_accepted_mismatch__then_routes_and_records_it(
+        self, tmp_path, monkeypatch
+    ):
+        bundle_path = _tmp_bundle(tmp_path)
+        reason = "area receipts are uncertified; the dense cut lags one release"
+        from policyengine.provenance.certification import (
+            regional_defaults_limitation,
+        )
+        from tests.test_regional_input_evidence import (
+            fake_model_surfaces,
+            input_evidence,
+        )
+
+        fake_model_surfaces(monkeypatch)
+        evidence = input_evidence(self._older_dense())
+
+        result = _certify_uk(
+            bundle_path,
+            [
+                _response(_microcosm_uk_national_payload()),
+                _response(self._older_dense()),
+            ],
+            regional_manifest_uri=UK_DENSE_URI,
+            regional_model_mismatch_reason=reason,
+            regional_input_surface_evidence=evidence,
+        )
+
+        release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+        assert release["regional_release_kind"] == "local_area"
+        assert release["regional_certification"] == {
+            "compatibility_basis": "accepted_model_mismatch",
+            "certified_for_model_version": UK_MODEL_VERSION,
+            "built_with_model_version": "2.120.0",
+            "accepted_reason": reason,
+            "area_receipts": "uncertified",
+            "regional_manifest_uri": UK_DENSE_URI,
+            "regional_manifest_sha256": evidence["regional_manifest_sha256"],
+            "defaulted_inputs": evidence["defaulted_inputs"],
+            "dropped_columns": [],
+            "never_modelled_columns": [],
+            "stored_columns": "auditor_attested",
+            "limitations": [
+                *evidence["limitations"],
+                regional_defaults_limitation(
+                    "policyengine-uk",
+                    UK_MODEL_VERSION,
+                    "2.120.0",
+                    evidence["defaulted_inputs"],
+                ),
+            ],
+            "evidence": evidence,
+        }
+        # The national certificate itself is untouched by the regional record.
+        assert release["certification"]["compatibility_basis"] == (
+            "built_with_model_package"
+        )
+        assert _sim_api_routes_both_area_types(release)
+        manifest = CountryReleaseManifest.model_validate(release)
+        assert manifest.regional_certification is not None
+        assert manifest.regional_certification.built_with_model_version == "2.120.0"
+        mismatch = [w for w in result.warnings if "accepted mismatch" in w]
+        assert len(mismatch) == 1 and "2.120.0" in mismatch[0]
+
+    def test__given_a_covering_regional_release__then_an_accepted_mismatch_refuses(
+        self, tmp_path
+    ):
+        with pytest.raises(CertificationError, match="drop --accept-regional"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [
+                    _response(_microcosm_uk_national_payload()),
+                    _response(_microcosm_uk_dense_payload()),
+                ],
+                regional_manifest_uri=UK_DENSE_URI,
+                regional_model_mismatch_reason="not needed",
+            )
+
+    # A zero-width space is not whitespace, so strip() alone kept it.
+    @pytest.mark.parametrize("reason", ["", "   ", "\t\n", "\u200b", "\ufeff\u2060"])
+    def test__given_an_empty_reason__then_refuses(self, tmp_path, reason):
+        with pytest.raises(CertificationError, match="needs a reason"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [
+                    _response(_microcosm_uk_national_payload()),
+                    _response(self._older_dense()),
+                ],
+                regional_manifest_uri=UK_DENSE_URI,
+                regional_model_mismatch_reason=reason,
+            )
+
+    def test__given_an_accepted_mismatch__then_the_core_must_still_be_covered(
+        self, tmp_path, monkeypatch
+    ):
+        from tests.test_regional_input_evidence import (
+            fake_model_surfaces,
+            input_evidence,
+        )
+
+        fake_model_surfaces(monkeypatch)
+        national = _microcosm_uk_national_payload()
+        national["compatible_core_packages"] = [
+            {"name": "policyengine-core", "specifier": "==3.33.0"}
+        ]
+        with pytest.raises(
+            CertificationError, match="Regional release .*policyengine-core 3.33.0"
+        ):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [_response(national), _response(self._older_dense())],
+                regional_manifest_uri=UK_DENSE_URI,
+                regional_model_mismatch_reason="area receipts are uncertified",
+                regional_input_surface_evidence=input_evidence(self._older_dense()),
+                core_version="3.33.0",
+            )
+
+    def test__given_an_accepted_mismatch_without_a_regional_release__then_refuses(
+        self, tmp_path
+    ):
+        with pytest.raises(CertificationError, match="pass --regional-manifest-uri"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [_response(_microcosm_uk_national_payload())],
+                drop_regional_release=True,
+                regional_model_mismatch_reason="area receipts are uncertified",
+            )
+
+    def test__given_bundle_wrapper_accepted_mismatch__then_forwards_it(
+        self, monkeypatch
+    ):
+        bundle_script = _load_bundle_script(monkeypatch)
+        captured: dict[str, list[str]] = {}
+        fake = ModuleType("certify_data_release")
+
+        def fake_main(argv):
+            captured["argv"] = argv
+            return 0
+
+        fake.main = fake_main
+        monkeypatch.setitem(sys.modules, "certify_data_release", fake)
+        reason = "area receipts are uncertified"
+        assert (
+            bundle_script.main(
+                [
+                    "certify-data",
+                    "--country",
+                    "uk",
+                    "--manifest-uri",
+                    UK_NATIONAL_URI,
+                    "--regional-manifest-uri",
+                    UK_DENSE_URI,
+                    "--accept-regional-model-mismatch",
+                    reason,
+                    "--regional-input-surface-evidence",
+                    "regional-audit.json",
+                ]
+            )
+            == 0
+        )
+        argv = captured["argv"]
+        assert argv[argv.index("--accept-regional-model-mismatch") + 1] == reason
+        assert (
+            argv[argv.index("--regional-input-surface-evidence") + 1]
+            == "regional-audit.json"
+        )
+
+    def test__given_bundle_wrapper_empty_reason__then_certifier_refuses_it(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        bundle_script = _load_bundle_script(monkeypatch)
+        spec = importlib.util.spec_from_file_location(
+            "certify_data_release",
+            Path(__file__).resolve().parents[1] / "scripts" / "certify_data_release.py",
+        )
+        certifier = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(certifier)
+        monkeypatch.setitem(sys.modules, "certify_data_release", certifier)
+        bundle_path = _tmp_bundle(tmp_path)
+        original_bundle = bundle_path.read_bytes()
+        captured = {}
+
+        def certify_temporary_bundle(**kwargs):
+            captured.update(kwargs)
+            kwargs["bundle_path"] = bundle_path
+            return certify_data_release(**kwargs)
+
+        monkeypatch.setattr(certifier, "certify_data_release", certify_temporary_bundle)
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                side_effect=[
+                    _response(_microcosm_uk_national_payload()),
+                    _response(self._older_dense()),
+                ],
+            ),
+            pytest.raises(SystemExit) as error,
+        ):
+            bundle_script.main(
+                [
+                    "certify-data",
+                    "--country",
+                    "uk",
+                    "--manifest-uri",
+                    UK_NATIONAL_URI,
+                    "--model-version",
+                    UK_MODEL_VERSION,
+                    "--regional-manifest-uri",
+                    UK_DENSE_URI,
+                    "--accept-regional-model-mismatch",
+                    "",
+                    "--no-generate",
+                    "--no-changelog",
+                    "--skip-artifact-check",
+                ]
+            )
+        # bundle.py reports the certifier's refusal as a usage error.
+        assert error.value.code == 2
+        assert isinstance(error.value.__context__, CertificationError)
+        assert "needs a reason" in str(error.value.__context__)
+        assert capsys.readouterr().out == ""
+        assert captured["regional_model_mismatch_reason"] == ""
+        assert bundle_path.read_bytes() == original_bundle
+
     def test__given_pinned_core__then_the_regional_release_must_cover_it(
         self, tmp_path
     ):
