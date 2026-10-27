@@ -123,14 +123,18 @@ Microcosm national release with one of:
     models are not changes.
 
   The audit reads the build model's variables and inputs in a throwaway
-  `uv run --no-project --no-config --default-index https://pypi.org/simple
-  --exclude-newer <build.built_at> --with policyengine-uk==<build> --with
-  policyengine-core==<core>` environment, so it needs `uv` and access to
-  PyPI. `--exclude-newer` is the manifest's build time, so the build model's
-  other dependencies resolve as they did then, and every `UV_*` setting
-  except the cache, Python-install and connection ones is removed. A regional
-  manifest that does not record both build versions has no baseline, and the
-  audit refuses it. The evidence binds the regional release identity,
+  `uv run --isolated --no-project --no-config --default-index
+  https://pypi.org/simple --exclude-newer <build.built_at> --with
+  policyengine-uk==<build> --with policyengine-core==<core>` environment, so
+  it needs `uv` and access to PyPI. `--isolated` makes the environment fresh:
+  without it, uv reuses an environment that already meets both pins, such as
+  a `.venv` in the working directory, and neither the index nor the cutoff
+  applies. `--exclude-newer` is the manifest's build time, so the build
+  model's other dependencies resolve as they did then, and every `UV_*`
+  setting except the cache, Python-install and connection ones is removed. A
+  regional manifest that does not record both build versions has no
+  baseline, and one without `build.built_at` cannot be read as of its build;
+  the audit refuses both. The evidence binds the regional release identity,
   original manifest bytes, actual H5 bytes, both build versions and the exact
   target model version, and keeps both models' full variable and input lists.
 
@@ -139,7 +143,8 @@ Microcosm national release with one of:
   policyengine-uk installed, as the audit's does, and reads the build model
   again with `uv`; any list or input alias that differs refuses. Only the
   stored columns rest on the auditor's word: they cannot be re-read without
-  the H5, and the evidence binds them to its SHA-256. Certification then
+  the H5, and the evidence binds them to its SHA-256. The record says so,
+  with `stored_columns: auditor_attested`. Certification then
   recomputes all three lists and refuses missing or mismatched evidence,
   including evidence without `schema_version: 2`, from before the comparison
   was relative to the build model. It records the never-modelled columns,
