@@ -64,7 +64,7 @@ The same `spm=` selection is accepted by
 `pe.us.managed_microsimulation`; its returned country simulation exposes
 `spm_config` and `spm_provenance()` too. See the [household SPM
 contract](households.md#spm-geography-and-measurement-selection) for exact keys,
-the 2022–2035 artifact horizon and explicit geography errors. No provider or
+the 2022–2036 artifact horizon and explicit geography errors. No provider or
 forecast-file path can replace the bundle's pinned artifact.
 
 For a small local development dataset, explicitly opt out of managed data
