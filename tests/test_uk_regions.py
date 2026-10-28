@@ -24,11 +24,11 @@ from policyengine.provenance.manifest import CountryReleaseManifest
 # release its constituency and local-authority regions are routed to.
 UK_CERTIFIED_NATIONAL_URI = (
     "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
-    "@microcosm-uk-2024-25-national-20261025T091414Z-a6299504"
+    "@microcosm-uk-2024-25-national-20261028T061416Z-3c0d11b6"
 )
 UK_CERTIFIED_LOCAL_AREA_URI = (
     "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
-    "@microcosm-uk-2024-25-dense-20261026T105309Z-c9df4b86"
+    "@microcosm-uk-2024-25-dense-20261027T154955Z-6528c865"
 )
 UK_AREA_REGION_COUNT = 650 + 361
 
