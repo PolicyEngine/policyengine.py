@@ -136,9 +136,9 @@ The functions in this section and the next are deprecated: their output is
 not disclosure-controlled.
 
 Constituency-level impacts group household output rows by the longwise
-`constituency_code_oa` column carried by the dataset. Names and map coordinates
-come from the packaged constituency list; codes it does not list use the code
-as the label.
+`constituency_code_oa` column carried by the dataset. Names come from the
+packaged constituency list; codes it does not list use the code as the label.
+Result rows carry no map positions.
 
 ```python
 from policyengine.outputs import compute_uk_constituency_impacts
