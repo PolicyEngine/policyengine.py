@@ -80,10 +80,9 @@ def compute_uk_local_authority_impacts(
         weight_matrix_path: Deprecated and ignored. Local-authority outputs
             now group by ``la_code_oa`` on the household output.
         local_authority_csv_path: Optional path to a lookup CSV with
-            ``code``, ``name``, ``x`` and ``y`` columns. If omitted, the
-            packaged April 2023 local-authority list supplies names and
-            hex positions. Codes missing from the lookup use the code as
-            the name.
+            ``code`` and ``name`` columns; other columns are ignored. If
+            omitted, the packaged April 2023 local-authority list supplies the
+            names. Codes missing from the lookup use the code as the name.
         year: Deprecated and ignored.
         asset_strategies: Deprecated and ignored.
         download_missing_assets: Deprecated and ignored; the lookup is

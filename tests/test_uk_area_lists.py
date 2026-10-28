@@ -39,10 +39,31 @@ ABOLISHED_2023_DISTRICTS = {
 }
 NEW_2023_UNITARIES = {"E06000063", "E06000064", "E06000065", "E06000066"}
 
+# The lists carry no hex-map positions: the app places areas on its hex maps
+# from its own layout files.
+AREA_LIST_COLUMNS = {
+    "constituency": ["code", "name", "region", "country"],
+    "local_authority": ["code", "name"],
+}
+
 
 def _rows(geography_type: str) -> list[dict]:
     with open(packaged_uk_area_list_path(geography_type), encoding="utf-8") as file:
         return list(csv.DictReader(file))
+
+
+def _columns(geography_type: str) -> list[str]:
+    with open(packaged_uk_area_list_path(geography_type), encoding="utf-8") as file:
+        return next(csv.reader(file))
+
+
+def test_every_area_list_has_its_columns_listed():
+    assert sorted(AREA_LIST_COLUMNS) == sorted(UK_AREA_LIST_FILES)
+
+
+@pytest.mark.parametrize("geography_type", sorted(UK_AREA_LIST_FILES))
+def test_area_list_has_no_hex_positions(geography_type):
+    assert _columns(geography_type) == AREA_LIST_COLUMNS[geography_type]
 
 
 @pytest.mark.parametrize("geography_type", sorted(UK_AREA_LIST_FILES))
@@ -53,8 +74,11 @@ def test_area_list_rows_are_well_formed(geography_type):
     assert len(codes) == len(set(codes))
     assert all(GSS_CODE.match(code) for code in codes)
     assert all(row["name"].strip() and row["name"] != row["code"] for row in rows)
-    hexes = [(int(row["x"]), int(row["y"])) for row in rows]
-    assert len(hexes) == len(set(hexes)), "two areas share a hex"
+    assert all(
+        row[column].strip()
+        for row in rows
+        for column in AREA_LIST_COLUMNS[geography_type]
+    )
 
 
 def test_local_authority_list_is_the_april_2023_frame():

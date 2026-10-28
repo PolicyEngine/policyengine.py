@@ -90,9 +90,9 @@ national UK dataset.
 
 The package ships the area lists: the 650 parliamentary constituencies (2024
 boundaries, including Northern Ireland) and the 361 local authority districts
-(April 2023, including Ards and North Down, `N09000011`), each with a name and
-a hex-map position (`src/policyengine/data/uk_geography/`, sources in its
-`SOURCES.md`). Building these regions needs no network access.
+(April 2023, including Ards and North Down, `N09000011`), each with a name
+(`src/policyengine/data/uk_geography/`, sources in its `SOURCES.md`). The lists
+have no hex-map positions. Building these regions needs no network access.
 
 Constituency regions (`constituency/<code>`) row-filter `constituency_code_oa`
 and local-authority regions (`local_authority/<code>`) row-filter `la_code_oa`.
@@ -136,9 +136,9 @@ The functions in this section and the next are deprecated: their output is
 not disclosure-controlled.
 
 Constituency-level impacts group household output rows by the longwise
-`constituency_code_oa` column carried by the dataset. Names and map coordinates
-come from the packaged constituency list; codes it does not list use the code
-as the label.
+`constituency_code_oa` column carried by the dataset. Names come from the
+packaged constituency list; codes it does not list use the code as the label.
+Result rows carry no map positions.
 
 ```python
 from policyengine.outputs import compute_uk_constituency_impacts

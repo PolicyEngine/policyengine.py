@@ -297,7 +297,7 @@ microdata.
 Constituency and local-authority breakdowns group household output rows by
 dataset-provided longwise geography columns. Constituencies use
 `constituency_code_oa`; local authorities use `la_code_oa`. Optional metadata
-CSVs add names and map coordinates when available.
+CSVs add names when available. Result rows carry no map positions.
 
 ```python
 from policyengine.outputs import compute_uk_constituency_impacts

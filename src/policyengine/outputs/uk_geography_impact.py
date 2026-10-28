@@ -101,6 +101,11 @@ def resolve_uk_geography_lookup_csv_path(
 def _load_lookup_metadata(
     lookup_csv_path: Optional[str],
 ) -> tuple[dict[str, dict], list[str]]:
+    """Read each area's name, and the area order, from a lookup CSV.
+
+    Only the ``code`` and ``name`` columns are read; others, such as ``x``
+    and ``y``, are ignored.
+    """
     if lookup_csv_path is None:
         return {}, []
 
@@ -121,16 +126,8 @@ def _load_lookup_metadata(
             "name": _normalise_code(row["name"])
             if "name" in lookup_df.columns
             else code,
-            "x": _optional_int(row["x"]) if "x" in lookup_df.columns else None,
-            "y": _optional_int(row["y"]) if "y" in lookup_df.columns else None,
         }
     return metadata, order
-
-
-def _optional_int(value) -> Optional[int]:
-    if value is None or pd.isna(value):
-        return None
-    return int(value)
 
 
 def compute_longwise_uk_geography_impacts(
@@ -202,8 +199,6 @@ def compute_longwise_uk_geography_impacts(
             {
                 f"{result_key_prefix}_code": code,
                 f"{result_key_prefix}_name": row_metadata.get("name", code),
-                "x": row_metadata.get("x"),
-                "y": row_metadata.get("y"),
                 "average_household_income_change": float(avg_change),
                 "relative_household_income_change": float(rel_change),
                 "population": total_weight,

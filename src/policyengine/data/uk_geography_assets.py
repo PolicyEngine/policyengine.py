@@ -52,12 +52,12 @@ LOCAL_AUTHORITY_ASSET_SPEC = UKGeographyAssetSpec(
     lookup_csv_filename="local_authorities_2021.csv",
 )
 
-# Area lists shipped with the package: code, name and hex-map position for
-# every constituency (2024 boundaries) and local authority (April 2023
-# districts). They define the constituency and local-authority regions and
-# label geography outputs. They are not the lookup CSVs paired with the weight
-# matrices above: a matrix's paired CSV gives each area its row, so it must
-# stay the file the matrix was built with. See data/uk_geography/SOURCES.md.
+# Area lists shipped with the package: code and name for every constituency
+# (2024 boundaries) and local authority (April 2023 districts). They define the
+# constituency and local-authority regions and label geography outputs. They
+# are not the lookup CSVs paired with the weight matrices above: a matrix's
+# paired CSV gives each area its row, so it must stay the file the matrix was
+# built with. See data/uk_geography/SOURCES.md.
 UK_AREA_LIST_FILES = {
     "constituency": "constituencies_2024.csv",
     "local_authority": "local_authorities_2023.csv",
