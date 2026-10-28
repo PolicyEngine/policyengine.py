@@ -43,3 +43,23 @@ same-repository draft PR.
 
 Do not add `[codex]`, `[claude]`, `[copilot]`, or other agent labels to PR
 titles. Use a plain descriptive title.
+
+## No Agent Notes In The Tree
+
+Keep job state and working notes out of commits. The Agent notes workflow
+(`.github/workflows/pr_agent_notes.yaml`) runs `.github/check-agent-notes.sh`
+on every PR and fails when the PR's head commit contains:
+
+- a `.job/`, `.job-git/` or `.diag/` folder at any depth. Subfleet build jobs
+  keep their state, hand-off and PR body in `.job/`.
+- `HANDOFF.md`, `handoffs.jsonl`, `PR_BODY.md`, `PR-BODY.md`, `REPORT.md` or
+  `PROGRESS.md` at the repository root, in any capitalisation.
+
+Put their content in the PR description or a PR comment instead. `.gitignore`
+ignores the three folders, so `git add -A` leaves them out.
+
+The workflow checks the PR's head commit with the default branch's copy of the
+script, so neither the PR's base nor an edit to the script changes the
+result. A skip instruction in a commit message skips the PR and push runs, so
+it also checks main once a day, which no commit message can skip. To check a
+commit yourself, run `.github/check-agent-notes.sh <commit>`.
