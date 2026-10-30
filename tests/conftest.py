@@ -3,6 +3,11 @@
 import pytest
 
 # Import fixtures from fixtures module so pytest can discover them
+from tests.fixtures.country_model_fixtures import (  # noqa: F401
+    country_model,
+    uk_country_model,
+    us_country_model,
+)
 from tests.fixtures.filtering_fixtures import (  # noqa: F401
     create_uk_test_dataset,
     create_us_test_dataset,

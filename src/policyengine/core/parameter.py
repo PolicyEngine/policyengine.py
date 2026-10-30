@@ -21,6 +21,22 @@ class Parameter(BaseModel):
     data_type: Optional[type] = None
     tax_benefit_model_version: TaxBenefitModelVersion
     unit: Optional[str] = None
+    economy: bool = Field(
+        default=True,
+        description=(
+            "Whether the parameter applies to economy-wide (population) "
+            "analysis, from the country package's 'economy' metadata. True "
+            "when the package does not say."
+        ),
+    )
+    household: bool = Field(
+        default=True,
+        description=(
+            "Whether the parameter applies to household calculations, from "
+            "the country package's 'household' metadata. True when the "
+            "package does not say."
+        ),
+    )
 
     # Lazy loading: store core param ref, build values on demand
     _core_param: Any = PrivateAttr(default=None)
