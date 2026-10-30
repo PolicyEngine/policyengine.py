@@ -478,6 +478,7 @@ class TestReleaseManifests:
             years=[2026],
             data_folder="./data",
             allow_unmanaged=False,
+            allow_unsupported_years=False,
         )
 
     def test__given_explicit_uri__then_managed_resolution_requires_opt_in(self):

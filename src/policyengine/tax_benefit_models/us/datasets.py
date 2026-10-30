@@ -13,6 +13,7 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
+from policyengine.provenance import dataset_years
 from policyengine.provenance.dataset_materialization import (
     MaterializedDataset,
     materialize_dataset,
@@ -407,6 +408,7 @@ def create_datasets(
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
     allow_unmanaged: bool = False,
+    allow_unsupported_years: bool = False,
 ) -> dict[str, PolicyEngineUSDataset]:
     """Create PolicyEngineUSDataset instances from logical dataset names or URLs.
 
@@ -416,20 +418,36 @@ def create_datasets(
     ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which ``ensure_datasets``
     and ``load_datasets`` check.
 
+    Each requested year must be one the installed policyengine-us supports
+    the source dataset for (see
+    :func:`policyengine.provenance.dataset_years.supported_years`).
+    policyengine-core would fill any other year by carrying the latest
+    projected inputs forward or uprating them. Every source is made available
+    as a local file (downloaded unless it is a local path or a verified copy
+    is already in ``data_folder``) and checked before any year file is
+    created.
+
     Args:
         datasets: List of logical dataset names or HuggingFace dataset URLs
         years: List of years to extract data for
         data_folder: Directory to save the dataset files
+        allow_unmanaged: Accept datasets outside the release bundle.
+        allow_unsupported_years: Skip the supported-years check and create
+            year files for any requested year.
 
     Returns:
         Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
+
+    Raises:
+        UnsupportedDatasetYearError: A requested year is not supported for a
+            source, unless ``allow_unsupported_years``.
     """
     from policyengine_us import Microsimulation
 
     from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
 
     dataset_requests: list[Optional[str]] = datasets or [None]
-    result = {}
+    sources = []
     for dataset in dataset_requests:
         source = materialize_dataset(
             "us",
@@ -437,6 +455,13 @@ def create_datasets(
             allow_unmanaged=allow_unmanaged,
             data_dir=Path(data_folder),
         )
+        if not allow_unsupported_years:
+            dataset_years.refuse_unsupported_years(
+                "us", dataset or source.name, source.path, years
+            )
+        sources.append(source)
+    result = {}
+    for source in sources:
         dataset_stem = source.name
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
         # The register the mapping below uses, stamped into each year file.
@@ -1369,6 +1394,7 @@ def ensure_datasets(
     years: list[int] = [2024, 2025, 2026, 2027, 2028],
     data_folder: str = "./data",
     allow_unmanaged: bool = False,
+    allow_unsupported_years: bool = False,
 ) -> dict[str, PolicyEngineUSDataset]:
     """Ensure datasets exist, loading if available or creating if not.
 
@@ -1380,13 +1406,28 @@ def ensure_datasets(
     year file is created again from the source dataset, and each out-of-date
     file is logged with the reason.
 
+    Year files are created only for years the installed policyengine-us
+    supports the source dataset for: otherwise ``create_datasets`` raises
+    ``UnsupportedDatasetYearError`` before creating any year file. Year
+    files that already exist and are current are loaded without that check,
+    so one created for an unsupported year, by ``allow_unsupported_years=True``
+    or by a policyengine.py release before the check, is still reused.
+
     Args:
         datasets: List of HuggingFace dataset paths
         years: List of years to load/create data for
         data_folder: Directory containing or to save the dataset files
+        allow_unmanaged: Accept datasets outside the release bundle.
+        allow_unsupported_years: Skip the supported-years check (see
+            ``create_datasets``).
 
     Returns:
         Dictionary mapping dataset keys to PolicyEngineUSDataset objects
+
+    Raises:
+        UnsupportedDatasetYearError: A requested year is not supported for a
+            dataset whose year files have to be created, unless
+            ``allow_unsupported_years``.
     """
     datasets = datasets or [get_release_manifest("us").default_dataset]
 
@@ -1433,4 +1474,5 @@ def ensure_datasets(
             years=years,
             data_folder=data_folder,
             allow_unmanaged=allow_unmanaged,
+            allow_unsupported_years=allow_unsupported_years,
         )
