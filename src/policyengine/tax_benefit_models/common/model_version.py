@@ -95,6 +95,10 @@ def build_runtime_dataset_provenance(
     return provenance
 
 
+# The value types an EnumValue label may hold.
+_ENUM_LABEL_TYPES = (str, int, float, bool, type(None))
+
+
 def _core_input_flag(core_variable: Any) -> Optional[bool]:
     """Return whether users enter a core variable, or None if core cannot say."""
     is_input_variable = getattr(core_variable, "is_input_variable", None)
@@ -262,10 +266,16 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                         var_obj.possible_values._value2member_map_.values(),
                     )
                 )
-                variable.enum_values = [
-                    EnumValue(value=member.name, label=member.value)
-                    for member in var_obj.possible_values
-                ]
+                members = list(var_obj.possible_values)
+                # A label is a scalar. A model whose members declare any
+                # other value still loads, without labels.
+                if all(
+                    isinstance(member.value, _ENUM_LABEL_TYPES) for member in members
+                ):
+                    variable.enum_values = [
+                        EnumValue(value=member.name, label=member.value)
+                        for member in members
+                    ]
             # Resolve parameter-path adds/subtracts to concrete lists so
             # consumers always see list[str], and record the path itself,
             # since the parameter's list can differ in other years.

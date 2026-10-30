@@ -5,6 +5,7 @@ import json
 from enum import Enum
 from types import SimpleNamespace
 
+import pytest
 from policyengine_core.parameters import ParameterNode as CoreParameterNode
 
 from policyengine.core import EnumValue
@@ -373,6 +374,40 @@ def test_enum_values_keep_each_declared_scalar_type():
     assert [(enum_value.label, type(enum_value.label)) for enum_value in restored] == [
         (label, label_type) for _, label, label_type in published
     ]
+
+
+class _RangeStatus(Enum):
+    LOW = (0, 10)
+    HIGH = (10, 20)
+
+
+class _DatedStatus(Enum):
+    NAMED = "Named"
+    DATED = datetime.date(2025, 1, 1)
+
+
+@pytest.mark.parametrize(
+    ("possible_values", "names"),
+    [(_RangeStatus, ["LOW", "HIGH"]), (_DatedStatus, ["NAMED", "DATED"])],
+)
+def test_an_enum_declaring_a_value_that_is_not_a_scalar_loads_without_labels(
+    possible_values, names
+):
+    # Labels are strings, numbers, booleans or None. A country model that
+    # declares any other member value still loads, as it did before labels
+    # were published, and keeps its possible values.
+    model = _model_version()
+    core_variable = _enum_core_variable("unusual_status", possible_values)
+    system = SimpleNamespace(
+        variables={core_variable.name: core_variable},
+        parameters=None,
+    )
+
+    MicrosimulationModelVersion._populate_variables(model, system)
+
+    variable = model.get_variable("unusual_status")
+    assert variable.possible_values == names
+    assert variable.enum_values is None
 
 
 def test_variables_without_possible_values_have_no_enum_values():

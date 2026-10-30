@@ -88,7 +88,9 @@ class Variable(BaseModel):
         description=(
             "For an enum variable, each value it can take with its label, in "
             "the order the country model declares them. possible_values holds "
-            "the same names without labels."
+            "the same names without labels. None for other variables, and for "
+            "an enum that declares a value other than a string, number, "
+            "boolean or None."
         ),
     )
 
