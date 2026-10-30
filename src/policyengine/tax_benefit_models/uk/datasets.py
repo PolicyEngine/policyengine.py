@@ -6,6 +6,7 @@ from microdf import MicroDataFrame
 from pydantic import ConfigDict, Field
 
 from policyengine.core import Dataset, YearData
+from policyengine.provenance import dataset_years
 from policyengine.provenance.dataset_materialization import (
     materialize_dataset,
 )
@@ -288,9 +289,35 @@ def create_datasets(
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
     allow_unmanaged: bool = False,
+    allow_unsupported_years: bool = False,
 ) -> dict[str, PolicyEngineUKDataset]:
+    """Create UK year files from logical dataset names, URIs or local paths.
+
+    Each requested year must be one the installed policyengine-uk supports
+    the source dataset for (see
+    :func:`policyengine.provenance.dataset_years.supported_years`). Every
+    source is made available as a local file (downloaded unless it is a
+    local path or a verified copy is already in ``data_folder``) and checked
+    before any year file is created.
+
+    Args:
+        datasets: Logical dataset names, Hugging Face URIs or, with
+            ``allow_unmanaged``, local paths. ``None`` uses the certified
+            default.
+        years: Years to create year files for.
+        data_folder: Directory the sources are cached in and the year files
+            are written to.
+        allow_unmanaged: Accept datasets outside the release bundle.
+        allow_unsupported_years: Skip the supported-years check.
+            policyengine-uk still cannot create a year outside its
+            projection.
+
+    Raises:
+        UnsupportedDatasetYearError: A requested year is not supported for a
+            source, unless ``allow_unsupported_years``.
+    """
     dataset_requests: list[Optional[str]] = [None] if datasets is None else datasets
-    result = {}
+    sources = []
     for dataset in dataset_requests:
         source = materialize_dataset(
             "uk",
@@ -298,6 +325,13 @@ def create_datasets(
             allow_unmanaged=allow_unmanaged,
             data_dir=Path(data_folder),
         )
+        if not allow_unsupported_years:
+            dataset_years.refuse_unsupported_years(
+                "uk", dataset or source.name, source.path, years
+            )
+        sources.append(source)
+    result = {}
+    for source in sources:
         dataset_stem = source.name
         from policyengine_uk import Microsimulation
 
@@ -380,6 +414,7 @@ def ensure_datasets(
     years: list[int] = [2026, 2027, 2028, 2029, 2030],
     data_folder: str = "./data",
     allow_unmanaged: bool = False,
+    allow_unsupported_years: bool = False,
 ) -> dict[str, PolicyEngineUKDataset]:
     """Ensure datasets exist, loading if available or creating if not.
 
@@ -387,13 +422,28 @@ def ensure_datasets(
     policyengine.py kept the observed year their tables were projected from
     (see ``load_datasets``), so they are created again rather than loaded.
 
+    A year file that has to be created is created only for a year the
+    installed policyengine-uk supports its source dataset for: otherwise
+    ``create_datasets`` raises ``UnsupportedDatasetYearError`` before
+    creating any year file. Year files that already exist are loaded
+    without that check: policyengine-uk creates a year file only for a year
+    it projects the source to.
+
     Args:
         datasets: List of HuggingFace dataset paths
         years: List of years to load/create data for
         data_folder: Directory containing or to save the dataset files
+        allow_unmanaged: Accept datasets outside the release bundle.
+        allow_unsupported_years: Skip the supported-years check (see
+            ``create_datasets``).
 
     Returns:
         Dictionary mapping dataset keys to PolicyEngineUKDataset objects
+
+    Raises:
+        UnsupportedDatasetYearError: A requested year is not supported for a
+            dataset whose year files have to be created, unless
+            ``allow_unsupported_years``.
     """
     if datasets is None:
         datasets = [get_release_manifest("uk").default_dataset]
@@ -421,4 +471,5 @@ def ensure_datasets(
             years=years,
             data_folder=data_folder,
             allow_unmanaged=allow_unmanaged,
+            allow_unsupported_years=allow_unsupported_years,
         )

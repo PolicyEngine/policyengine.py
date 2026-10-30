@@ -33,6 +33,7 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
+from policyengine.provenance import dataset_years
 from policyengine.provenance.manifest import DataReleaseManifest, _specifier_matches
 from policyengine.provenance.qualification import (
     CandidatePair,
@@ -422,24 +423,15 @@ def data_year(dataset_path: Path) -> int:
 
 
 def projected_years_from_model(dataset_path: Path) -> list[int]:
-    """The years policyengine-uk projects a single-year dataset to.
+    """The years the installed policyengine-uk supports a dataset for.
 
-    Builds the multi-year dataset exactly as ``policyengine_uk.Simulation``
-    does for a single-year file (``extend_single_year_dataset`` with the
-    system's parameters), without running any formula.
+    :func:`policyengine.provenance.dataset_years.supported_years` for the UK:
+    the years ``extend_single_year_dataset`` projects the single-year file
+    to, built as ``policyengine_uk.Simulation`` builds them, from the data
+    year onwards.
     """
 
-    from policyengine_uk.data.dataset_schema import UKSingleYearDataset
-    from policyengine_uk.data.economic_assumptions import extend_single_year_dataset
-    from policyengine_uk.system import system
-
-    multi_year = extend_single_year_dataset(
-        UKSingleYearDataset(str(dataset_path)), system.parameters
-    )
-    years = getattr(multi_year, "years", None)
-    if years is None:
-        years = list(multi_year.datasets)
-    return sorted(int(year) for year in years)
+    return dataset_years.supported_years("uk", dataset_path)
 
 
 def supported_years(
