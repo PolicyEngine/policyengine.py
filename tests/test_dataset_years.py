@@ -179,8 +179,17 @@ def _write_tiny_uk_dataset(path: Path, fiscal_year: int = 2024) -> Path:
             }
         ),
         benunit=pd.DataFrame({"benunit_id": [1]}),
+        # policyengine-uk's projection uprates council tax and rent, so a
+        # dataset it can project stores both.
         household=pd.DataFrame(
-            {"household_id": [1], "household_weight": [1.0], "region": ["LONDON"]}
+            {
+                "household_id": [1],
+                "household_weight": [1.0],
+                "region": ["LONDON"],
+                "tenure_type": ["RENT_PRIVATELY"],
+                "council_tax": [1_500.0],
+                "rent": [9_000.0],
+            }
         ),
         fiscal_year=fiscal_year,
     ).save(str(path))

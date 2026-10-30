@@ -152,6 +152,43 @@ List datasets already known to the country:
 pe.us.load_datasets()  # or pe.uk.load_datasets()
 ```
 
+### Supported years
+
+A dataset is supported only for the years the installed country model
+projects it to. `supported_years` builds that projection from a single-year
+dataset file as the model's own `Simulation` does, with the model's
+`extend_single_year_dataset` and without running any formula, and returns
+the years from the dataset's data year onwards:
+
+```python
+from policyengine.provenance import supported_years
+
+supported_years("us", "./data/populace_us_2024.h5")  # 2022 to 2035
+supported_years("uk", "./data/microcosm_uk_2024_25.h5")  # 2024 to 2032
+```
+
+- **UK:** from the data year to policyengine-uk's default projection end,
+  `PROJECTION_END_YEAR` (2032 in policyengine-uk 2.151.0), or the end of a
+  capital gains projection that ends earlier.
+- **US:** from the data year to the earlier of policyengine-us's default
+  projection end (the last year in its `gov.bls.cpi.cpi_u` parameter file,
+  2035 in policyengine-us 2.2.1) and the last year of spm-calculator's SPM
+  forecast (2035 in spm-calculator 1.0.0), after which the poverty figures
+  have no thresholds. The constant `US_EARLY_YEAR_ALLOWANCE` in
+  `policyengine.provenance.dataset_years` also keeps 2022 and 2023
+  supported, although the certified Populace US 2024 holds almost no data
+  for them.
+
+A calculation for another year still returns results, because
+policyengine-core carries the latest projected inputs forward or uprates
+them, so a successful run is not evidence of support. `create_datasets` and
+`ensure_datasets` therefore raise `UnsupportedDatasetYearError` (from
+`policyengine.provenance`) for any other year before they create a year
+file. The error's `country_id`, `dataset`, `years` and `supported_years`
+attributes name the request and the years that are supported. Pass
+`allow_unsupported_years=True` to create the year files anyway. Year files
+that already exist in the data folder are loaded without the check.
+
 ### US local-area dataset
 
 Alongside the certified national default, the bundle registers a US dataset for
