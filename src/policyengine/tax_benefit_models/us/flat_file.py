@@ -164,7 +164,7 @@ def _county_text(value) -> str:
         return ""
     if isinstance(value, bytes):
         value = value.decode()
-    if isinstance(value, (float, np.floating)) and float(value).is_integer():
+    if isinstance(value, float | np.floating) and float(value).is_integer():
         value = int(value)
     text = str(value).strip()
     if not text.isdigit() or len(text) > COUNTY_FIPS_LENGTH:
