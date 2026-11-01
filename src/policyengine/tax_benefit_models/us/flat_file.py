@@ -36,7 +36,8 @@ ID_VARIABLES = frozenset(
     }
 )
 STATE_LABELS = ("state_code", "state_code_str", "state_name")
-# Geography finer than a state, which means nothing in another state.
+# Geography finer than a state, and what the model derives from it. Neither means
+# anything in another state.
 LOCAL_GEOGRAPHY = (
     "block_geoid",
     "cbsa_code",
@@ -44,10 +45,14 @@ LOCAL_GEOGRAPHY = (
     "county",
     "county_fips",
     "county_str",
+    "in_ny_mctd_zone_2",
+    "in_nyc",
+    "medicaid_rating_area",
     "place_fips",
     "puma",
     "sldl",
     "sldu",
+    "three_digit_zip_code",
     "tract_geoid",
     "vtd",
     "zcta",
@@ -73,9 +78,10 @@ def _value_at(frame: pd.DataFrame, name: str, year: int) -> Optional[pd.Series]:
     readable = []
     for column in _columns_of(frame, name):
         period = column.rsplit("__", 1)[1]
-        column_year = year if period == ETERNITY else int(period[:4])
-        if column_year <= year:
-            readable.append((column_year, column))
+        if period == ETERNITY:
+            readable.append((year, column))
+        elif period[:4].isdigit() and int(period[:4]) <= year:
+            readable.append((int(period[:4]), column))
     return frame[max(readable)[1]] if readable else None
 
 
@@ -155,6 +161,37 @@ def _with_person_level_ids(frame: pd.DataFrame, year: int) -> pd.DataFrame:
     return frame.assign(**identifiers)
 
 
+def _require_groups_within_households(frame: pd.DataFrame, year: int) -> None:
+    """Refuse IDs numbered within households, which would merge strangers."""
+    households = frame[f"person_household_id__{year}"]
+    for group in GROUP_ENTITIES:
+        ids = frame[f"person_{group}_id__{year}"]
+        if households.groupby(ids).nunique().gt(1).any():
+            raise ValueError(
+                f"Some {group}_id values span several households. Number each "
+                f"{group} across the whole file, not within its household."
+            )
+
+
+def _require_group_values_agree(frame: pd.DataFrame, year: int, variables) -> None:
+    """Refuse a group's rows that disagree, since the first row would win."""
+    by_group = {}
+    for column in frame.columns:
+        group = variables[_variable_of(column)].entity.key
+        if group in GROUP_ENTITIES:
+            by_group.setdefault(group, []).append(column)
+    for group, columns in by_group.items():
+        ids = frame[f"person_{group}_id__{year}"]
+        spread = frame[columns].groupby(ids, sort=False).nunique().max()
+        disagreeing = spread[spread > 1].index.tolist()
+        if disagreeing:
+            listed = ", ".join(disagreeing[:LISTED_COLUMNS])
+            raise ValueError(
+                f"The rows of one {group} disagree on {listed}, which hold one "
+                f"value per {group}. Give each person the {group}'s value."
+            )
+
+
 def _county_text(value) -> str:
     """A county FIPS code as five-digit text, or blank for no county.
 
@@ -184,7 +221,7 @@ def _state_fips(state: Union[str, int]) -> int:
     """Read a postal code or a FIPS code as a FIPS code."""
     if isinstance(state, str) and state.upper() in US_STATE_FIPS:
         return US_STATE_FIPS[state.upper()]
-    if state in POSTAL_BY_FIPS:
+    if not isinstance(state, bool) and state in POSTAL_BY_FIPS:
         return int(state)
     raise ValueError(f"{state!r} is neither a state postal code nor a state FIPS code.")
 
@@ -215,10 +252,6 @@ def _require_coherent_geography(frame: pd.DataFrame, year: int) -> None:
     if unknown:
         listed = ", ".join(sorted(str(value) for value in unknown))
         raise ValueError(f"state_fips holds {listed}, which name no state.")
-
-    households = frame[f"person_household_id__{year}"]
-    if state.groupby(households).nunique().gt(1).any():
-        raise ValueError("Some households span several values of state_fips.")
 
     county = _value_at(frame, "county_fips", year)
     if county is not None:
@@ -274,10 +307,13 @@ def prepare_flat_file(
             f"The file has no age for {year}, so everyone would run as a 40-year-old."
         )
     frame = _with_person_level_ids(frame, year)
+    _require_groups_within_households(frame, year)
     frame = _with_text_counties(frame)
-    if state is not None:
-        return _in_state(frame, _state_fips(state), year)
-    _require_coherent_geography(frame, year)
+    if state is None:
+        _require_coherent_geography(frame, year)
+    else:
+        frame = _in_state(frame, _state_fips(state), year)
+    _require_group_values_agree(frame, year, system.variables)
     return frame
 
 

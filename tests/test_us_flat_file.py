@@ -170,7 +170,7 @@ class TestRefusals:
         with pytest.raises(ValueError, match="99"):
             prepare_flat_file(in_state(survey(), 99), year=YEAR)
 
-    @pytest.mark.parametrize("state", ["ZZ", 99, ""])
+    @pytest.mark.parametrize("state", ["ZZ", 99, "", True])
     def test_a_requested_state_that_does_not_exist(self, state):
         with pytest.raises(ValueError, match="postal code"):
             prepare_flat_file(survey(), year=YEAR, state=state)
@@ -178,7 +178,18 @@ class TestRefusals:
     def test_a_household_across_states(self):
         people = in_state(survey())
         people.loc[0, "state_fips"] = MISSISSIPPI
-        with pytest.raises(ValueError, match="span"):
+        with pytest.raises(ValueError, match="state_fips"):
+            prepare_flat_file(people, year=YEAR)
+
+    def test_a_group_numbered_within_its_household(self):
+        people = in_state(survey()).assign(tax_unit_id=1)
+        with pytest.raises(ValueError, match="tax_unit_id values span"):
+            prepare_flat_file(people, year=YEAR)
+
+    def test_a_household_value_that_varies_within_the_household(self):
+        people = in_state(survey())
+        people.loc[0, "household_weight"] = 7
+        with pytest.raises(ValueError, match="household_weight"):
             prepare_flat_file(people, year=YEAR)
 
     def test_a_county_outside_its_state(self):
@@ -217,6 +228,11 @@ class TestMovingToAState:
         columns = [column for column in prepared if column.startswith("state_fips")]
         assert len(columns) == 3
         assert set(prepared[columns].to_numpy().ravel()) == {MISSISSIPPI}
+
+    def test_a_moved_file_may_hold_one_stale_county_per_person(self):
+        people = survey().assign(county_fips=[f"{index:05d}" for index in range(7)])
+        prepared = prepare_flat_file(people, year=YEAR, state="MS")
+        assert not any(column.startswith("county_fips") for column in prepared)
 
     def test_stale_geography_leaves(self):
         stale = {f"{name}__{YEAR}": "x" for name in (*STATE_LABELS, *LOCAL_GEOGRAPHY)}
@@ -307,6 +323,27 @@ def test_stale_geography_changes_nothing_after_a_move():
     ]:
         first, second = (arm.calculate(variable, period).values for arm in arms)
         assert np.array_equal(first, second), variable
+
+
+def test_national_thresholds_do_not_depend_on_the_state():
+    thresholds = [
+        pe.us.flat_file_microsimulation(
+            survey(), year=YEAR, state=state, spm=NATIONAL_SPM
+        )
+        .calculate("spm_unit_spm_threshold", YEAR)
+        .values
+        for state in ("CA", "MS")
+    ]
+    assert np.array_equal(*thresholds)
+
+
+def test_a_year_before_the_file_falls_back_to_defaults():
+    sim = pe.us.flat_file_microsimulation(
+        survey(), year=YEAR, state="MS", spm=NATIONAL_SPM
+    )
+    assert set(sim.calculate("state_code", YEAR - 1).values) == {"CA"}
+    assert set(sim.calculate("age", YEAR - 1).values) == {40}
+    assert sim.calculate("employment_income", YEAR - 1).sum() == 0
 
 
 def test_a_county_keyed_rule_runs_after_a_move():

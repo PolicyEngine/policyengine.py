@@ -34,7 +34,7 @@ The file holds one row per person. Name a column after a variable, or `variable_
 
 | Column | Needed | Notes |
 | --- | --- | --- |
-| `household_id`, `tax_unit_id`, `spm_unit_id`, `family_id`, `marital_unit_id` | Yes | Put each on every person's row. Text IDs work. |
+| `household_id`, `tax_unit_id`, `spm_unit_id`, `family_id`, `marital_unit_id` | Yes | Put each on every person's row, numbered across the whole file. Text IDs work. |
 | `age` | Yes | Without it, everyone runs as 40. |
 | `state_fips` | Unless you pass `state` | Without it, everyone runs as California. |
 | `person_id` | No | The helper numbers the rows if you leave it out. |
@@ -42,7 +42,7 @@ The file holds one row per person. Name a column after a variable, or `variable_
 | Income and other inputs | As your measure needs | Inputs you omit take their defaults, usually zero. |
 | `county_fips` | No | Read it as text so that 06037 keeps its leading zero. The helper repairs 6037 either way. |
 
-`prepare_flat_file` runs these checks and returns the frame the simulation loads, so you can inspect it. It refuses a file that lacks a required column, repeats a `person_id`, puts one household in two states, or holds a county outside its state. It logs columns that name no variable, then ignores them.
+`prepare_flat_file` runs these checks and returns the frame the simulation loads, so you can inspect it. It refuses a file that lacks a required column, repeats a `person_id`, numbers groups within each household, gives one group's rows different values for a group-level variable such as `household_weight`, or holds a county outside its state. It logs columns that name no variable, then ignores them.
 
 ## What a state change clears
 
