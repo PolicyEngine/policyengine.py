@@ -16,31 +16,31 @@
   },
   "data_releases": {
     "uk": {
-      "build_id": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
+      "build_id": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
       "bundle_id": "uk-6.11.1",
       "certification": {
-        "built_with_model_version": "2.164.2",
+        "built_with_model_version": "2.165.1",
         "certified_by": "policyengine.py bundle certification",
-        "certified_for_model_version": "2.164.2",
+        "certified_for_model_version": "2.165.1",
         "compatibility_basis": "built_with_model_package",
         "core_binding": "bundle_pin",
-        "data_build_id": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c"
+        "data_build_id": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93"
       },
       "certified_data_artifact": {
-        "build_id": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
+        "build_id": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
         "data_package": {
           "name": "microcosm-data",
           "version": "0.1.0"
         },
         "dataset": "microcosm_uk_2024_25",
-        "sha256": "f8543876415f47819f56094c71ca4dab4cad6dcb2ba3a13b97f6982e38444c9e",
-        "uri": "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5@microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c"
+        "sha256": "a59456800f3dcc9b6b1c8c6e0271c3d1a0a599b929e0a6dd3fcd5112830af194",
+        "uri": "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5@microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93"
       },
       "country_id": "uk",
       "data_package": {
         "name": "microcosm-data",
         "release_manifest_path": "releases/microcosm-uk-2024-25-national/release_manifest.json",
-        "release_manifest_revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
+        "release_manifest_revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
         "repo_id": "policyengine/populace-uk-private",
         "repo_type": "dataset",
         "version": "0.1.0"
@@ -50,20 +50,20 @@
         "calibration_diagnostics": {
           "path": "releases/microcosm-uk-2024-25-national/calibration_diagnostics.json",
           "repo_id": "policyengine/populace-uk-private",
-          "revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
-          "sha256": "ce1b6c87852d53f9783f1671c14643aab49079975f1efff86a5b54ea989ca9b5"
+          "revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
+          "sha256": "a14152fa1cf1d95aec469c527d6af7d4a07bd924251eaa723aaba25b70e2e74f"
         },
         "microcosm_uk_2024_25": {
           "path": "microcosm_uk_2024_25.h5",
           "repo_id": "policyengine/populace-uk-private",
-          "revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
-          "sha256": "f8543876415f47819f56094c71ca4dab4cad6dcb2ba3a13b97f6982e38444c9e"
+          "revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
+          "sha256": "a59456800f3dcc9b6b1c8c6e0271c3d1a0a599b929e0a6dd3fcd5112830af194"
         },
         "microcosm_uk_2024_25_calibration": {
           "path": "microcosm_uk_2024_25_calibration.npz",
           "repo_id": "policyengine/populace-uk-private",
-          "revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
-          "sha256": "cf82d34a5eabbcd1a607b7475878133d77e64f3a7ae45bac9531d8ccaa427f5e"
+          "revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
+          "sha256": "ed0952c2a6fbc1a7925e4bdb150e504fa27b2baae628f24fa1406ac6205528ea"
         },
         "microcosm_uk_2024_25_dense": {
           "path": "microcosm_uk_2024_25_dense.h5",
@@ -75,41 +75,41 @@
         "release_certification": {
           "path": "releases/microcosm-uk-2024-25-national/release_certification.json",
           "repo_id": "policyengine/populace-uk-private",
-          "revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
-          "sha256": "09ed917bfdaaa6bce1c5d947221cbe6f78342761977f0cbc37db4cf1d3654d7c"
+          "revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
+          "sha256": "b7b1d391bfa1937285717f971862d9345cdb547e8f1136644e6515335160e09d"
         },
         "release_cut_gates": {
           "path": "releases/microcosm-uk-2024-25-national/release_cut_gates.json",
           "repo_id": "policyengine/populace-uk-private",
-          "revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
-          "sha256": "357bcfb218819d70e73d8b75c136f9c60f9fdadb9c2fcadfb3c41b42312bce5c"
+          "revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
+          "sha256": "71de392cd8309e12933db35a21fa44db8bd6149d800882c6425add8d049c2028"
         },
         "score_vs_enhanced_frs": {
           "path": "releases/microcosm-uk-2024-25-national/score_vs_enhanced_frs.json",
           "repo_id": "policyengine/populace-uk-private",
-          "revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
-          "sha256": "81873b01725555887c436698c9c030b00697d2b4b240a0a1342a19696269afc7"
+          "revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
+          "sha256": "45ed6088340de8acad9dcd495e8f2fe2972c5614f135fe67aeabb658cead7ff5"
         },
         "spine_gates": {
           "path": "releases/microcosm-uk-2024-25-national/spine_gates.json",
           "repo_id": "policyengine/populace-uk-private",
-          "revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
-          "sha256": "60b5902096a4d23ef79924503aee187f990f8fcaae2b765b876d968d2ec08ac4"
+          "revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
+          "sha256": "6e16461b33477b381a9bad438133c705ce50c656000fada28c1a77b887bbca5c"
         },
         "terminal_gates": {
           "path": "releases/microcosm-uk-2024-25-national/terminal_gates.json",
           "repo_id": "policyengine/populace-uk-private",
-          "revision": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
-          "sha256": "b278ae3bef7a9fe800e5b8797ffbaa5d838d825e3f226124c345d981a8ec24a4"
+          "revision": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
+          "sha256": "c810b22f5f7ac24553f6b12c3c78d4e65ed85b5b55da3a5a368120c73514be21"
         }
       },
       "default_dataset": "microcosm_uk_2024_25",
-      "default_dataset_uri": "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5@microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c",
+      "default_dataset_uri": "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5@microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93",
       "model_package": {
         "name": "policyengine-uk",
-        "sha256": "649c03d59d5deb8194690ce7b704206c3ffc90d2cde5661c1a806143a863ae09",
-        "version": "2.164.2",
-        "wheel_url": "https://files.pythonhosted.org/packages/20/98/7519e6b1f5dfcb79c737aeb9d1e74998ea9f40b406bb271564cf8a744a4d/policyengine_uk-2.164.2-py3-none-any.whl"
+        "sha256": "e8327ffe22393d468f7c4bb0e1e18b8b8ed7241b1a5fcec447917196e8a1b4fa",
+        "version": "2.165.1",
+        "wheel_url": "https://files.pythonhosted.org/packages/eb/3c/4db973ea84deb97e32a4a67a832babbade2475f2df9edc7a2494dae86d69/policyengine_uk-2.165.1-py3-none-any.whl"
       },
       "policyengine_version": "6.11.1",
       "region_datasets": {
@@ -124,14 +124,23 @@
         }
       },
       "regional_certification": {
-        "accepted_reason": "Built from the head of PolicyEngine/policyengine-uk#2695 (b71ce793), labelled 2.162.12, and routed under policyengine-uk 2.164.2 on its audited input surface: no column is dropped, and five inputs added after 2.162.12 take their defaults (the cash and stocks-and-shares ISA balances and subscriptions, and Housing Benefit's permitted-work disregard).",
+        "accepted_reason": "Built from the head of PolicyEngine/policyengine-uk#2695 (b71ce793), labelled 2.162.12, and routed under policyengine-uk 2.165.1 on its audited input surface: no column is dropped, and fourteen inputs added after 2.162.12 take their defaults (the cash and stocks-and-shares ISA balances and subscriptions, Housing Benefit's permitted-work disregard, and the nine company car inputs, so the local area carries no company cars).",
         "area_receipts": "uncertified",
         "built_with_model_version": "2.162.12",
-        "certified_for_model_version": "2.164.2",
+        "certified_for_model_version": "2.165.1",
         "compatibility_basis": "accepted_model_mismatch",
         "defaulted_inputs": [
           "cash_isa_balance",
           "cash_isa_subscriptions",
+          "company_car_availability",
+          "company_car_capital_contributions",
+          "company_car_co2_emissions",
+          "company_car_electric_range",
+          "company_car_fuel_type",
+          "company_car_list_price",
+          "company_car_private_fuel_provided",
+          "company_car_private_use_payments",
+          "company_car_registered_from_6_april_2020",
           "housing_benefit_permitted_work_disregard",
           "stocks_and_shares_isa_balance",
           "stocks_and_shares_isa_subscriptions"
@@ -2536,6 +2545,15 @@
           "defaulted_inputs": [
             "cash_isa_balance",
             "cash_isa_subscriptions",
+            "company_car_availability",
+            "company_car_capital_contributions",
+            "company_car_co2_emissions",
+            "company_car_electric_range",
+            "company_car_fuel_type",
+            "company_car_list_price",
+            "company_car_private_fuel_provided",
+            "company_car_private_use_payments",
+            "company_car_registered_from_6_april_2020",
             "housing_benefit_permitted_work_disregard",
             "stocks_and_shares_isa_balance",
             "stocks_and_shares_isa_subscriptions"
@@ -2549,7 +2567,7 @@
           },
           "limitations": [
             "The audit's baseline is the policyengine-uk 2.162.12 release on PyPI, which lacks #2695; the cut was built from #2695's head (b71ce793), whose package code 2.162.14 releases unchanged. #2695 adds no input and changes no result.",
-            "policyengine-uk 2.164.2 changes rules after 2.162.14. This audit covers the inputs the cut stores, not how 2.164.2's rules use them."
+            "policyengine-uk 2.165.1 changes rules after 2.162.14. This audit covers the inputs the cut stores, not how 2.165.1's rules use them."
           ],
           "model_inputs": [
             "a_and_e_visits",
@@ -2624,6 +2642,15 @@
             "cigars_grams_per_week",
             "clothing_and_footwear_consumption",
             "communication_consumption",
+            "company_car_availability",
+            "company_car_capital_contributions",
+            "company_car_co2_emissions",
+            "company_car_electric_range",
+            "company_car_fuel_type",
+            "company_car_list_price",
+            "company_car_private_fuel_provided",
+            "company_car_private_use_payments",
+            "company_car_registered_from_6_april_2020",
             "consumer_debt",
             "corporate_wealth",
             "council_tax",
@@ -2999,6 +3026,7 @@
             "beer_litres",
             "benefit_cap_reduction",
             "benefit_cap_welfare_benefits",
+            "benefits_in_kind",
             "benefits_premiums",
             "benunit_contains_household_head",
             "benunit_count_adults",
@@ -3057,6 +3085,7 @@
             "car_co2_emissions",
             "car_engine_size",
             "car_first_registration_date",
+            "car_fuel_benefit",
             "car_fuel_type",
             "car_is_ved_exempt",
             "car_list_price",
@@ -3133,6 +3162,17 @@
             "cliff_gap",
             "clothing_and_footwear_consumption",
             "communication_consumption",
+            "company_car_appropriate_percentage",
+            "company_car_availability",
+            "company_car_benefit",
+            "company_car_capital_contributions",
+            "company_car_co2_emissions",
+            "company_car_electric_range",
+            "company_car_fuel_type",
+            "company_car_list_price",
+            "company_car_private_fuel_provided",
+            "company_car_private_use_payments",
+            "company_car_registered_from_6_april_2020",
             "consumer_debt",
             "consumer_incident_tax_revenue_change",
             "consumption",
@@ -3286,6 +3326,7 @@
             "family_type",
             "financial_spread_betting_net_losses",
             "food_and_non_alcoholic_beverages_consumption",
+            "forgoes_universal_credit_for_tax_free_childcare",
             "free_school_fruit_veg",
             "free_school_meals",
             "free_school_milk",
@@ -3309,6 +3350,7 @@
             "guarantee_credit",
             "hand_rolling_tobacco_grams_per_week",
             "has_attained_state_pension_credit_qualifying_age",
+            "has_company_car",
             "has_lifetime_isa",
             "has_mixed_age_couple_pension_credit_saving",
             "has_non_dependant_for_council_tax_reduction_severe_disability_premium",
@@ -3725,6 +3767,7 @@
             "ni_class_1_employer",
             "ni_class_1_income",
             "ni_class_1_secondary_liable",
+            "ni_class_1a",
             "ni_class_2",
             "ni_class_3",
             "ni_class_4",
@@ -4042,6 +4085,7 @@
             "tax_free_childcare_child_age_eligible",
             "tax_free_childcare_eligible",
             "tax_free_childcare_eligible_declaration_periods",
+            "tax_free_childcare_eligible_without_universal_credit",
             "tax_free_childcare_expected_declaration_period_income",
             "tax_free_childcare_meets_income_requirements",
             "tax_free_childcare_meets_uk_connection",
@@ -4056,6 +4100,7 @@
             "tax_free_childcare_spend_routed_share",
             "tax_free_childcare_treated_as_in_work",
             "tax_free_childcare_uses_qualifying_provider",
+            "tax_free_childcare_without_universal_credit",
             "tax_free_childcare_work_condition",
             "tax_free_savings_income",
             "tax_modelling",
@@ -4101,6 +4146,7 @@
             "uc_LHA_cap",
             "uc_advance_repayment_amount",
             "uc_assessable_capital",
+            "uc_award_carries_deductions",
             "uc_benefit_cap",
             "uc_benefit_cap_earnings_exception_threshold",
             "uc_benefit_cap_reduction",
@@ -4272,7 +4318,7 @@
             "youngest_child_age_for_legacy_benefits",
             "youngest_claimant_or_partner_age"
           ],
-          "model_version": "2.164.2",
+          "model_version": "2.165.1",
           "never_modelled_columns": [
             "age_left_full_time_education",
             "atomic_area_basis",
@@ -4370,8 +4416,8 @@
         },
         "limitations": [
           "The audit's baseline is the policyengine-uk 2.162.12 release on PyPI, which lacks #2695; the cut was built from #2695's head (b71ce793), whose package code 2.162.14 releases unchanged. #2695 adds no input and changes no result.",
-          "policyengine-uk 2.164.2 changes rules after 2.162.14. This audit covers the inputs the cut stores, not how 2.164.2's rules use them.",
-          "area runs on policyengine-uk 2.164.2 default 5 inputs that the regional file does not store and its build model, policyengine-uk 2.162.12, did not take as inputs, so area results for measures that read them use those defaults: cash_isa_balance, cash_isa_subscriptions, housing_benefit_permitted_work_disregard, stocks_and_shares_isa_balance, stocks_and_shares_isa_subscriptions"
+          "policyengine-uk 2.165.1 changes rules after 2.162.14. This audit covers the inputs the cut stores, not how 2.165.1's rules use them.",
+          "area runs on policyengine-uk 2.165.1 default 14 inputs that the regional file does not store and its build model, policyengine-uk 2.162.12, did not take as inputs, so area results for measures that read them use those defaults: cash_isa_balance, cash_isa_subscriptions, company_car_availability, company_car_capital_contributions, company_car_co2_emissions, company_car_electric_range, company_car_fuel_type, company_car_list_price, company_car_private_fuel_provided, company_car_private_use_payments, company_car_registered_from_6_april_2020, housing_benefit_permitted_work_disregard, stocks_and_shares_isa_balance, stocks_and_shares_isa_subscriptions"
         ],
         "never_modelled_columns": [
           "age_left_full_time_education",
@@ -4472,10 +4518,10 @@
       "regional_release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-uk-private/resolve/microcosm-uk-2024-25-dense-20261027T154955Z-6528c865/releases/microcosm-uk-2024-25-dense/release_manifest.json",
       "regional_source_manifest_sha256": "20e8ade9e5225147fffff52bd09f3bea506dbced886dae6c099f14ce3b72e996",
       "regional_source_manifest_uri": "hf://dataset/policyengine/populace-uk-private@microcosm-uk-2024-25-dense-20261027T154955Z-6528c865/releases/microcosm-uk-2024-25-dense/release_manifest.json",
-      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-uk-private/resolve/microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c/releases/microcosm-uk-2024-25-national/release_manifest.json",
+      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-uk-private/resolve/microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93/releases/microcosm-uk-2024-25-national/release_manifest.json",
       "schema_version": 1,
-      "source_manifest_uri": "hf://dataset/policyengine/populace-uk-private@microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c/releases/microcosm-uk-2024-25-national/release_manifest.json",
-      "version": "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c"
+      "source_manifest_uri": "hf://dataset/policyengine/populace-uk-private@microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93/releases/microcosm-uk-2024-25-national/release_manifest.json",
+      "version": "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93"
     },
     "us": {
       "build_id": "populace-us-2024-spm-20260915",
@@ -4709,10 +4755,10 @@
     "policyengine-uk": {
       "country": "uk",
       "import_name": "policyengine_uk",
-      "install_requirement": "policyengine-uk==2.164.2",
+      "install_requirement": "policyengine-uk==2.165.1",
       "name": "policyengine-uk",
       "role": "country_model",
-      "version": "2.164.2"
+      "version": "2.165.1"
     },
     "policyengine-us": {
       "country": "us",
