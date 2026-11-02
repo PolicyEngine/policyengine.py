@@ -10,6 +10,7 @@ from .dataset import Dataset
 from .dataset import YearData as YearData
 from .dataset import map_to_entity as map_to_entity
 from .dynamic import Dynamic as Dynamic
+from .entity import Entity as Entity
 from .output import Output as Output
 from .output import OutputCollection as OutputCollection
 from .parameter import Parameter as Parameter
@@ -31,6 +32,7 @@ from .tax_benefit_model_version import StaleOutputError as StaleOutputError
 from .tax_benefit_model_version import (
     TaxBenefitModelVersion as TaxBenefitModelVersion,
 )
+from .variable import EnumValue as EnumValue
 from .variable import Variable as Variable
 
 # Rebuild models to resolve forward references
