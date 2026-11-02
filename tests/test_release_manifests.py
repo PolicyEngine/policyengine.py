@@ -73,11 +73,11 @@ US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
     f"@{US_LOCAL_AREA_RELEASE_ID}"
 )
-UK_MODEL_VERSION = "2.164.2"
-UK_BUILT_WITH_MODEL_VERSION = "2.164.2"
+UK_MODEL_VERSION = "2.165.1"
+UK_BUILT_WITH_MODEL_VERSION = "2.165.1"
 UK_DATA_RELEASE_VERSION = "0.1.0"
-UK_DATA_RELEASE_ID = "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c"
-UK_DATA_RELEASE_REVISION = "microcosm-uk-2024-25-national-20261031T181401Z-0a4c8e2c"
+UK_DATA_RELEASE_ID = "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93"
+UK_DATA_RELEASE_REVISION = "microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93"
 UK_DATA_RELEASE_PATH = "releases/microcosm-uk-2024-25-national/release_manifest.json"
 UK_LOCAL_AREA_RELEASE_ID = "microcosm-uk-2024-25-dense-20261027T154955Z-6528c865"
 # The prior certified default (policyengine-uk-data 1.58.1), kept resolvable
