@@ -13,6 +13,7 @@ from policyengine.provenance.manifest import (
 )
 from policyengine.provenance.trace import build_trace_tro_from_release_bundle
 
+from .entity import Entity
 from .tax_benefit_model import TaxBenefitModel
 
 if TYPE_CHECKING:
@@ -46,6 +47,17 @@ class TaxBenefitModelVersion(BaseModel):
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)
     parameter_nodes: list["ParameterNode"] = Field(default_factory=list)
+    entities: list[Entity] = Field(
+        default_factory=list,
+        description="The country model's entities, in the country package's order",
+    )
+    basic_inputs: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Variables a household builder shows by default, as the country "
+            "package declares them"
+        ),
+    )
 
     # Region registry for geographic simulations
     region_registry: "Optional[RegionRegistry]" = Field(

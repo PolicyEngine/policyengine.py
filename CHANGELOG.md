@@ -1,3 +1,17 @@
+## [6.12.0] - 2026-11-02
+
+### Added
+
+- `certify-data --accept-regional-model-mismatch REASON --regional-input-surface-evidence AUDIT.json` (UK only) keeps a local-area release routed when it was built on another policyengine-uk version, and records the reviewed mismatch as `regional_certification` in the bundle instead of refusing; area receipts are uncertified. `scripts/audit_regional_input_surface.py` writes the audit, reading the release's build model in a throwaway `uv run` environment, and `verify_regional_certification` checks an area receipt's record of the exception.
+- Model versions publish the metadata the Public API could only read through the private `_load_system()` method: each model version's `entities` (key, plural and person flag) and `basic_inputs`; each variable's `is_input_variable`, `hidden_input`, `module_name`, `enum_values` (each value with its label, as declared) and, where its `adds` or `subtracts` names a parameter, `adds_parameter_path` or `subtracts_parameter_path`; each parameter's `economy` and `household` flags; and each bracket schedule as a parameter node with its stored label. Existing fields are unchanged: `adds` and `subtracts` still hold the list as of 2025-01-01.
+
+### Fixed
+
+- Require a byte-bound input-surface audit when accepting a UK regional model mismatch. The audit compares the regional H5's stored columns with the regional release's build model as well as the target model: it refuses columns the build model defines and the target does not, records columns neither model defines as never modelled, and reports as defaulted only target inputs the file does not store that were not build-model inputs. Certification reads both models again rather than trusting the evidence's lists, records that the stored columns are the auditor's (`stored_columns: auditor_attested`), and adds a limitation naming the defaulted inputs. The bundle and TRACE record the result and limitations and preserve the regional manifest digest and area build model; an area run's execution receipt carries a summary bound to the record's digest and stays uncertified. Dropping the regional release removes its exception record.
+
+  Refuse regional releases that explicitly name a different model package, and forward empty CLI reasons so certification rejects them, as it rejects reasons with no visible character. Document that the UK loader silently skips unknown columns.
+
+
 ## [6.11.1] - 2026-10-27
 
 ### Changed
