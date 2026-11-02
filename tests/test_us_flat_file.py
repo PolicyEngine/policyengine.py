@@ -13,6 +13,7 @@ pytest.importorskip("policyengine_us")
 import policyengine as pe  # noqa: E402
 from policyengine.countries.us.data import US_STATE_FIPS  # noqa: E402
 from policyengine.tax_benefit_models.us.flat_file import (  # noqa: E402
+    DERIVED_FROM_STATE,
     LOCAL_GEOGRAPHY,
     STATE_LABELS,
     prepare_flat_file,
@@ -68,14 +69,40 @@ class TestPreparedColumns:
         prepared = prepare_flat_file(people, year=YEAR)
         assert "is_household_head__ETERNITY" in prepared.columns
 
-    def test_group_ids_move_onto_each_persons_row(self):
+    def test_group_ids_stay_the_files_own(self):
         prepared = prepare_flat_file(in_state(survey()), year=YEAR)
         for column in GROUP_COLUMNS:
-            assert f"{column}__{YEAR}" not in prepared.columns
-            assert (
-                prepared[f"person_{column}__{YEAR}"].tolist()
-                == survey()[column].tolist()
-            )
+            assert prepared[f"{column}__{YEAR}"].tolist() == survey()[column].tolist()
+
+    def test_memberships_number_groups_in_file_order(self):
+        people = in_state(survey()).assign(household_id=[9, 9, 3, 3, 3, 3, 7])
+        prepared = prepare_flat_file(people, year=YEAR)
+        assert prepared[f"person_household_id__{YEAR}"].tolist() == [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            2,
+        ]
+        assert prepared[f"household_id__{YEAR}"].tolist() == [9, 9, 3, 3, 3, 3, 7]
+
+    def test_whole_number_float_ids_keep_their_values(self):
+        people = in_state(survey()).astype({"household_id": float})
+        prepared = prepare_flat_file(people, year=YEAR)
+        assert prepared[f"household_id__{YEAR}"].tolist() == (
+            survey()["household_id"].tolist()
+        )
+
+    def test_an_id_too_large_to_store_takes_its_place_in_the_file(self, caplog):
+        people = in_state(survey()).assign(
+            household_id=survey()["household_id"] + 2**40
+        )
+        with caplog.at_level(logging.WARNING):
+            prepared = prepare_flat_file(people, year=YEAR)
+        assert "too large" in caplog.text
+        assert prepared[f"household_id__{YEAR}"].tolist() == [0, 0, 1, 1, 1, 1, 2]
 
     def test_an_export_with_many_id_columns_settles_on_one(self):
         people = in_state(survey()).rename(
@@ -83,8 +110,8 @@ class TestPreparedColumns:
         )
         people[f"person_household_id__{YEAR}"] = people["household_id__ETERNITY"]
         prepared = prepare_flat_file(people, year=YEAR)
-        ids = [column for column in prepared if "household_id" in column]
-        assert ids == [f"person_household_id__{YEAR}"]
+        ids = {column for column in prepared if "household_id" in column}
+        assert ids == {f"household_id__{YEAR}", f"person_household_id__{YEAR}"}
 
     def test_text_ids_become_integers_that_keep_the_groups(self):
         people = in_state(survey())
@@ -170,7 +197,7 @@ class TestRefusals:
         with pytest.raises(ValueError, match="99"):
             prepare_flat_file(in_state(survey(), 99), year=YEAR)
 
-    @pytest.mark.parametrize("state", ["ZZ", 99, "", True])
+    @pytest.mark.parametrize("state", ["ZZ", 99, "", True, np.bool_(True)])
     def test_a_requested_state_that_does_not_exist(self, state):
         with pytest.raises(ValueError, match="postal code"):
             prepare_flat_file(survey(), year=YEAR, state=state)
@@ -192,10 +219,60 @@ class TestRefusals:
         with pytest.raises(ValueError, match="household_weight"):
             prepare_flat_file(people, year=YEAR)
 
-    def test_a_county_outside_its_state(self):
-        people = in_state(survey(), MISSISSIPPI).assign(county_fips=LOS_ANGELES_COUNTY)
-        with pytest.raises(ValueError, match="outside"):
+    @pytest.mark.parametrize(
+        "column, value",
+        [
+            ("county_fips", LOS_ANGELES_COUNTY),
+            ("county_fips", 6037),
+            ("county", "LOS_ANGELES_COUNTY_CA"),
+            ("county_str", "LOS_ANGELES_COUNTY_CA"),
+            ("tract_geoid", "06037101110"),
+            ("tract_geoid", 6037101110),
+            ("block_geoid", "060371011101000"),
+            ("congressional_district_geoid", 634),
+        ],
+    )
+    def test_geography_outside_its_state(self, column, value):
+        people = in_state(survey(), MISSISSIPPI).assign(**{column: value})
+        with pytest.raises(ValueError, match=f"{column} outside"):
             prepare_flat_file(people, year=YEAR)
+
+    @pytest.mark.parametrize("years", [(YEAR + 1,), (YEAR - 1,)])
+    def test_a_county_from_another_year_outside_its_state(self, years):
+        people = in_state(survey(), MISSISSIPPI).assign(
+            **{f"county_fips__{year}": LOS_ANGELES_COUNTY for year in years}
+        )
+        with pytest.raises(ValueError, match="county_fips outside"):
+            prepare_flat_file(people, year=YEAR)
+
+    def test_a_county_name_from_a_later_year_outside_its_state(self):
+        people = in_state(survey(), MISSISSIPPI).assign(
+            **{f"county__{YEAR + 1}": "LOS_ANGELES_COUNTY_CA"}
+        )
+        with pytest.raises(ValueError, match="county outside"):
+            prepare_flat_file(people, year=YEAR)
+
+    def test_a_state_that_moves_away_from_its_county(self):
+        people = survey().assign(
+            **{
+                f"state_fips__{YEAR}": 6,
+                f"state_fips__{YEAR + 1}": MISSISSIPPI,
+                "county_fips": LOS_ANGELES_COUNTY,
+            }
+        )
+        with pytest.raises(ValueError, match=f"for {YEAR + 1}"):
+            prepare_flat_file(people, year=YEAR)
+
+    def test_a_state_and_county_that_move_together_stay(self):
+        people = survey().assign(
+            **{
+                f"state_fips__{YEAR}": 6,
+                f"state_fips__{YEAR + 1}": MISSISSIPPI,
+                f"county_fips__{YEAR}": LOS_ANGELES_COUNTY,
+                f"county_fips__{YEAR + 1}": "28001",
+            }
+        )
+        prepare_flat_file(people, year=YEAR)
 
     def test_a_label_that_disagrees_with_the_state(self):
         people = in_state(survey(), MISSISSIPPI).assign(state_code="CA")
@@ -206,6 +283,18 @@ class TestRefusals:
         people = in_state(survey()).assign(county_fips="Los Angeles")
         with pytest.raises(ValueError, match="county_fips"):
             prepare_flat_file(people, year=YEAR)
+
+    def test_a_code_that_names_no_county_gets_a_warning(self, caplog):
+        people = in_state(survey()).assign(county_fips="06999")
+        with caplog.at_level(logging.WARNING):
+            prepare_flat_file(people, year=YEAR)
+        assert "name no county" in caplog.text
+
+    def test_a_real_county_stays_quiet(self, caplog):
+        people = in_state(survey()).assign(county_fips=LOS_ANGELES_COUNTY)
+        with caplog.at_level(logging.WARNING):
+            prepare_flat_file(people, year=YEAR)
+        assert "name no county" not in caplog.text
 
 
 class TestMovingToAState:
@@ -244,6 +333,15 @@ class TestMovingToAState:
         )
         for name in (*STATE_LABELS, *LOCAL_GEOGRAPHY):
             assert not any(column.startswith(f"{name}__") for column in prepared)
+
+    @pytest.mark.parametrize("state", [None, "AK"])
+    def test_stored_state_results_leave_whichever_state_runs(self, state):
+        stale = {f"{name}__{YEAR}": "x" for name in sorted(DERIVED_FROM_STATE)}
+        prepared = prepare_flat_file(
+            in_state(survey()).assign(**stale), year=YEAR, state=state
+        )
+        for name in DERIVED_FROM_STATE:
+            assert f"{name}__{YEAR}" not in prepared.columns
 
 
 @settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
@@ -302,6 +400,70 @@ def test_the_recipe_runs_a_csv_through_a_state(tmp_path, state):
     assert sim.populations["marital_unit"].count == 5
     assert sim.policyengine_bundle["runtime_dataset"] == "flat_file"
     assert sim.policyengine_bundle["spm"]["geography_kind"] == "national"
+    assert sim.policyengine_bundle["flat_file"]["year"] == YEAR
+    assert sim.policyengine_bundle["flat_file"]["state"] == US_STATE_FIPS[state]
+
+
+def test_the_provenance_tells_files_apart_and_not_column_orders():
+    def digest(people):
+        sim = pe.us.flat_file_microsimulation(
+            people, year=YEAR, state="MS", spm=NATIONAL_SPM
+        )
+        return sim.policyengine_bundle["flat_file"]["sha256"]
+
+    people = survey()
+    reordered = people[list(reversed(people.columns))]
+    assert digest(people) == digest(reordered)
+    assert digest(people) != digest(people.assign(age=people["age"] + 1))
+
+
+def test_one_person_groups_keep_their_own_values_in_any_order():
+    people = pd.DataFrame(
+        {
+            **{column: [9, 3] for column in GROUP_COLUMNS},
+            "age": [30, 40],
+            "state_fips": [MISSISSIPPI, 6],
+            "household_weight": [900, 100],
+        }
+    )
+    sim = pe.us.flat_file_microsimulation(people, year=YEAR, spm=NATIONAL_SPM)
+    assert sim.calculate("household_id", YEAR).values.tolist() == [9, 3]
+    assert sim.calculate("state_code", YEAR, map_to="person").values.tolist() == [
+        "MS",
+        "CA",
+    ]
+    assert sim.calculate("household_weight", YEAR, map_to="person").values.tolist() == [
+        900,
+        100,
+    ]
+
+
+def test_results_merge_back_on_the_files_own_ids():
+    ids = {1: 70, 2: 80, 3: 60}
+    people = in_state(survey()).assign(
+        household_id=survey()["household_id"].map(ids),
+    )
+    sim = pe.us.flat_file_microsimulation(people, year=YEAR, spm=NATIONAL_SPM)
+    weights = pd.DataFrame(
+        {
+            "household_id": sim.calculate("household_id", YEAR).values,
+            "weight": sim.calculate("household_weight", YEAR).values,
+        }
+    )
+    merged = people.merge(weights, on="household_id")
+    assert merged["weight"].tolist() == people["household_weight"].tolist()
+
+
+def test_a_stored_state_group_does_not_set_the_poverty_guideline():
+    clean = pe.us.flat_file_microsimulation(survey(), year=YEAR, state="AK")
+    stale = pe.us.flat_file_microsimulation(
+        survey().assign(state_group="CONTIGUOUS_US"), year=YEAR, state="AK"
+    )
+    period = f"{YEAR}-01"
+    assert np.array_equal(
+        clean.calculate("snap_fpg", period).values,
+        stale.calculate("snap_fpg", period).values,
+    )
 
 
 def test_stale_geography_changes_nothing_after_a_move():
@@ -372,3 +534,19 @@ def test_keywords_reach_the_simulation():
 def test_a_dataset_is_refused():
     with pytest.raises(ValueError, match="people"):
         pe.us.flat_file_microsimulation(survey(), year=YEAR, dataset="other.h5")
+
+
+@settings(max_examples=30, suppress_health_check=[HealthCheck.too_slow])
+@given(st.permutations(range(7)))
+def test_row_order_changes_no_household(order):
+    """Shuffling a file's rows changes the order of results, not any household."""
+    people = in_state(survey()).assign(
+        state_fips=survey()["household_id"].map({1: 6, 2: 28, 3: 36})
+    )
+    shuffled = people.iloc[list(order)].reset_index(drop=True)
+    prepared = prepare_flat_file(shuffled, year=YEAR)
+    memberships = prepared[f"person_household_id__{YEAR}"]
+    first_seen = shuffled["household_id"].drop_duplicates().tolist()
+    assert [first_seen[index] for index in memberships] == (
+        shuffled["household_id"].tolist()
+    )

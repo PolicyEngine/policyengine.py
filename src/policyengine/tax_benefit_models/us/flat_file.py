@@ -11,6 +11,7 @@ California. It writes the columns in the one form the pinned loader reads
 correctly, ``variable__period``, with each person's groups on their own row.
 """
 
+import hashlib
 import logging
 from typing import Optional, Union
 
@@ -39,6 +40,7 @@ STATE_LABELS = ("state_code", "state_code_str", "state_name")
 # Geography finer than a state, and what the model derives from it. Neither means
 # anything in another state.
 LOCAL_GEOGRAPHY = (
+    "average_home_energy_use_in_state",
     "block_geoid",
     "cbsa_code",
     "congressional_district_geoid",
@@ -58,10 +60,34 @@ LOCAL_GEOGRAPHY = (
     "zcta",
     "zip_code",
 )
+# What the model derives from the state. A stored value hides the formula, so
+# these never reach a run. The model names its in-state flags by postal code.
+DERIVED_FROM_STATE = frozenset(
+    {
+        "spm_unit_state_fips",
+        "state_group",
+        "state_group_str",
+        "tax_unit_state",
+        *US_STATE_FIPS,
+    }
+)
 COUNTY_FIPS_LENGTH = 5
+GEOID_LENGTHS = {
+    "block_geoid": 15,
+    "county_fips": COUNTY_FIPS_LENGTH,
+    "tract_geoid": 11,
+}
+COUNTY_NAMES = ("county", "county_str")
+STATE_NAMING_GEOGRAPHY = (
+    *GEOID_LENGTHS,
+    *COUNTY_NAMES,
+    "congressional_district_geoid",
+)
 ETERNITY = "ETERNITY"
+LATEST_YEAR = 9999
 POSTAL_BY_FIPS = {fips: postal for postal, fips in US_STATE_FIPS.items()}
 LISTED_COLUMNS = 10
+LARGEST_STORED_ID = 2**31 - 1
 
 
 def _variable_of(column: str) -> str:
@@ -73,15 +99,21 @@ def _columns_of(frame: pd.DataFrame, name: str) -> list[str]:
     return [column for column in frame.columns if _variable_of(column) == name]
 
 
+def _year_of(column: str) -> Optional[int]:
+    """The year a dated column starts, or ``None`` for one with no year."""
+    period = column.rsplit("__", 1)[1]
+    return int(period[:4]) if period[:4].isdigit() else None
+
+
 def _value_at(frame: pd.DataFrame, name: str, year: int) -> Optional[pd.Series]:
     """The column of ``name`` that a run in ``year`` reads, carried forward."""
     readable = []
     for column in _columns_of(frame, name):
-        period = column.rsplit("__", 1)[1]
-        if period == ETERNITY:
+        column_year = _year_of(column)
+        if column.endswith(f"__{ETERNITY}"):
             readable.append((year, column))
-        elif period[:4].isdigit() and int(period[:4]) <= year:
-            readable.append((int(period[:4]), column))
+        elif column_year is not None and column_year <= year:
+            readable.append((column_year, column))
     return frame[max(readable)[1]] if readable else None
 
 
@@ -117,20 +149,44 @@ def _without_unknown_columns(frame: pd.DataFrame, variables) -> pd.DataFrame:
 
 
 def _id_values(values: pd.Series, name: str) -> pd.Series:
-    """IDs as integers, the only form the model stores."""
+    """IDs as integers, the only form the model stores.
+
+    The model stores them in 32 bits, so anything else takes its place in the
+    file instead.
+    """
     if values.isna().any():
         raise ValueError(f"{name} has blanks. Every row needs one.")
+    if pd.api.types.is_float_dtype(values) and values.mod(1).eq(0).all():
+        values = values.astype("int64")
     if pd.api.types.is_integer_dtype(values):
-        return values.astype("int64")
-    return pd.Series(pd.factorize(values, sort=True)[0], index=values.index)
+        if values.abs().max() <= LARGEST_STORED_ID:
+            return values.astype("int64")
+        logging.warning(
+            f"{name} holds values too large to store, so the run numbers them in "
+            "file order."
+        )
+    return pd.Series(pd.factorize(values)[0], index=values.index)
+
+
+def _in_file_order(ids: pd.Series) -> pd.Series:
+    """Number groups in the order the file first names them.
+
+    The pinned loader sorts groups by ID, but reads a column with one row per
+    group in row order, so one-person groups in any other order would each take
+    another's values. In file order the two agree, for every entity at once.
+    """
+    return pd.Series(pd.factorize(ids)[0], index=ids.index)
 
 
 def _with_person_level_ids(frame: pd.DataFrame, year: int) -> pd.DataFrame:
-    """Put each person's ID and group memberships on their own row."""
+    """Put each person's ID and group memberships on their own row.
+
+    ``{group}_id`` keeps the file's own IDs, so results merge back on them.
+    """
     memberships = {}
     for group in GROUP_ENTITIES:
-        columns = _columns_of(frame, f"person_{group}_id") or _columns_of(
-            frame, f"{group}_id"
+        columns = _columns_of(frame, f"{group}_id") or _columns_of(
+            frame, f"person_{group}_id"
         )
         if columns:
             memberships[group] = _id_values(frame[columns[0]], f"{group}_id")
@@ -157,7 +213,8 @@ def _with_person_level_ids(frame: pd.DataFrame, year: int) -> pd.DataFrame:
     )
     identifiers = {f"person_id__{year}": persons}
     for group, ids in memberships.items():
-        identifiers[f"person_{group}_id__{year}"] = ids
+        identifiers[f"{group}_id__{year}"] = ids
+        identifiers[f"person_{group}_id__{year}"] = _in_file_order(ids)
     return frame.assign(**identifiers)
 
 
@@ -217,11 +274,29 @@ def _with_text_counties(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.assign(**counties)
 
 
+def _warn_about_unknown_counties(frame: pd.DataFrame) -> None:
+    """Say when a code names no county, because the model falls back silently."""
+    from policyengine_us.tools.geography.county_helpers import (
+        load_county_fips_dataset,
+    )
+
+    held = set()
+    for column in _columns_of(frame, "county_fips"):
+        held |= set(frame[column].unique()) - {""}
+    unknown = held - set(load_county_fips_dataset()["county_fips"]) if held else held
+    if unknown:
+        logging.warning(
+            f"county_fips holds {len(unknown)} code(s) that name no county, such as "
+            f"{min(unknown)}. Those households use the first county in their state "
+            "for county-keyed rules."
+        )
+
+
 def _state_fips(state: Union[str, int]) -> int:
     """Read a postal code or a FIPS code as a FIPS code."""
     if isinstance(state, str) and state.upper() in US_STATE_FIPS:
         return US_STATE_FIPS[state.upper()]
-    if not isinstance(state, bool) and state in POSTAL_BY_FIPS:
+    if not isinstance(state, bool | np.bool_) and state in POSTAL_BY_FIPS:
         return int(state)
     raise ValueError(f"{state!r} is neither a state postal code nor a state FIPS code.")
 
@@ -239,37 +314,80 @@ def _in_state(frame: pd.DataFrame, fips: int, year: int) -> pd.DataFrame:
     return frame.assign(**dict.fromkeys(state_columns, fips))
 
 
+def _named_state(name: str, values: pd.Series) -> pd.Series:
+    """The state FIPS code each value names, blank where it names none."""
+    if name in COUNTY_NAMES:
+        # "LOS_ANGELES_COUNTY_CA" names California; "UNKNOWN" names nothing.
+        return values.astype(str).str.rsplit("_", n=1).str[-1].map(US_STATE_FIPS)
+    if name == "congressional_district_geoid":
+        states = pd.to_numeric(values, errors="coerce").floordiv(100)
+    else:
+        codes = values.astype(str).str.removesuffix(".0").str.zfill(GEOID_LENGTHS[name])
+        states = pd.to_numeric(codes.str[:2], errors="coerce")
+    return states.where(states > 0)
+
+
+def _geography_read(frame: pd.DataFrame, name: str, year: int) -> Optional[pd.Series]:
+    """The column of ``name`` that a run in ``year`` reads."""
+    if name in COUNTY_NAMES and f"{name}__{year}" not in frame:
+        # The model reads the latest stored county, whichever year that is.
+        return _value_at(frame, name, LATEST_YEAR)
+    return _value_at(frame, name, year)
+
+
 def _require_coherent_geography(frame: pd.DataFrame, year: int) -> None:
     """Check a file that keeps its own states, since nothing moves them here."""
-    state = _value_at(frame, "state_fips", year)
-    if state is None:
+    if _value_at(frame, "state_fips", year) is None:
         raise ValueError(
             f"The file has no state_fips for {year}, so every household would run "
             "as California. Add the column, or pass state= to run them all in one "
             "state."
         )
-    unknown = set(state.unique()) - set(POSTAL_BY_FIPS)
-    if unknown:
-        listed = ", ".join(sorted(str(value) for value in unknown))
-        raise ValueError(f"state_fips holds {listed}, which name no state.")
 
-    county = _value_at(frame, "county_fips", year)
-    if county is not None:
-        known = county != ""
-        if county[known].str[:2].astype(int).ne(state[known]).any():
-            raise ValueError(
-                "Some rows hold a county_fips outside their state_fips. Correct them, "
-                "or pass state= to run the file in one state, which clears county."
-            )
+    dated_columns = [
+        column
+        for name in ("state_fips", *STATE_NAMING_GEOGRAPHY)
+        for column in _columns_of(frame, name)
+    ]
+    read_years = {year, *filter(None, map(_year_of, dated_columns))}
+    for read_year in sorted(read_years):
+        state = _value_at(frame, "state_fips", read_year)
+        if state is None:
+            continue
+        unknown = set(state.unique()) - set(POSTAL_BY_FIPS)
+        if unknown:
+            listed = ", ".join(sorted(str(value) for value in unknown))
+            raise ValueError(f"state_fips holds {listed}, which name no state.")
+        for name in STATE_NAMING_GEOGRAPHY:
+            stored = _geography_read(frame, name, read_year)
+            if stored is None:
+                continue
+            named = _named_state(name, stored)
+            if (named.notna() & named.ne(state)).any():
+                raise ValueError(
+                    f"Some rows hold a {name} outside their state_fips for "
+                    f"{read_year}. Correct them, or pass state= to run the file in "
+                    "one state, which clears it."
+                )
 
-    postal = state.map(POSTAL_BY_FIPS)
     for label in STATE_LABELS:
-        stored = _value_at(frame, label, year)
-        if stored is not None and stored.astype(str).ne(postal).any():
-            raise ValueError(
-                f"Some rows hold a {label} that disagrees with state_fips. Correct "
-                "them, or pass state= to run the file in one state."
-            )
+        for column in _columns_of(frame, label):
+            state = _value_at(frame, "state_fips", _year_of(column) or year)
+            if (
+                state is not None
+                and frame[column].astype(str).ne(state.map(POSTAL_BY_FIPS)).any()
+            ):
+                raise ValueError(
+                    f"Some rows hold a {label} that disagrees with state_fips. "
+                    "Correct them, or pass state= to run the file in one state."
+                )
+
+
+def _digest(frame: pd.DataFrame) -> str:
+    """A fingerprint of a prepared frame, whatever order its columns take."""
+    ordered = frame[sorted(frame.columns)]
+    rows = pd.util.hash_pandas_object(ordered, index=False).to_numpy().tobytes()
+    return hashlib.sha256("|".join(ordered.columns).encode() + rows).hexdigest()
 
 
 def prepare_flat_file(
@@ -285,7 +403,8 @@ def prepare_flat_file(
             tax unit, SPM unit, family and marital unit, plus ``age``. Columns
             are named ``variable`` or ``variable__period``. ``person_id`` is
             optional. The run ignores columns that name no variable, and logs
-            them.
+            them. Stored copies of what the model derives from the state, such
+            as ``state_group``, leave too, so the formulas run.
         year: The year the file describes. A column without a period holds that
             year's value.
         state: A postal code or FIPS code to run every household in. It applies
@@ -294,7 +413,8 @@ def prepare_flat_file(
             ``state_fips``, which then has to agree with those columns.
 
     Returns:
-        A new frame, leaving ``people`` as it was.
+        A new frame, leaving ``people`` as it was. Results come back with
+        groups in the order the file first names them.
     """
     from policyengine_us.system import system
 
@@ -302,6 +422,13 @@ def prepare_flat_file(
         raise ValueError("The file has no rows.")
     frame = _with_periods(people, year)
     frame = _without_unknown_columns(frame, system.variables)
+    frame = frame.drop(
+        columns=[
+            column
+            for column in frame.columns
+            if _variable_of(column) in DERIVED_FROM_STATE
+        ]
+    )
     if _value_at(frame, "age", year) is None:
         raise ValueError(
             f"The file has no age for {year}, so everyone would run as a 40-year-old."
@@ -311,6 +438,7 @@ def prepare_flat_file(
     frame = _with_text_counties(frame)
     if state is None:
         _require_coherent_geography(frame, year)
+        _warn_about_unknown_counties(frame)
     else:
         frame = _in_state(frame, _state_fips(state), year)
     _require_group_values_agree(frame, year, system.variables)
@@ -340,7 +468,9 @@ def flat_file_microsimulation(
         **kwargs: Passed on to ``Microsimulation``, for example ``reform``.
 
     Returns:
-        A ``Microsimulation`` carrying this release's ``policyengine_bundle``.
+        A ``Microsimulation`` carrying this release's ``policyengine_bundle``,
+        whose ``flat_file`` entry records the year, the state and a digest of
+        the prepared file.
     """
     from policyengine_core.data import Dataset
     from policyengine_us import Microsimulation
@@ -363,5 +493,10 @@ def flat_file_microsimulation(
             logical_name="flat_file",
         )
     )
+    microsim.policyengine_bundle["flat_file"] = {
+        "year": year,
+        "state": None if state is None else _state_fips(state),
+        "sha256": _digest(prepared),
+    }
     microsim.policyengine_bundle["spm"] = dict(microsim.spm_config)
     return microsim
