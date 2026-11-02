@@ -54,9 +54,17 @@ from policyengine.data.uk_geography_assets import (
     CONSTITUENCY_ASSET_SPEC,
     LOCAL_AUTHORITY_ASSET_SPEC,
 )
+from policyengine.provenance import dataset_years
 from policyengine.provenance.bundle_validation import shadowed_dataset_overlays
+from policyengine.provenance.dataset_materialization import (
+    DEFAULT_DATA_DIR,
+    DatasetMaterializationError,
+    _resolve_bundle_dataset,
+    _reuse_or_download_bundle_files,
+)
 from policyengine.provenance.manifest import (
     HF_REQUEST_TIMEOUT_SECONDS,
+    CountryReleaseManifest,
     DataReleaseArtifact,
     DataReleaseManifest,
     RegionalInputSurfaceEvidence,
@@ -194,6 +202,7 @@ class CertificationResult:
     model_package: str
     model_version: str
     warnings: list[str] = field(default_factory=list)
+    supported_years: list[int] = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -203,6 +212,7 @@ class CertificationResult:
             f"  manifest sha256: {self.manifest_sha256}",
             f"  model: {self.model_package}=={self.model_version}",
             f"  data-producer: {self.data_producer}",
+            f"  supported years: {', '.join(str(year) for year in self.supported_years)}",
             f"  wrote: {self.bundle_path}",
         ]
         for warning in self.warnings:
@@ -1641,6 +1651,128 @@ def certification_strategy(
     raise CertificationError(f"Unknown data-producer {producer!r}.")
 
 
+def supported_years_packages(
+    country: CertifiedCountry,
+    bundle_packages: dict,
+    *,
+    model_version: str,
+    core_version: Optional[str] = None,
+) -> dict[str, str]:
+    """The exact packages a country's supported years are computed with.
+
+    The country model at ``model_version``, policyengine-core at
+    ``core_version`` or else the bundle's pin, and, for the US, the bundle's
+    spm-calculator pin: the US rule ends at the last year of its SPM forecast.
+    """
+
+    def pinned(package_name: str) -> str:
+        package = bundle_packages.get(package_name)
+        version = package.get("version") if isinstance(package, dict) else None
+        if not isinstance(version, str) or not version:
+            raise CertificationError(
+                f"The bundle pins no {package_name} version, so the "
+                f"{country.upper()} supported years cannot be computed."
+            )
+        return version
+
+    packages = {
+        COUNTRY_MODEL_PACKAGES[country]: model_version,
+        "policyengine-core": core_version or pinned("policyengine-core"),
+    }
+    if country == "us":
+        packages["spm-calculator"] = pinned("spm-calculator")
+    return packages
+
+
+def certified_supported_years(
+    country: CertifiedCountry,
+    data_release: dict,
+    *,
+    packages: dict[str, str],
+    data_dir: Path = DEFAULT_DATA_DIR,
+    run=None,
+) -> list[int]:
+    """Compute the supported years of a data release's certified dataset.
+
+    The certified default dataset is made available exactly as the runtime
+    makes it available: a verified copy already in ``data_dir`` is reused,
+    otherwise it is downloaded and refused unless its bytes match the
+    certified ``sha256``. :func:`dataset_years.supported_years_in_environment`
+    then computes the years with exactly ``packages`` (see
+    :func:`supported_years_packages`), whatever is installed here.
+
+    Raises:
+        CertificationError: The dataset has no certified ``sha256`` or cannot
+            be downloaded, or the years cannot be computed.
+    """
+
+    country_manifest = CountryReleaseManifest.model_validate(data_release)
+    try:
+        certified_copy = _reuse_or_download_bundle_files(
+            _resolve_bundle_dataset(
+                country, None, data_dir=Path(data_dir), manifest=country_manifest
+            )
+        )
+        return dataset_years.supported_years_in_environment(
+            country, certified_copy.path, packages, run=run
+        )
+    except (
+        DatasetMaterializationError,
+        dataset_years.SupportedYearsEnvironmentError,
+    ) as exc:
+        raise CertificationError(
+            f"Cannot record the {country.upper()} supported years of "
+            f"{country_manifest.default_dataset!r}: {exc}"
+        ) from exc
+
+
+def record_supported_years(
+    country: str,
+    *,
+    bundle_path: Optional[Path] = None,
+    data_dir: Path = DEFAULT_DATA_DIR,
+    run=None,
+) -> list[int]:
+    """Record the current certificate's supported years without re-certifying.
+
+    Computes them as certification does, on the certified dataset under the
+    bundle's own pins (country model, core and, for the US, spm-calculator),
+    and writes them to ``data_releases.<country>.certified_data_artifact``.
+    Nothing else in the bundle changes; regenerate the TRACE sidecars after,
+    since they bind the manifest's bytes.
+    """
+
+    certified_country = _certified_country(country)
+    bundle_path = bundle_path or default_bundle_source_path()
+    bundle = json.loads(bundle_path.read_text())
+    data_release = (bundle.get("data_releases") or {}).get(certified_country)
+    if not isinstance(data_release, dict) or not isinstance(
+        data_release.get("certified_data_artifact"), dict
+    ):
+        raise CertificationError(
+            f"The bundle has no certified {certified_country.upper()} data release."
+        )
+    bundle_packages = bundle.get("packages") or {}
+    model_package = COUNTRY_MODEL_PACKAGES[certified_country]
+    model_version = ((bundle_packages.get(model_package) or {}).get("version")) or (
+        (data_release.get("model_package") or {}).get("version")
+    )
+    if not model_version:
+        raise CertificationError(f"The bundle pins no {model_package} version.")
+    years = certified_supported_years(
+        certified_country,
+        data_release,
+        packages=supported_years_packages(
+            certified_country, bundle_packages, model_version=model_version
+        ),
+        data_dir=data_dir,
+        run=run,
+    )
+    data_release["certified_data_artifact"]["supported_years"] = years
+    bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
+    return years
+
+
 def installed_model_version(model_package: str) -> str:
     from importlib.metadata import version
 
@@ -1671,6 +1803,7 @@ def certify_data_release(
     qualified_pair_id: Optional[str] = None,
     regional_model_mismatch_reason: Optional[str] = None,
     regional_input_surface_evidence: Optional[RegionalInputSurfaceEvidence] = None,
+    supported_years_data_dir: Path = DEFAULT_DATA_DIR,
 ) -> CertificationResult:
     """Certify a data release into the bundle manifest.
 
@@ -1695,6 +1828,12 @@ def certify_data_release(
     never-modelled column, defaulted input and limitation is recorded in
     ``regional_certification`` alongside the reason and both model versions.
     The core must still be covered; area receipts remain uncertified.
+
+    The certificate records the certified dataset's supported years on
+    ``certified_data_artifact.supported_years``: the dataset is downloaded
+    into ``supported_years_data_dir`` (a verified copy there is reused) and
+    the years are computed with exactly the certified model, the core and,
+    for the US, the bundle's spm-calculator (:func:`certified_supported_years`).
     """
     certified_country = _certified_country(country)
     if (
@@ -1751,6 +1890,21 @@ def certify_data_release(
         regional_model_mismatch_reason=regional_model_mismatch_reason,
         regional_input_surface_evidence=regional_input_surface_evidence,
     )
+    # The years the certified dataset is supported for under the exact pins
+    # this certificate sets, so the runtime can check requested years without
+    # the file (create_datasets, ensure_datasets).
+    supported_years = certified_supported_years(
+        certified_country,
+        data_release,
+        packages=supported_years_packages(
+            certified_country,
+            bundle.get("packages") or {},
+            model_version=model_version,
+            core_version=core_version,
+        ),
+        data_dir=supported_years_data_dir,
+    )
+    data_release["certified_data_artifact"]["supported_years"] = supported_years
     previous_release = (bundle.get("data_releases") or {}).get(country) or {}
     bundle.setdefault("data_releases", {})[country] = data_release
     # Overlays may never shadow a certified name, so a release that certifies
@@ -1801,4 +1955,5 @@ def certify_data_release(
         model_package=model_package,
         model_version=model_version,
         warnings=warnings,
+        supported_years=supported_years,
     )

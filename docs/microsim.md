@@ -185,8 +185,26 @@ them, so a successful run is not evidence of support. `create_datasets` and
 `policyengine.provenance`) for any other year before they create a year
 file. The error's `country_id`, `dataset`, `years` and `supported_years`
 attributes name the request and the years that are supported. Pass
-`allow_unsupported_years=True` to create the year files anyway. Year files
-that already exist in the data folder are loaded without the check.
+`allow_unsupported_years=True` to create the year files anyway.
+
+For the certified default dataset, the bundle manifest records the
+supported years, on `data_releases.<country>.certified_data_artifact.supported_years`.
+Certification computes them on the certified file under the pinned packages.
+A request for that dataset (no dataset, its name, or its certified URI) is
+checked against the record before anything is downloaded, and
+`ensure_datasets` checks it before reusing year files that already exist,
+without reading the source or the year files. Any other dataset, such as the
+US local-area dataset or your own file, is checked by computing its years
+from the source once it is available locally, and its existing year files
+are loaded without the check. A certificate from before the record existed
+falls back to the same computation.
+
+```python
+from policyengine.provenance.dataset_years import recorded_supported_years
+
+recorded_supported_years("us")  # 2022 to 2035
+recorded_supported_years("us", "populace_us_2024_acs_local")  # None
+```
 
 ### US local-area dataset
 

@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
@@ -51,6 +52,34 @@ US_LOCAL_AREA_MANIFEST_URI = (
     "hf://dataset/policyengine/populace-us"
     f"@{US_LOCAL_AREA_TAG}/releases/{US_LOCAL_AREA_TAG}/release_manifest.json"
 )
+#: What the stand-in for the certified dataset's supported years returns.
+STAND_IN_SUPPORTED_YEARS = [2024, 2025, 2026]
+
+
+@contextmanager
+def _stand_in_supported_years():
+    """Stand in for computing the certified dataset's supported years, which
+    downloads the dataset and installs the pinned packages (#734). These
+    tests' bundles pin no core or spm-calculator, so the packages are stood
+    in for as well; tests/test_recorded_supported_years.py covers both."""
+
+    with (
+        patch(
+            "policyengine.provenance.certification.supported_years_packages",
+            return_value={},
+        ),
+        patch(
+            "policyengine.provenance.certification.certified_supported_years",
+            return_value=list(STAND_IN_SUPPORTED_YEARS),
+        ),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _no_supported_years_computation():
+    with _stand_in_supported_years():
+        yield
 
 
 def _release_manifest_payload() -> dict:
@@ -1176,6 +1205,7 @@ def _certify_uk(
     bundle_path: Path, responses: list, manifest_uri: str = UK_NATIONAL_URI, **kwargs
 ):
     with (
+        _stand_in_supported_years(),
         patch(
             "policyengine.provenance.certification.requests.get",
             side_effect=responses,

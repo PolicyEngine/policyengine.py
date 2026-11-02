@@ -418,14 +418,18 @@ def create_datasets(
     ``legacy_inputs.YEAR_FILE_STAMP_H5_DATASET``), which ``ensure_datasets``
     and ``load_datasets`` check.
 
-    Each requested year must be one the installed policyengine-us supports
-    the source dataset for (see
+    Each requested year must be one policyengine-us supports the source
+    dataset for (see
     :func:`policyengine.provenance.dataset_years.supported_years`).
     policyengine-core would fill any other year by carrying the latest
-    projected inputs forward or uprating them. Every source is made available
-    as a local file (downloaded unless it is a local path or a verified copy
-    is already in ``data_folder``) and checked before any year file is
-    created.
+    projected inputs forward or uprating them. For the certified default
+    dataset the bundle manifest records those years
+    (``certified_data_artifact.supported_years``), so the years are checked
+    against the record before any source is made available. Any other
+    source is made available as a local file (downloaded unless it is a
+    local path or a verified copy is already in ``data_folder``) and its
+    years are computed from it. Every source is checked before any year
+    file is created.
 
     Args:
         datasets: List of logical dataset names or HuggingFace dataset URLs
@@ -447,15 +451,22 @@ def create_datasets(
     from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
 
     dataset_requests: list[Optional[str]] = datasets or [None]
+    # The bundle manifest records the certified dataset's years, so those
+    # requests are checked before any download.
+    checked_against_record = [
+        not allow_unsupported_years
+        and dataset_years.refuse_years_outside_record("us", dataset, years)
+        for dataset in dataset_requests
+    ]
     sources = []
-    for dataset in dataset_requests:
+    for dataset, checked in zip(dataset_requests, checked_against_record):
         source = materialize_dataset(
             "us",
             dataset,
             allow_unmanaged=allow_unmanaged,
             data_dir=Path(data_folder),
         )
-        if not allow_unsupported_years:
+        if not allow_unsupported_years and not checked:
             dataset_years.refuse_unsupported_years(
                 "us", dataset or source.name, source.path, years
             )
@@ -1406,12 +1417,18 @@ def ensure_datasets(
     year file is created again from the source dataset, and each out-of-date
     file is logged with the reason.
 
-    Year files are created only for years the installed policyengine-us
-    supports the source dataset for: otherwise ``create_datasets`` raises
-    ``UnsupportedDatasetYearError`` before creating any year file. Year
-    files that already exist and are current are loaded without that check,
-    so one created for an unsupported year, by ``allow_unsupported_years=True``
-    or by a policyengine.py release before the check, is still reused.
+    For the certified default dataset, the requested years are first
+    checked against the supported years the bundle manifest records
+    (``certified_data_artifact.supported_years``), reading neither the
+    source nor any year file, so a year file that already exists for an
+    unsupported year is refused rather than reused. For any other dataset,
+    year files are created only for years policyengine-us supports its
+    source for: otherwise ``create_datasets`` raises
+    ``UnsupportedDatasetYearError`` before creating any year file. Year files
+    of such a dataset that already exist and are current are loaded without
+    that check, so one created for an unsupported year, by
+    ``allow_unsupported_years=True`` or by a policyengine.py release before
+    the check, is still reused.
 
     Args:
         datasets: List of HuggingFace dataset paths
@@ -1425,11 +1442,15 @@ def ensure_datasets(
         Dictionary mapping dataset keys to PolicyEngineUSDataset objects
 
     Raises:
-        UnsupportedDatasetYearError: A requested year is not supported for a
-            dataset whose year files have to be created, unless
-            ``allow_unsupported_years``.
+        UnsupportedDatasetYearError: A requested year is outside the years
+            the bundle manifest records for the certified dataset, or is not
+            supported for another dataset whose year files have to be
+            created, unless ``allow_unsupported_years``.
     """
     datasets = datasets or [get_release_manifest("us").default_dataset]
+    if not allow_unsupported_years:
+        for dataset in datasets:
+            dataset_years.refuse_years_outside_record("us", dataset, years)
 
     # Check that every year file exists and is current. A year file cut
     # under another register of renamed stored inputs may have lost one, so

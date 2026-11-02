@@ -141,7 +141,7 @@ def test_the_bundle_check_accepts_a_certificate_without_the_record():
     bundle_validation.validate_supported_years(bundle)
 
 
-def test_the_bundle_check_command_validates_the_record(monkeypatch):
+def test_the_bundle_check_command_validates_the_record(monkeypatch, capsys):
     maintenance = _load_bundle_script(monkeypatch)
     import generate_bundle_artifacts
 
@@ -159,8 +159,10 @@ def test_the_bundle_check_command_validates_the_record(monkeypatch):
         lambda **keyword_arguments: 0,
     )
 
-    with pytest.raises(ValueError, match="supported_years"):
+    with pytest.raises(SystemExit):
         maintenance.main(["check"])
+
+    assert "certified_data_artifact.supported_years" in capsys.readouterr().err
 
 
 # --- Certification writes the record -----------------------------------------------
