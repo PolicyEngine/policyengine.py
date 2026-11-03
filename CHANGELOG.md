@@ -1,3 +1,20 @@
+## [6.13.0] - 2026-11-03
+
+### Added
+
+- Added `policyengine.provenance.supported_years(country_id, dataset_path)`, which returns the years the installed country model supports a single-year dataset for: the years its `extend_single_year_dataset` projects the file to, built as the model's own `Simulation` builds them and without running any formula, from the data year onwards. The UK runs to policyengine-uk's default projection end (2024–2032 for a 2024–25 dataset on policyengine-uk 2.151.0). The US runs from the data year to the earlier of policyengine-us's default projection end and the last year of spm-calculator's SPM forecast (2024–2035 for `populace_us_2024` on policyengine-us 2.2.1 and spm-calculator 1.0.0), so society-wide runs no longer accept US years before the data year, such as 2022 and 2023. The UK qualification check and execution receipts now use this function rather than their own copies of the rule. Added `UnsupportedDatasetYearError`, a `ValueError` whose message and `country_id`, `dataset`, `years` and `supported_years` attributes name the refused years, the country and the supported years.
+
+### Changed
+
+- `create_datasets` and `ensure_datasets` (UK and US) now raise `UnsupportedDatasetYearError` for a requested year the source dataset is not supported for, after making the source available and before creating any year file; `allow_unsupported_years=True` turns the check off. The US used to create year files for any year, from inputs policyengine-core carried forward or uprated, and the UK failed with `No dataset found for year ...`. Year files that already exist are loaded without the check, so a US year file that an earlier release created for an unsupported year is still reused until it is deleted.
+
+### Removed
+
+- Constituency and local-authority result rows (`compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts`, `ConstituencyImpact` and `LocalAuthorityImpact`) no longer have `x` and `y` keys, the hex-map positions copied from the area lists. A lookup CSV passed as `constituency_csv_path` or `local_authority_csv_path` may still have `x` and `y` columns; they are ignored.
+
+  The packaged UK area lists no longer have `x` and `y` columns: `data/uk_geography/constituencies_2024.csv` now has `code,name,region,country` and `local_authorities_2023.csv` has `code,name`, with every row, code, name and the row order unchanged.
+
+
 ## [6.12.1] - 2026-11-03
 
 ### Changed
