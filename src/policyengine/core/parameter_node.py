@@ -14,6 +14,10 @@ class ParameterNode(BaseModel):
     "gov.hmrc", "gov.hmrc.income_tax"). They provide structure and human-readable
     labels for navigating the parameter tree, but don't have values themselves.
 
+    A bracket schedule (e.g., "gov.hmrc.income_tax.rates.uk") is a node, and
+    so is each of its brackets ("gov.hmrc.income_tax.rates.uk[0]"), whose
+    parameters are its rate, threshold or amount.
+
     Unlike Parameter objects (which are leaf nodes with actual values),
     ParameterNode objects are purely organizational.
     """
