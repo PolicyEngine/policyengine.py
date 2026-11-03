@@ -73,15 +73,15 @@ def test_the_manifest_records_supported_years_for_every_country(country_id):
     assert recorded == sorted(set(recorded))
 
 
-def test_the_recorded_us_years_start_with_the_early_year_allowance():
-    from policyengine.provenance.dataset_years import US_EARLY_YEAR_ALLOWANCE
+def test_the_recorded_us_years_start_at_the_data_year():
+    """Society-wide runs refuse 2022 and 2023, before the certified
+    populace_us_2024's data year, since it holds almost no data for them."""
 
     recorded = _shipped_bundle()["data_releases"]["us"]["certified_data_artifact"][
         "supported_years"
     ]
 
-    assert recorded[0] == 2022
-    assert US_EARLY_YEAR_ALLOWANCE <= set(recorded)
+    assert recorded[0] == 2024
 
 
 def test_the_runtime_manifest_model_carries_the_recorded_years():
@@ -315,7 +315,7 @@ def test_the_record_is_computed_on_the_certified_bytes_with_exact_pins(tmp_path)
     release, local_copy = _local_data_release(tmp_path, b"certified bytes")
     commands: list = []
     run = _environment_run(
-        {"package_versions": PINNED_US_PACKAGES, "supported_years": [2022, 2023]},
+        {"package_versions": PINNED_US_PACKAGES, "supported_years": [2024, 2025]},
         commands,
     )
 
@@ -323,7 +323,7 @@ def test_the_record_is_computed_on_the_certified_bytes_with_exact_pins(tmp_path)
         "us", release, packages=PINNED_US_PACKAGES, data_dir=tmp_path, run=run
     )
 
-    assert recorded == [2022, 2023]
+    assert recorded == [2024, 2025]
     ((command, keyword_arguments),) = commands
     assert command[:5] == ["uv", "run", "--isolated", "--no-project", "--no-config"]
     pins = [
@@ -415,7 +415,7 @@ def test_recording_writes_only_the_years_for_the_pinned_bundle(tmp_path):
 
     def certified_supported_years(country_id, data_release, **keyword_arguments):
         record_calls.append((country_id, keyword_arguments))
-        return [2022, 2023, 2024]
+        return [2024, 2025, 2026]
 
     with patch(
         "policyengine.provenance.certification.certified_supported_years",
@@ -426,10 +426,10 @@ def test_recording_writes_only_the_years_for_the_pinned_bundle(tmp_path):
         )
 
     written = json.loads(bundle_path.read_text())
-    assert recorded == [2022, 2023, 2024]
+    assert recorded == [2024, 2025, 2026]
     assert written["data_releases"]["us"]["certified_data_artifact"][
         "supported_years"
-    ] == [2022, 2023, 2024]
+    ] == [2024, 2025, 2026]
     written["data_releases"]["us"]["certified_data_artifact"].pop("supported_years")
     assert written == shipped
     ((country_id, keyword_arguments),) = record_calls

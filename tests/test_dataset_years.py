@@ -920,4 +920,4 @@ def test_the_recorded_years_equal_the_years_computed_on_the_certified_dataset(
 
     assert computed == certified.supported_years
     if country_id == "us":
-        assert computed[0] == 2022
+        assert computed[0] == 2024
