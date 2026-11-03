@@ -202,7 +202,7 @@ falls back to the same computation.
 ```python
 from policyengine.provenance.dataset_years import recorded_supported_years
 
-recorded_supported_years("us")  # 2022 to 2035
+recorded_supported_years("us")  # 2024 to 2035
 recorded_supported_years("us", "populace_us_2024_acs_local")  # None
 ```
 

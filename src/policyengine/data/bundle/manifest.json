@@ -161,8 +161,6 @@
         "dataset": "populace_us_2024",
         "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84",
         "supported_years": [
-          2022,
-          2023,
           2024,
           2025,
           2026,
