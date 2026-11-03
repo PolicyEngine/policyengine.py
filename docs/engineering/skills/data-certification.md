@@ -291,6 +291,32 @@ revision pin; the certified dataset must be reachable), writes the canonical
 bundle manifest, exact-pins the country model package in that same manifest,
 regenerates derived bundle metadata, and writes a Towncrier changelog fragment.
 
+### Supported years
+
+Certification also records the certified dataset's supported years on
+`data_releases.<country>.certified_data_artifact.supported_years`: a list of
+years sorted ascending without duplicates. `create_datasets` and
+`ensure_datasets` check requested years for that dataset against it before
+any download and before reusing year files.
+
+- It downloads the certified dataset into `./data` (a copy there whose
+  SHA-256 matches is reused) and refuses one without a certified `sha256`.
+- It computes the years with `dataset_years.supported_years` in a
+  throwaway `uv run --isolated --no-project --no-config` environment that
+  holds exactly the certified country model, the core (`--core-version`, or
+  else the bundle's pin) and, for the US, the bundle's spm-calculator. So the
+  environment that runs `certify-data` may still hold the previous model, as
+  the UK candidate workflow's does. It needs `uv` and access to PyPI.
+- To record the years of the current certificate without re-certifying, for
+  example for a certificate from before the record existed, run
+  `python scripts/bundle.py record-supported-years --country <country>`, then
+  `python scripts/bundle.py generate --include-tros`: the TRACE sidecars bind
+  the manifest's bytes. Private data (UK) requires `HUGGING_FACE_TOKEN` or
+  `HF_TOKEN`.
+
+`bundle.py check` refuses a malformed record and accepts a missing one; the
+runtime computes the years from the source when the record is missing.
+
 Private data (UK) requires `HUGGING_FACE_TOKEN` or `HF_TOKEN`.
 
 After running:

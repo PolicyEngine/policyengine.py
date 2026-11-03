@@ -9,11 +9,12 @@ from typing import Literal, NoReturn, Optional
 from urllib.parse import quote
 
 import requests
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, StrictInt, field_validator
 
 from policyengine.provenance.bundle_validation import (
     shadowed_dataset_overlays,
     shadowing_overlays_message,
+    supported_years_problem,
 )
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
@@ -206,6 +207,25 @@ class CertifiedDataArtifact(BaseModel):
     uri: str
     sha256: Optional[str] = None
     build_id: Optional[str] = None
+    supported_years: Optional[list[StrictInt]] = None
+    """The years the certified dataset is supported for: what
+    :func:`policyengine.provenance.dataset_years.supported_years` returned
+    for the file with ``sha256`` under the country model, core and (US)
+    spm-calculator the bundle pinned at certification. Sorted ascending
+    without duplicates. ``create_datasets`` and ``ensure_datasets`` check
+    requested years for this dataset against it without reading the file.
+    Absent in certificates from before November 2026, for which the years
+    are computed from the source file."""
+
+    @field_validator("supported_years")
+    @classmethod
+    def _sorted_unique_years(cls, years: Optional[list[int]]) -> Optional[list[int]]:
+        if years is None:
+            return None
+        problem = supported_years_problem(years)
+        if problem is not None:
+            raise ValueError(f"supported_years {problem}")
+        return years
 
 
 RegionalReleaseKind = Literal["local_area", "area_coded_national"]

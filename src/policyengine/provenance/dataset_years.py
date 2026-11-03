@@ -11,13 +11,23 @@ outside the projection by carrying the latest projected inputs forward or
 uprating them. A result there is therefore not evidence that its year is
 supported, and ``create_datasets`` and ``ensure_datasets`` refuse such a year
 with :class:`UnsupportedDatasetYearError` unless asked not to.
+
+Certification records the certified dataset's supported years in the bundle
+manifest (:func:`recorded_supported_years`), computed with exactly the pinned
+packages (:func:`supported_years_in_environment`). Requests for that dataset
+are checked against the record without reading any file
+(:func:`refuse_years_outside_record`); other datasets are checked by computing
+their years from the source (:func:`refuse_unsupported_years`).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import json
+import os
+import subprocess
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 COUNTRY_IDS = ("uk", "us")
 
@@ -130,6 +140,227 @@ def refuse_unsupported_years(
     unsupported = [year for year in requested if year not in supported]
     if unsupported:
         raise UnsupportedDatasetYearError(country_id, dataset, unsupported, supported)
+
+
+def recorded_supported_years(
+    country_id: str, dataset: Optional[str] = None
+) -> Optional[list[int]]:
+    """Return the supported years the bundle manifest records for a dataset.
+
+    Certification records them for the certified dataset only, on
+    ``data_releases.<country>.certified_data_artifact.supported_years``.
+    ``dataset`` covers it when it is ``None`` (the certified default), the
+    default dataset's name, or its certified URI, and the bundle serves that
+    name with the certified bytes (the same ``sha256``).
+
+    Args:
+        country_id: ``"uk"`` or ``"us"``.
+        dataset: The dataset as requested from ``create_datasets`` or
+            ``ensure_datasets``.
+
+    Returns:
+        The recorded years, sorted ascending, or ``None`` when the manifest
+        records none for ``dataset``: another dataset, a local file, or a
+        certificate from before the record existed.
+    """
+
+    # Imported here: the certification environment loads this module by path,
+    # without the rest of policyengine (see supported_years_in_environment).
+    from policyengine.provenance import manifest as bundle_manifest
+
+    country_manifest = bundle_manifest.get_release_manifest(country_id)
+    certified = country_manifest.certified_data_artifact
+    if certified is None or certified.supported_years is None:
+        return None
+    if certified.dataset != country_manifest.default_dataset:
+        return None
+    if dataset is not None and dataset not in (
+        country_manifest.default_dataset,
+        country_manifest.default_dataset_uri,
+    ):
+        return None
+    served = country_manifest.datasets.get(certified.dataset)
+    if served is None or certified.sha256 is None or served.sha256 != certified.sha256:
+        return None
+    return list(certified.supported_years)
+
+
+def refuse_years_outside_record(
+    country_id: str, dataset: Optional[str], years: Iterable[int]
+) -> bool:
+    """Check requested years against the years the bundle manifest records.
+
+    Reads only the bundle manifest, never a dataset file, so it runs before
+    any download and before year files that already exist are reused.
+
+    Args:
+        country_id: ``"uk"`` or ``"us"``.
+        dataset: The dataset as requested; ``None`` is the certified default.
+        years: The requested years.
+
+    Returns:
+        ``True`` when the manifest records supported years for ``dataset``
+        and every requested year is among them. ``False`` when it records
+        none for ``dataset``: the caller then computes them from the source
+        with :func:`refuse_unsupported_years`.
+
+    Raises:
+        UnsupportedDatasetYearError: The manifest records supported years for
+            ``dataset`` and a requested year is not among them.
+    """
+
+    recorded = recorded_supported_years(country_id, dataset)
+    if recorded is None:
+        return False
+    requested = sorted({int(year) for year in years})
+    unsupported = [year for year in requested if year not in recorded]
+    if unsupported:
+        from policyengine.provenance import manifest as bundle_manifest
+
+        requested_dataset = (
+            dataset or bundle_manifest.get_release_manifest(country_id).default_dataset
+        )
+        raise UnsupportedDatasetYearError(
+            country_id, requested_dataset, unsupported, recorded
+        )
+    return True
+
+
+class SupportedYearsEnvironmentError(ValueError):
+    """The supported years could not be computed with the exact packages."""
+
+
+#: Runs in the environment of :func:`supported_years_in_environment`: loads
+#: this file by path, so nothing of policyengine but the rule is imported, and
+#: prints the versions it imported with the years.
+SUPPORTED_YEARS_PROBE = """
+import importlib.util
+import json
+import sys
+from importlib.metadata import version
+
+module_path, country_id, dataset_path, *package_names = sys.argv[1:]
+specification = importlib.util.spec_from_file_location(
+    "_policyengine_dataset_years", module_path
+)
+dataset_years = importlib.util.module_from_spec(specification)
+specification.loader.exec_module(dataset_years)
+print(json.dumps({
+    "package_versions": {name: version(name) for name in package_names},
+    "supported_years": dataset_years.supported_years(country_id, dataset_path),
+}))
+"""
+
+
+def supported_years_in_environment(
+    country_id: str,
+    dataset_path: Union[str, Path],
+    packages: Mapping[str, str],
+    *,
+    run: Optional[Callable[..., Any]] = None,
+) -> list[int]:
+    """Compute :func:`supported_years` with exactly the given package versions.
+
+    ``uv run --isolated --no-project --no-config`` installs exactly
+    ``packages`` from PyPI into a fresh environment, without the caller's uv
+    settings, project or environment, and runs this module's rule there. The
+    result therefore does not depend on what the caller has installed.
+    Certification uses it, since a candidate pair is certified from an
+    environment that still holds the previous model.
+
+    Args:
+        country_id: ``"uk"`` or ``"us"``.
+        dataset_path: Path of the single-year dataset file.
+        packages: Distribution names and exact versions to install, such as
+            ``{"policyengine-us": "2.2.1", "policyengine-core": "3.33.3",
+            "spm-calculator": "1.0.0"}``.
+        run: Stands in for :func:`subprocess.run` in tests.
+
+    Returns:
+        The supported years, sorted ascending without duplicates.
+
+    Raises:
+        SupportedYearsEnvironmentError: uv failed, the environment imported
+            other versions, or the rule printed no well-formed years.
+    """
+
+    # Imported here so that loading this module by path stays import-free.
+    from policyengine.provenance.bundle_validation import supported_years_problem
+    from policyengine.provenance.regional_input_surface import (
+        BUILD_MODEL_INDEX,
+        BUILD_MODEL_KEPT_UV_SETTINGS,
+        BUILD_MODEL_PYTHON,
+    )
+
+    run = run if run is not None else subprocess.run
+    package_names = sorted(packages)
+    label = ", ".join(f"{name} {packages[name]}" for name in package_names)
+    command = [
+        "uv",
+        "run",
+        "--isolated",
+        "--no-project",
+        "--no-config",
+        "--default-index",
+        BUILD_MODEL_INDEX,
+        "--python",
+        BUILD_MODEL_PYTHON,
+    ]
+    for name in package_names:
+        command.extend(["--with", f"{name}=={packages[name]}"])
+    command.extend(
+        [
+            "python",
+            "-I",
+            "-c",
+            SUPPORTED_YEARS_PROBE,
+            str(Path(__file__).resolve()),
+            country_id,
+            str(dataset_path),
+            *package_names,
+        ]
+    )
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key != "VIRTUAL_ENV"
+        and (not key.startswith("UV_") or key in BUILD_MODEL_KEPT_UV_SETTINGS)
+    }
+    try:
+        result = run(
+            command, capture_output=True, text=True, check=True, env=environment
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = " | ".join((exc.stderr or "").strip().splitlines()[-5:])
+        raise SupportedYearsEnvironmentError(
+            f"Cannot compute the supported years with {label}: {detail or exc}"
+        ) from exc
+    except OSError as exc:
+        raise SupportedYearsEnvironmentError(
+            f"Cannot run uv to compute the supported years with {label}."
+        ) from exc
+    try:
+        printed = json.loads((result.stdout or "").strip().splitlines()[-1])
+    except (IndexError, ValueError) as exc:
+        raise SupportedYearsEnvironmentError(
+            f"The environment with {label} printed no supported years."
+        ) from exc
+    if not isinstance(printed, dict):
+        raise SupportedYearsEnvironmentError(
+            f"The environment with {label} printed no supported years."
+        )
+    resolved = printed.get("package_versions")
+    if resolved != dict(packages):
+        raise SupportedYearsEnvironmentError(
+            f"The environment imported {resolved}, not {label}."
+        )
+    years: Any = printed.get("supported_years")
+    problem = supported_years_problem(years)
+    if problem is not None:
+        raise SupportedYearsEnvironmentError(
+            f"The supported years computed with {label} {problem}: {years!r}."
+        )
+    return list(years)
 
 
 def _uk_supported_years(dataset_path: Path) -> list[int]:

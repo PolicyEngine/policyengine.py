@@ -2,7 +2,7 @@
 
 import re
 from datetime import date
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 from urllib.parse import urlparse
 
 # Canonical PEP 440 spellings only: no aliases, leading zeroes, or implicit
@@ -62,6 +62,44 @@ def validate_dataset_overlays(bundle: Mapping[str, Any]) -> None:
         shadowed = shadowed_dataset_overlays(release, entries)
         if shadowed:
             raise ValueError(shadowing_overlays_message(country, shadowed))
+
+
+def supported_years_problem(years: Any) -> Optional[str]:
+    """What is wrong with a recorded ``supported_years`` list, or ``None``.
+
+    A record is a non-empty JSON list of integer years, sorted ascending
+    without duplicates, as ``dataset_years.supported_years`` returns them.
+    Booleans, decimals and strings are not years.
+    """
+    if not isinstance(years, list) or not years:
+        return "must be a non-empty list of years"
+    if any(type(year) is not int for year in years):
+        return "must hold integer years only"
+    if any(later <= earlier for earlier, later in zip(years, years[1:])):
+        return "must be sorted ascending without duplicates"
+    return None
+
+
+def validate_supported_years(bundle: Mapping[str, Any]) -> None:
+    """Refuse a malformed ``certified_data_artifact.supported_years`` record.
+
+    Certification records the years on each country's certified dataset
+    record. Certificates from before the record existed omit it, and the
+    runtime then computes the years from the source dataset, so a missing
+    record passes.
+    """
+    for country, release in (bundle.get("data_releases") or {}).items():
+        if not isinstance(release, Mapping):
+            continue
+        certified = release.get("certified_data_artifact")
+        if not isinstance(certified, Mapping) or "supported_years" not in certified:
+            continue
+        problem = supported_years_problem(certified["supported_years"])
+        if problem is not None:
+            raise ValueError(
+                f"data_releases.{country}.certified_data_artifact.supported_years "
+                f"{problem}."
+            )
 
 
 def validate_spm_configuration(configuration: Any) -> None:

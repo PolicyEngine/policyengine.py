@@ -293,12 +293,16 @@ def create_datasets(
 ) -> dict[str, PolicyEngineUKDataset]:
     """Create UK year files from logical dataset names, URIs or local paths.
 
-    Each requested year must be one the installed policyengine-uk supports
-    the source dataset for (see
-    :func:`policyengine.provenance.dataset_years.supported_years`). Every
+    Each requested year must be one policyengine-uk supports the source
+    dataset for (see
+    :func:`policyengine.provenance.dataset_years.supported_years`). For the
+    certified default dataset the bundle manifest records those years
+    (``certified_data_artifact.supported_years``), so the years are checked
+    against the record before any source is made available. Any other
     source is made available as a local file (downloaded unless it is a
-    local path or a verified copy is already in ``data_folder``) and checked
-    before any year file is created.
+    local path or a verified copy is already in ``data_folder``) and its
+    years are computed from it. Every source is checked before any year
+    file is created.
 
     Args:
         datasets: Logical dataset names, Hugging Face URIs or, with
@@ -317,15 +321,22 @@ def create_datasets(
             source, unless ``allow_unsupported_years``.
     """
     dataset_requests: list[Optional[str]] = [None] if datasets is None else datasets
+    # The bundle manifest records the certified dataset's years, so those
+    # requests are checked before any download.
+    checked_against_record = [
+        not allow_unsupported_years
+        and dataset_years.refuse_years_outside_record("uk", dataset, years)
+        for dataset in dataset_requests
+    ]
     sources = []
-    for dataset in dataset_requests:
+    for dataset, checked in zip(dataset_requests, checked_against_record):
         source = materialize_dataset(
             "uk",
             dataset,
             allow_unmanaged=allow_unmanaged,
             data_dir=Path(data_folder),
         )
-        if not allow_unsupported_years:
+        if not allow_unsupported_years and not checked:
             dataset_years.refuse_unsupported_years(
                 "uk", dataset or source.name, source.path, years
             )
@@ -422,12 +433,16 @@ def ensure_datasets(
     policyengine.py kept the observed year their tables were projected from
     (see ``load_datasets``), so they are created again rather than loaded.
 
-    A year file that has to be created is created only for a year the
-    installed policyengine-uk supports its source dataset for: otherwise
-    ``create_datasets`` raises ``UnsupportedDatasetYearError`` before
-    creating any year file. Year files that already exist are loaded
-    without that check: policyengine-uk creates a year file only for a year
-    it projects the source to.
+    For the certified default dataset, the requested years are first
+    checked against the supported years the bundle manifest records
+    (``certified_data_artifact.supported_years``), reading neither the
+    source nor any year file, so year files that already exist are checked
+    too. For any other dataset, a year file that has to be created is
+    created only for a year policyengine-uk supports its source for:
+    otherwise ``create_datasets`` raises ``UnsupportedDatasetYearError``
+    before creating any year file. Year files of such a dataset that
+    already exist are loaded without that check: policyengine-uk creates a
+    year file only for a year it projects the source to.
 
     Args:
         datasets: List of HuggingFace dataset paths
@@ -441,12 +456,16 @@ def ensure_datasets(
         Dictionary mapping dataset keys to PolicyEngineUKDataset objects
 
     Raises:
-        UnsupportedDatasetYearError: A requested year is not supported for a
-            dataset whose year files have to be created, unless
-            ``allow_unsupported_years``.
+        UnsupportedDatasetYearError: A requested year is outside the years
+            the bundle manifest records for the certified dataset, or is not
+            supported for another dataset whose year files have to be
+            created, unless ``allow_unsupported_years``.
     """
     if datasets is None:
         datasets = [get_release_manifest("uk").default_dataset]
+    if not allow_unsupported_years:
+        for dataset in datasets:
+            dataset_years.refuse_years_outside_record("uk", dataset, years)
 
     # Check if all dataset files exist
     all_exist = True

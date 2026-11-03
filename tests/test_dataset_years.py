@@ -602,6 +602,248 @@ def test_ensure_datasets_passes_the_opt_out_to_create_datasets(
     )
 
 
+# --- The years the bundle manifest records (#734) -------------------------------
+#
+# Certification records the certified dataset's supported years on its record,
+# ``data_releases.<country>.certified_data_artifact.supported_years``. A request
+# for that dataset is checked against them before any download, and before year
+# files that already exist are reused, without reading the source.
+
+
+class ReachedMaterialization(Exception):
+    """Raised by the stand-in materialize_dataset: a download could begin."""
+
+
+def _record_supported_years(monkeypatch, country_id, supported_years):
+    """Serve the bundled manifest with ``supported_years`` recorded for the
+    certified dataset, and return it."""
+
+    manifest_module = importlib.import_module("policyengine.provenance.manifest")
+    shipped_manifest = manifest_module.get_release_manifest(country_id)
+    recorded_manifest = shipped_manifest.model_copy(deep=True)
+    recorded_manifest.certified_data_artifact = (
+        shipped_manifest.certified_data_artifact.model_copy(
+            update={"supported_years": supported_years}
+        )
+    )
+    shipped_release_manifest = manifest_module.get_release_manifest
+
+    def get_release_manifest(requested_country_id):
+        if requested_country_id == country_id:
+            return recorded_manifest
+        return shipped_release_manifest(requested_country_id)
+
+    monkeypatch.setattr(manifest_module, "get_release_manifest", get_release_manifest)
+    return recorded_manifest
+
+
+def _refuse_downloads(monkeypatch):
+    """Stand in for materialize_dataset in both countries; returns its calls."""
+
+    materialization_calls = []
+
+    def materialize_dataset(country_id, dataset=None, **keyword_arguments):
+        materialization_calls.append((country_id, dataset))
+        raise ReachedMaterialization
+
+    for module in COUNTRY_DATASET_MODULES.values():
+        monkeypatch.setattr(module, "materialize_dataset", materialize_dataset)
+    return materialization_calls
+
+
+def _serve_certified_source(monkeypatch, source_path: Path):
+    """Stand in for materialize_dataset with an already verified local copy."""
+
+    from policyengine.provenance.dataset_materialization import DatasetSource
+
+    materialization_calls = []
+
+    def materialize_dataset(country_id, dataset=None, **keyword_arguments):
+        materialization_calls.append((country_id, dataset))
+        manifest_module = importlib.import_module("policyengine.provenance.manifest")
+        country_manifest = manifest_module.get_release_manifest(country_id)
+        return DatasetSource(
+            source_uri=country_manifest.default_dataset_uri, path=str(source_path)
+        )
+
+    for module in COUNTRY_DATASET_MODULES.values():
+        monkeypatch.setattr(module, "materialize_dataset", materialize_dataset)
+    return materialization_calls
+
+
+def _refuse_computed_years(monkeypatch, dataset_years):
+    def refuse_to_compute(country_id, dataset_path):
+        raise AssertionError("supported years were computed from the source")
+
+    monkeypatch.setattr(dataset_years, "supported_years", refuse_to_compute)
+
+
+def _certified_request(country_id: str, request_form: str):
+    """The certified dataset requested as ``None``, by name or by its URI."""
+
+    manifest_module = importlib.import_module("policyengine.provenance.manifest")
+    country_manifest = manifest_module.get_release_manifest(country_id)
+    return {
+        "omitted": None,
+        "name": country_manifest.default_dataset,
+        "uri": country_manifest.default_dataset_uri,
+    }[request_form]
+
+
+@pytest.mark.parametrize("country_id", ["uk", "us"])
+@pytest.mark.parametrize("helper_name", ["create_datasets", "ensure_datasets"])
+@pytest.mark.parametrize("request_form", ["omitted", "name", "uri"])
+def test_a_year_outside_the_recorded_years_is_refused_before_any_download(
+    tmp_path, monkeypatch, dataset_years, country_id, helper_name, request_form
+):
+    recorded_manifest = _record_supported_years(monkeypatch, country_id, [2024, 2025])
+    materialization_calls = _refuse_downloads(monkeypatch)
+    _refuse_computed_years(monkeypatch, dataset_years)
+    request = _certified_request(country_id, request_form)
+    helper = getattr(COUNTRY_DATASET_MODULES[country_id], helper_name)
+
+    with pytest.raises(dataset_years.UnsupportedDatasetYearError) as refusal:
+        helper(
+            datasets=None if request is None else [request],
+            years=[2025, 2026],
+            data_folder=str(tmp_path),
+        )
+
+    assert refusal.value.country_id == country_id
+    assert refusal.value.dataset == (request or recorded_manifest.default_dataset)
+    assert refusal.value.years == [2026]
+    assert refusal.value.supported_years == [2024, 2025]
+    assert materialization_calls == []
+
+
+@pytest.mark.parametrize("country_id", ["uk", "us"])
+def test_year_files_that_exist_are_checked_against_the_recorded_years_when_reused(
+    tmp_path, monkeypatch, dataset_years, country_id
+):
+    recorded_manifest = _record_supported_years(monkeypatch, country_id, [2024, 2025])
+    materialization_calls = _refuse_downloads(monkeypatch)
+    _refuse_computed_years(monkeypatch, dataset_years)
+    module = COUNTRY_DATASET_MODULES[country_id]
+    stem = recorded_manifest.default_dataset
+    for year in (2025, 2026):
+        (tmp_path / f"{stem}_year_{year}.h5").write_bytes(b"an existing year file")
+
+    def refuse_to_use_year_files(*arguments, **keyword_arguments):
+        raise AssertionError("year files were loaded or created")
+
+    monkeypatch.setattr(module, "load_datasets", refuse_to_use_year_files)
+    monkeypatch.setattr(module, "create_datasets", refuse_to_use_year_files)
+
+    with pytest.raises(dataset_years.UnsupportedDatasetYearError) as refusal:
+        module.ensure_datasets(
+            datasets=[stem], years=[2025, 2026], data_folder=str(tmp_path)
+        )
+
+    assert refusal.value.years == [2026]
+    assert materialization_calls == []
+
+
+@pytest.mark.parametrize("country_microsimulation", ["uk", "us"], indirect=True)
+def test_a_recorded_year_goes_on_to_creation_without_computing_years(
+    tmp_path, monkeypatch, dataset_years, country_microsimulation
+):
+    country_id, microsimulation = country_microsimulation
+    _record_supported_years(monkeypatch, country_id, [2024, 2025, 2026])
+    materialization_calls = _serve_certified_source(
+        monkeypatch, Path(_source_file(tmp_path / "certified.h5"))
+    )
+    _refuse_computed_years(monkeypatch, dataset_years)
+
+    with pytest.raises(ReachedCreation):
+        COUNTRY_DATASET_MODULES[country_id].create_datasets(
+            datasets=None, years=[2026], data_folder=str(tmp_path / "data")
+        )
+
+    assert materialization_calls == [(country_id, None)]
+    microsimulation.assert_called_once()
+
+
+@pytest.mark.parametrize("country_microsimulation", ["uk", "us"], indirect=True)
+def test_a_certified_dataset_without_recorded_years_falls_back_to_the_source(
+    tmp_path, monkeypatch, dataset_years, country_microsimulation
+):
+    country_id, microsimulation = country_microsimulation
+    _record_supported_years(monkeypatch, country_id, None)
+    source = _source_file(tmp_path / "certified.h5")
+    _serve_certified_source(monkeypatch, Path(source))
+    computed_for = _stub_supported_years(
+        monkeypatch, dataset_years, {source: [2024, 2025]}
+    )
+
+    with pytest.raises(dataset_years.UnsupportedDatasetYearError) as refusal:
+        COUNTRY_DATASET_MODULES[country_id].create_datasets(
+            datasets=None, years=[2026], data_folder=str(tmp_path / "data")
+        )
+
+    assert refusal.value.supported_years == [2024, 2025]
+    assert computed_for == [(country_id, source)]
+    microsimulation.assert_not_called()
+
+
+@pytest.mark.parametrize("country_microsimulation", ["uk", "us"], indirect=True)
+@pytest.mark.parametrize("helper_name", ["create_datasets", "ensure_datasets"])
+def test_the_opt_out_skips_the_recorded_years_too(
+    tmp_path, monkeypatch, dataset_years, country_microsimulation, helper_name
+):
+    country_id, microsimulation = country_microsimulation
+    _record_supported_years(monkeypatch, country_id, [2024])
+    _serve_certified_source(monkeypatch, Path(_source_file(tmp_path / "certified.h5")))
+    _refuse_computed_years(monkeypatch, dataset_years)
+    helper = getattr(COUNTRY_DATASET_MODULES[country_id], helper_name)
+
+    with pytest.raises(ReachedCreation):
+        helper(
+            datasets=None,
+            years=[2040],
+            data_folder=str(tmp_path / "data"),
+            allow_unsupported_years=True,
+        )
+
+    microsimulation.assert_called_once()
+
+
+@pytest.mark.parametrize("country_id", ["uk", "us"])
+def test_the_record_covers_only_the_certified_dataset(
+    monkeypatch, dataset_years, country_id
+):
+    recorded_manifest = _record_supported_years(monkeypatch, country_id, [2024, 2025])
+
+    assert dataset_years.recorded_supported_years(country_id) == [2024, 2025]
+    assert dataset_years.recorded_supported_years(
+        country_id, recorded_manifest.default_dataset
+    ) == [2024, 2025]
+    assert dataset_years.recorded_supported_years(
+        country_id, recorded_manifest.default_dataset_uri
+    ) == [2024, 2025]
+    other_datasets = set(recorded_manifest.datasets) - {
+        recorded_manifest.default_dataset
+    }
+    for other_dataset in sorted(other_datasets):
+        assert dataset_years.recorded_supported_years(country_id, other_dataset) is None
+    assert dataset_years.recorded_supported_years(country_id, "own_dataset.h5") is None
+
+
+@pytest.mark.parametrize("country_id", ["uk", "us"])
+def test_the_record_does_not_cover_a_dataset_served_with_other_bytes(
+    monkeypatch, dataset_years, country_id
+):
+    """The years were computed for the certified file's bytes, so a bundle
+    that serves the dataset with another hash falls back to the source."""
+
+    recorded_manifest = _record_supported_years(monkeypatch, country_id, [2024, 2025])
+    default_dataset = recorded_manifest.default_dataset
+    recorded_manifest.datasets[default_dataset] = recorded_manifest.datasets[
+        default_dataset
+    ].model_copy(update={"sha256": "0" * 64})
+
+    assert dataset_years.recorded_supported_years(country_id) is None
+
+
 # --- The UK provenance code uses the same rule ----------------------------------
 
 
@@ -635,31 +877,47 @@ def test_execution_receipts_project_with_the_public_rule(monkeypatch, dataset_ye
     assert computed_for == [("uk", "run.h5")]
 
 
-# --- The bundle's default datasets on the pinned models -------------------------
+# --- The bundle's certified datasets on the pinned models -----------------------
 
-#: What ``supported_years`` returns for each bundle default dataset under the
-#: pinned policyengine-uk 2.151.0, policyengine-us 2.2.1 and spm-calculator
-#: 1.0.0 (UK measured 30 Oct 2026, US 3 Nov 2026).
-PINNED_DEFAULT_DATASET_YEARS = {
-    "uk": list(range(2024, 2033)),
-    "us": list(range(2024, 2036)),
+#: The packages whose installed versions decide each country's supported years.
+SUPPORTED_YEARS_PACKAGES = {
+    "uk": ("policyengine-uk",),
+    "us": ("policyengine-us", "spm-calculator"),
 }
 
 
 @pytest.mark.parametrize("country_id", ["uk", "us"])
-def test_the_default_dataset_is_supported_for_the_pinned_years(
+def test_the_recorded_years_equal_the_years_computed_on_the_certified_dataset(
     country_id, dataset_years
 ):
-    """Runs only with the bundle's default dataset file, named by
+    """Runs only with the bundle's certified dataset file, named by
     POLICYENGINE_UK_DEFAULT_DATASET or POLICYENGINE_US_DEFAULT_DATASET."""
+
+    from importlib.metadata import version
+
+    from policyengine.bundle import get_current_bundle
+    from policyengine.provenance.manifest import get_release_manifest
+    from policyengine.utils.hashing import sha256_file
 
     variable = f"POLICYENGINE_{country_id.upper()}_DEFAULT_DATASET"
     path = os.environ.get(variable)
     if not path:
-        pytest.skip(f"set {variable} to the bundle's default {country_id} dataset")
+        pytest.skip(f"set {variable} to the bundle's certified {country_id} dataset")
     pytest.importorskip(COUNTRY_PACKAGES[country_id])
-
-    assert (
-        dataset_years.supported_years(country_id, path)
-        == PINNED_DEFAULT_DATASET_YEARS[country_id]
+    pinned_packages = get_current_bundle()["packages"]
+    for package_name in SUPPORTED_YEARS_PACKAGES[country_id]:
+        assert version(package_name) == pinned_packages[package_name]["version"], (
+            f"installed {package_name} is not the version the bundle pins"
+        )
+    certified = get_release_manifest(country_id).certified_data_artifact
+    assert certified is not None
+    assert sha256_file(Path(path)) == certified.sha256, (
+        f"{variable} names a file other than the certified {certified.dataset} "
+        f"(sha256 {certified.sha256})"
     )
+
+    computed = dataset_years.supported_years(country_id, path)
+
+    assert computed == certified.supported_years
+    if country_id == "us":
+        assert computed[0] == 2024

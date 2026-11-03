@@ -667,6 +667,13 @@ def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
     monkeypatch.setattr(
         certification, "required_supplemental_release_files", lambda *args: []
     )
+    # Computing the supported years downloads the dataset and installs the
+    # pinned model (#734).
+    monkeypatch.setattr(
+        certification,
+        "certified_supported_years",
+        lambda *args, **kw: list(range(2024, 2033)),
+    )
     calls = []
 
     def run(command, *, cwd, env=None):

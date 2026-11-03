@@ -10,6 +10,7 @@ Examples:
     python scripts/bundle.py certify-data --country uk --manifest-uri hf://...
     python scripts/bundle.py generate
     python scripts/bundle.py generate --include-tros
+    python scripts/bundle.py record-supported-years --country us
     python scripts/bundle.py check
 """
 
@@ -93,17 +94,36 @@ def _generate(args: argparse.Namespace) -> int:
     return _generate_tros(strict=args.strict_tros)
 
 
+def _record_supported_years(args: argparse.Namespace) -> int:
+    from generate_bundle_artifacts import generate
+
+    from policyengine.provenance.certification import record_supported_years
+
+    years = record_supported_years(args.country, data_dir=args.data_dir)
+    print(
+        f"recorded {args.country} supported years: "
+        f"{', '.join(str(year) for year in years)}"
+    )
+    print(
+        "Regenerate the TRACE sidecars, which bind the manifest's bytes: "
+        "python scripts/bundle.py generate --include-tros"
+    )
+    return generate(check=False)
+
+
 def _check(args: argparse.Namespace) -> int:
     from generate_bundle_artifacts import (
         generate,
         load_bundle_manifest,
         validate_bundle_measurements,
         validate_dataset_overlays,
+        validate_supported_years,
     )
 
     bundle = load_bundle_manifest()
     validate_bundle_measurements(bundle, require_published_spm=args.published_spm)
     validate_dataset_overlays(bundle)
+    validate_supported_years(bundle)
     result = generate(check=True)
     if not args.include_tros:
         return result
@@ -282,6 +302,26 @@ def _parser() -> argparse.ArgumentParser:
         help="Admit the exact pair on automated qualification (needs --core-version).",
     )
     certify.set_defaults(func=_certify_data)
+
+    record = subparsers.add_parser(
+        "record-supported-years",
+        help=(
+            "Compute the certified dataset's supported years under the bundle's "
+            "pins and record them, without re-certifying."
+        ),
+    )
+    record.add_argument("--country", required=True, choices=["us", "uk"])
+    record.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path("data"),
+        help=(
+            "Where the certified dataset is cached; a verified copy there is "
+            "reused instead of downloaded. Private data (UK) requires "
+            "HUGGING_FACE_TOKEN or HF_TOKEN."
+        ),
+    )
+    record.set_defaults(func=_record_supported_years)
 
     packages = subparsers.add_parser(
         "update-packages",
