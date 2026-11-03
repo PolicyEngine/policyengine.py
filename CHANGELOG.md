@@ -1,3 +1,10 @@
+## [6.12.1] - 2026-11-03
+
+### Changed
+
+- The pull-request and push-to-main Test jobs may run for 105 minutes instead of 90. On Python 3.11 to 3.13 they now take 65 to 90 minutes, and one of them was often cancelled at the 90-minute limit with no failing test.
+
+
 ## [6.12.0] - 2026-11-02
 
 ### Added
