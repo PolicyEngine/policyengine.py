@@ -19,6 +19,16 @@ pytestmark = pytest.mark.filterwarnings(
     "ignore:.*not disclosure-controlled.*:DeprecationWarning"
 )
 
+# Every key of a local-authority result row. Rows carry no hex-map position:
+# the app places areas from its own layout files.
+LOCAL_AUTHORITY_RESULT_KEYS = {
+    "local_authority_code",
+    "local_authority_name",
+    "average_household_income_change",
+    "relative_household_income_change",
+    "population",
+}
+
 
 def _make_sim(household_data: dict) -> MagicMock:
     """Create a mock Simulation with household-level data."""
@@ -39,7 +49,10 @@ def _write_lookup_csv(tmp_path, rows) -> str:
 
 
 def test_basic_local_authority_longwise_grouping(tmp_path):
-    """Two local authorities with household geography codes produce metrics."""
+    """Two local authorities with household geography codes produce metrics.
+
+    The lookup's ``x`` and ``y`` columns are ignored.
+    """
     baseline = _make_sim(
         {
             "la_code_oa": ["LA001", "LA001", b"LA002", ""],
@@ -77,14 +90,14 @@ def test_basic_local_authority_longwise_grouping(tmp_path):
     la1 = by_code["LA001"]
     assert abs(la1["average_household_income_change"] - 3000.0) < 1e-6
     assert la1["local_authority_name"] == "Authority A"
-    assert la1["x"] == 5
-    assert la1["y"] == 15
     assert la1["population"] == 3.0
 
     la2 = by_code["LA002"]
     assert abs(la2["average_household_income_change"] - 3000.0) < 1e-6
     assert la2["local_authority_name"] == "Authority B"
     assert la2["population"] == 3.0
+    for row in (la1, la2):
+        assert set(row) == LOCAL_AUTHORITY_RESULT_KEYS
 
 
 def test_zero_weight_la_skipped(tmp_path):
@@ -106,8 +119,8 @@ def test_zero_weight_la_skipped(tmp_path):
     csv_path = _write_lookup_csv(
         tmp_path,
         [
-            {"code": "LA001", "name": "A", "x": 0, "y": 0},
-            {"code": "LA002", "name": "B", "x": 0, "y": 0},
+            {"code": "LA001", "name": "A"},
+            {"code": "LA002", "name": "B"},
         ],
     )
 
@@ -140,7 +153,7 @@ def test_relative_change(tmp_path):
     )
     csv_path = _write_lookup_csv(
         tmp_path,
-        [{"code": "LA001", "name": "A", "x": 0, "y": 0}],
+        [{"code": "LA001", "name": "A"}],
     )
 
     impact = compute_uk_local_authority_impacts(
@@ -178,7 +191,7 @@ def test_compute_labels_with_packaged_area_list_by_default(
     )
     # A stale lookup in a local search dir (the old GCS download cache) is
     # ignored.
-    pd.DataFrame([{"code": "N09000011", "name": "Stale", "x": 0, "y": 0}]).to_csv(
+    pd.DataFrame([{"code": "N09000011", "name": "Stale"}]).to_csv(
         tmp_path / LOCAL_AUTHORITY_ASSET_SPEC.lookup_csv_filename, index=False
     )
 
@@ -200,9 +213,9 @@ def test_compute_labels_with_packaged_area_list_by_default(
         row["local_authority_code"]: row for row in impact.local_authority_results
     }
     assert by_code["N09000011"]["local_authority_name"] == "Ards and North Down"
-    assert (by_code["N09000011"]["x"], by_code["N09000011"]["y"]) == (-3, 16)
     assert by_code["UNLISTED"]["local_authority_name"] == "UNLISTED"
-    assert by_code["UNLISTED"]["x"] is None
+    for row in by_code.values():
+        assert set(row) == LOCAL_AUTHORITY_RESULT_KEYS
 
 
 def test_compute_local_authority_impacts_does_not_require_lookup_csv_or_matrix(
@@ -240,8 +253,7 @@ def test_compute_local_authority_impacts_does_not_require_lookup_csv_or_matrix(
     result = impact.local_authority_results[0]
     assert result["local_authority_code"] == "LA001"
     assert result["local_authority_name"] == "LA001"
-    assert result["x"] is None
-    assert result["y"] is None
+    assert set(result) == LOCAL_AUTHORITY_RESULT_KEYS
 
 
 def test_compute_local_authority_impacts_requires_longwise_geography_column():
