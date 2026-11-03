@@ -639,7 +639,7 @@ def test_execution_receipts_project_with_the_public_rule(monkeypatch, dataset_ye
 
 #: What ``supported_years`` returns for each bundle default dataset under the
 #: pinned policyengine-uk 2.151.0, policyengine-us 2.2.1 and spm-calculator
-#: 1.0.0 (measured 30 Oct 2026).
+#: 1.0.0 (UK measured 30 Oct 2026, US 3 Nov 2026).
 PINNED_DEFAULT_DATASET_YEARS = {
     "uk": list(range(2024, 2033)),
     "us": list(range(2024, 2036)),

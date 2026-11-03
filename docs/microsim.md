@@ -163,7 +163,7 @@ the years from the dataset's data year onwards:
 ```python
 from policyengine.provenance import supported_years
 
-supported_years("us", "./data/populace_us_2024.h5")  # 2022 to 2035
+supported_years("us", "./data/populace_us_2024.h5")  # 2024 to 2035
 supported_years("uk", "./data/microcosm_uk_2024_25.h5")  # 2024 to 2032
 ```
 
@@ -174,10 +174,9 @@ supported_years("uk", "./data/microcosm_uk_2024_25.h5")  # 2024 to 2032
   projection end (the last year in its `gov.bls.cpi.cpi_u` parameter file,
   2035 in policyengine-us 2.2.1) and the last year of spm-calculator's SPM
   forecast (2035 in spm-calculator 1.0.0), after which the poverty figures
-  have no thresholds. The constant `US_EARLY_YEAR_ALLOWANCE` in
-  `policyengine.provenance.dataset_years` also keeps 2022 and 2023
-  supported, although the certified Populace US 2024 holds almost no data
-  for them.
+  have no thresholds. Society-wide runs are not supported for years before
+  the data year, such as 2022 and 2023 for Populace US 2024, because the
+  certified dataset holds almost no data for them.
 
 A calculation for another year still returns results, because
 policyengine-core carries the latest projected inputs forward or uprates

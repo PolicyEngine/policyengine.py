@@ -21,15 +21,6 @@ from typing import Any, Union
 
 COUNTRY_IDS = ("uk", "us")
 
-#: Years the US rule supports although they come before the data year of the
-#: certified ``populace_us_2024``. The certified dataset holds almost no data
-#: for them: its household weights sum to 57,240 in each of 2022 and 2023,
-#: against 122,537,088 in 2024, and employment income is zero. They stay
-#: supported (not provisional) by a decision of 2026-10-28 and 2026-10-30
-#: (PolicyEngine/policyengine.py#729). Removing them is a change to this
-#: constant alone.
-US_EARLY_YEAR_ALLOWANCE: frozenset[int] = frozenset({2022, 2023})
-
 
 class UnsupportedDatasetYearError(ValueError):
     """Requested years are outside the years a dataset is supported for.
@@ -91,8 +82,11 @@ def supported_years(country_id: str, dataset_path: Union[str, Path]) -> list[int
     - **US:** policyengine-us projects to the last year in its
       ``gov.bls.cpi.cpi_u`` parameter file. Years after the last year of
       spm-calculator's SPM forecast are not supported, since the poverty
-      figures have no thresholds there. :data:`US_EARLY_YEAR_ALLOWANCE` adds
-      2022 and 2023.
+      figures have no thresholds there. Years before the data year are not
+      supported either, although the SPM forecast covers 2022 and 2023: the
+      certified ``populace_us_2024`` holds almost no data for them (its
+      household weights sum to 57,240 in each of 2022 and 2023, against
+      122,537,088 in 2024, and employment income is zero).
 
     Args:
         country_id: ``"uk"`` or ``"us"``.
@@ -160,12 +154,11 @@ def _us_supported_years(dataset_path: Path) -> list[int]:
     data_year = _data_year(dataset)
     multi_year_dataset = extend_single_year_dataset(dataset)
     last_spm_forecast_year = max(int(year) for year in load_forecast().years)
-    projected = {
+    return sorted(
         year
         for year in _projected_years(multi_year_dataset)
         if data_year <= year <= last_spm_forecast_year
-    }
-    return sorted(projected | US_EARLY_YEAR_ALLOWANCE)
+    )
 
 
 def _data_year(dataset: Any) -> int:
@@ -184,7 +177,7 @@ def _projected_years(multi_year_dataset: Any) -> set[int]:
 
 
 def _describe_years(years: list[int]) -> str:
-    """Sorted years as runs of consecutive years, such as ``2022–2035``."""
+    """Sorted years as runs of consecutive years, such as ``2024–2035``."""
 
     if not years:
         return "none"
