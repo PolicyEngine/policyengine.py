@@ -229,7 +229,7 @@ def test_us_years_end_at_the_policyengine_us_projection_end(monkeypatch, dataset
         forecast_years=range(2022, 2041),
     )
 
-    assert dataset_years.supported_years("us", "data.h5") == list(range(2022, 2036))
+    assert dataset_years.supported_years("us", "data.h5") == list(range(2024, 2036))
 
 
 def test_us_years_after_the_last_spm_forecast_year_are_not_supported(
@@ -245,26 +245,14 @@ def test_us_years_after_the_last_spm_forecast_year_are_not_supported(
         forecast_years=range(2022, 2036),
     )
 
-    assert dataset_years.supported_years("us", "data.h5") == list(range(2022, 2036))
+    assert dataset_years.supported_years("us", "data.h5") == list(range(2024, 2036))
 
 
-def test_us_allowance_adds_2022_and_2023_before_the_data_year(
-    monkeypatch, dataset_years
-):
-    _stub_us_model(
-        monkeypatch,
-        data_year=2024,
-        projected_years=range(2024, 2031),
-        forecast_years=range(2022, 2036),
-    )
+def test_us_years_before_the_data_year_are_not_supported(monkeypatch, dataset_years):
+    """Years the projection and the SPM forecast hold before the data year are
+    not supported: the certified 2024 dataset holds almost no data for 2022
+    and 2023."""
 
-    assert dataset_years.US_EARLY_YEAR_ALLOWANCE == frozenset({2022, 2023})
-    assert dataset_years.supported_years("us", "data.h5") == list(range(2022, 2031))
-
-
-def test_us_years_before_the_data_year_outside_the_allowance_are_not_supported(
-    monkeypatch, dataset_years
-):
     _stub_us_model(
         monkeypatch,
         data_year=2024,
@@ -272,21 +260,18 @@ def test_us_years_before_the_data_year_outside_the_allowance_are_not_supported(
         forecast_years=range(2018, 2036),
     )
 
-    assert dataset_years.supported_years("us", "data.h5") == list(range(2022, 2031))
+    assert dataset_years.supported_years("us", "data.h5") == list(range(2024, 2031))
 
 
-def test_removing_the_us_allowance_is_a_change_to_one_constant(
-    monkeypatch, dataset_years
-):
+def test_us_rule_adds_no_year_the_projection_does_not_hold(monkeypatch, dataset_years):
     _stub_us_model(
         monkeypatch,
         data_year=2024,
-        projected_years=range(2024, 2036),
+        projected_years=range(2024, 2031),
         forecast_years=range(2022, 2036),
     )
-    monkeypatch.setattr(dataset_years, "US_EARLY_YEAR_ALLOWANCE", frozenset())
 
-    assert dataset_years.supported_years("us", "data.h5") == list(range(2024, 2036))
+    assert dataset_years.supported_years("us", "data.h5") == list(range(2024, 2031))
 
 
 def test_us_projection_uses_the_models_default_end_year(monkeypatch, dataset_years):
@@ -341,9 +326,7 @@ def test_us_rule_on_the_installed_model(tmp_path, dataset_years):
     last_year = min(_get_default_end_year(system), max(load_forecast().years))
     path = _write_tiny_us_dataset(tmp_path / "tiny_us_2024.h5")
 
-    assert dataset_years.supported_years("us", path) == sorted(
-        set(range(2024, last_year + 1)) | {2022, 2023}
-    )
+    assert dataset_years.supported_years("us", path) == list(range(2024, last_year + 1))
 
 
 def test_an_unknown_country_is_refused(dataset_years):
@@ -358,18 +341,18 @@ def test_the_error_names_the_year_the_country_and_the_supported_years(
     dataset_years,
 ):
     error = dataset_years.UnsupportedDatasetYearError(
-        "us", "populace_us_2024", [2036], range(2022, 2036)
+        "us", "populace_us_2024", [2036], range(2024, 2036)
     )
 
     assert isinstance(error, ValueError)
     assert error.country_id == "us"
     assert error.dataset == "populace_us_2024"
     assert error.years == [2036]
-    assert error.supported_years == list(range(2022, 2036))
+    assert error.supported_years == list(range(2024, 2036))
     message = str(error)
     assert message.startswith(
         "US dataset 'populace_us_2024' is not supported for year 2036. "
-        "Supported years: 2022–2035."
+        "Supported years: 2024–2035."
     )
     assert "allow_unsupported_years=True" in message
 
@@ -397,7 +380,7 @@ def test_the_error_says_when_no_year_is_supported(dataset_years):
 
 def test_the_error_keeps_its_contents_through_pickling(dataset_years):
     error = dataset_years.UnsupportedDatasetYearError(
-        "us", "populace_us_2024", [2036], range(2022, 2036)
+        "us", "populace_us_2024", [2036], range(2024, 2036)
     )
 
     restored = pickle.loads(pickle.dumps(error))
@@ -409,7 +392,7 @@ def test_the_error_keeps_its_contents_through_pickling(dataset_years):
         restored.dataset,
         restored.years,
         restored.supported_years,
-    ) == ("us", "populace_us_2024", [2036], list(range(2022, 2036)))
+    ) == ("us", "populace_us_2024", [2036], list(range(2024, 2036)))
 
 
 def test_the_function_and_error_are_exported_from_provenance(dataset_years):
@@ -659,7 +642,7 @@ def test_execution_receipts_project_with_the_public_rule(monkeypatch, dataset_ye
 #: 1.0.0 (measured 30 Oct 2026).
 PINNED_DEFAULT_DATASET_YEARS = {
     "uk": list(range(2024, 2033)),
-    "us": list(range(2022, 2036)),
+    "us": list(range(2024, 2036)),
 }
 
 
