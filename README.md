@@ -70,9 +70,10 @@ print(f"Total UC spending: £{agg.result / 1e9:.1f}bn")
 For baseline-vs-reform comparisons, see `pe.uk.economic_impact_analysis`
 and its US counterpart.
 
-UK population data is stored in a private Hugging Face model repository. Set
-`HUGGING_FACE_TOKEN` to a token from an account with access before running UK
-population examples. To download the raw `.h5` file directly, see
+UK population data is stored in private Hugging Face repositories: the
+Microcosm default in a dataset repository, and the enhanced FRS in a model
+repository. Set `HUGGING_FACE_TOKEN` to a token from an account with access
+before running UK population examples. To download the raw `.h5` file directly, see
 [Microsimulation](docs/microsim.md#uk-private-data-and-raw-h5-access).
 
 ## Documentation

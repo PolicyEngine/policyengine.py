@@ -30,7 +30,9 @@ jobs:
   # ── Phase 1 gates (skip on sentinel commit) ─────────────────
   Lint:
     if: github.event.head_commit.message != 'Update package version'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CI_RUNNER_X64 || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -43,12 +45,15 @@ jobs:
 
   Test:
     if: github.event.head_commit.message != 'Update package version'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CI_RUNNER_X64 || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     # Successful runs on main 2026-10-14..16: 3.11 33-54 min, 3.12 32-56,
     # 3.13 36-60, 3.14 23-42; at 60 minutes every push run on 16 Oct was
-    # cancelled before Versioning, so nothing was released (#640). Matches
-    # the pull-request Test job (#631).
-    timeout-minutes: 90
+    # cancelled before Versioning, so nothing was released (#640). By early
+    # Nov, pull-request runs on 3.11-3.13 took 65 to 90 minutes and were often
+    # cancelled at 90 (#736). Matches the pull-request Test job (#631).
+    timeout-minutes: 105
     strategy:
       fail-fast: false
       matrix:
@@ -59,7 +64,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
-          version: "0.12.14"
+          version: "0.13.4"
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -128,7 +133,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
-          version: "0.12.14"
+          version: "0.13.4"
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -184,7 +189,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
-          version: "0.12.14"
+          version: "0.13.4"
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -258,7 +263,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
-          version: "0.12.14"
+          version: "0.13.4"
       - name: Install policyengine without country models
         run: uv pip install -e . --system
       # The payload carries the certified UK bundle identity and, for an
@@ -316,6 +321,11 @@ jobs:
           VERSION: ${{ needs.Publish.outputs.version }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
         run: python scripts/release_consumers.py scorecard-request --version "$VERSION" > "$RUNNER_TEMP/scorecard-request.json"
+      - name: Warn that no released-bundle replay was requested
+        if: steps.released.outcome == 'failure' || steps.scorecard-request.outcome == 'failure'
+        env:
+          VERSION: ${{ needs.Publish.outputs.version }}
+        run: echo "::warning title=No released-bundle replay::The scorecard's replay request for policyengine $VERSION could not be built; see the steps above."
       - name: Generate GitHub App token for the scorecard
         if: steps.scorecard-request.outcome == 'success'
         id: scorecard-token

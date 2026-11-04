@@ -534,6 +534,12 @@ def _build_bundle_performance(
             certification.certified_for_model_version
         )
         performance["pe:compatibilityBasis"] = certification.compatibility_basis
+        if certification.core_binding is not None:
+            performance["pe:coreBinding"] = certification.core_binding
+        if certification.certified_for_core_version is not None:
+            performance["pe:certifiedForCoreVersion"] = (
+                certification.certified_for_core_version
+            )
         if certification.built_with_model_version is not None:
             performance["pe:builtWithModelVersion"] = (
                 certification.built_with_model_version
@@ -550,6 +556,15 @@ def _build_bundle_performance(
             performance["pe:dataBuildId"] = certification.data_build_id
         if certification.certified_by is not None:
             performance["pe:certifiedBy"] = certification.certified_by
+    if country_manifest.regional_certification is not None:
+        # An explicit JSON literal preserves evidence member names through
+        # JSON-LD expansion; they are JSON contract keys, not RDF predicates.
+        performance["pe:regionalCertification"] = {
+            "@type": "@json",
+            "@value": country_manifest.regional_certification.model_dump(
+                mode="json", exclude_none=True
+            ),
+        }
     performance.update(dict(emission_context or _emission_context()))
     return performance
 

@@ -56,14 +56,20 @@ from policyengine.provenance.uk_qualification import (
     stage_attempt,
     write_gate_results,
 )
-from tests.qualification_fixtures import HARNESS, ISSUED, gates, golden, make_pair
+from tests.qualification_fixtures import (
+    HARNESS,
+    ISSUED,
+    UK_DATA_LINE_BUNDLE,
+    gates,
+    golden,
+    make_pair,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / ".github" / "qualification-ledger.sh"
 CLI = ROOT / "scripts" / "check_uk_candidate.py"
-BASE = json.loads(
-    (ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json").read_text()
-)
+# PAIR is a policyengine-uk-data pair, so main is a bundle on that line.
+BASE = UK_DATA_LINE_BUNDLE
 PAIR = make_pair(
     model="2.200.0", data=BASE["data_releases"]["uk"]["data_package"]["version"]
 )

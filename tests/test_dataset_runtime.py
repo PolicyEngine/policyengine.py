@@ -143,15 +143,15 @@ def test_uk_load_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
     )
     resolve = Mock(
         return_value=(
-            "hf://policyengine/policyengine-uk-data-private/"
-            "enhanced_frs_2024_25.h5@1.56.16"
+            "hf://policyengine/populace-uk-private/"
+            "microcosm_uk_2024_25.h5@microcosm-uk-2024-25-national-cut"
         )
     )
     monkeypatch.setattr(uk_datasets, "resolve_dataset_reference", resolve)
 
     assert uk_datasets.load_datasets(years=[]) == {}
 
-    resolve.assert_called_once_with("uk", "enhanced_frs_2024_25")
+    resolve.assert_called_once_with("uk", "microcosm_uk_2024_25")
 
 
 def test_uk_ensure_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
@@ -165,7 +165,7 @@ def test_uk_ensure_datasets_defaults_to_certified_bundle_dataset(monkeypatch):
     assert uk_datasets.ensure_datasets(years=[]) == {}
 
     load.assert_called_once_with(
-        datasets=["enhanced_frs_2024_25"],
+        datasets=["microcosm_uk_2024_25"],
         years=[],
         data_folder="./data",
     )

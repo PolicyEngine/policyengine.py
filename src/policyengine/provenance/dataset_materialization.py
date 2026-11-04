@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal, Optional
 
 import requests
@@ -84,6 +84,37 @@ class _BundleDatasetSpec:
         return Path(f"{self.destination}.metadata.json")
 
 
+def _bundle_destination(data_dir: Path, path: str) -> Path:
+    """Where a bundle artifact is cached.
+
+    A top-level file is cached by its name. A nested one keeps its release
+    path, so two releases' files of one name (each country's
+    ``calibration_diagnostics.json``) never share a cache entry.
+    """
+
+    relative = PurePosixPath(path)
+    # Repository paths use forward slashes. A backslash, or a drive or root in
+    # any segment, would make the platform path leave data_dir on Windows.
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or "\\" in path
+        or any(
+            PureWindowsPath(part).drive or PureWindowsPath(part).root
+            for part in relative.parts
+        )
+    ):
+        raise DatasetMaterializationError(
+            f"Bundle artifact path {path!r} must be relative to its repository."
+        )
+    destination = data_dir.joinpath(*relative.parts)
+    if destination == data_dir or not destination.is_relative_to(data_dir):
+        raise DatasetMaterializationError(
+            f"Bundle artifact path {path!r} must be relative to its repository."
+        )
+    return destination
+
+
 def _resolve_bundle_dataset(
     country_id: str,
     dataset: Optional[str] = None,
@@ -116,7 +147,7 @@ def _resolve_bundle_dataset(
         revision=reference.revision
         or _artifact_revision(country_manifest.data_package),
         sha256=reference.sha256,
-        destination=data_dir / Path(reference.path).name,
+        destination=_bundle_destination(data_dir, reference.path),
         metadata_sha256=reference.metadata_sha256,
     )
 

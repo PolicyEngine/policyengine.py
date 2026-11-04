@@ -48,6 +48,14 @@ def _certify_data(args: argparse.Namespace) -> int:
         argv.extend(["--regional-release-kind", args.regional_release_kind])
     if args.drop_regional_release:
         argv.append("--drop-regional-release")
+    if args.accept_regional_model_mismatch is not None:
+        argv.extend(
+            ["--accept-regional-model-mismatch", args.accept_regional_model_mismatch]
+        )
+    if args.regional_input_surface_evidence:
+        argv.extend(
+            ["--regional-input-surface-evidence", args.regional_input_surface_evidence]
+        )
     if args.no_generate:
         argv.append("--no-generate")
     if args.no_changelog:
@@ -90,11 +98,12 @@ def _check(args: argparse.Namespace) -> int:
         generate,
         load_bundle_manifest,
         validate_bundle_measurements,
+        validate_dataset_overlays,
     )
 
-    validate_bundle_measurements(
-        load_bundle_manifest(), require_published_spm=args.published_spm
-    )
+    bundle = load_bundle_manifest()
+    validate_bundle_measurements(bundle, require_published_spm=args.published_spm)
+    validate_dataset_overlays(bundle)
     result = generate(check=True)
     if not args.include_tros:
         return result
@@ -224,6 +233,19 @@ def _parser() -> argparse.ArgumentParser:
             "Remove the bundle's current regional routing on re-certification. "
             "Cannot be combined with --regional-manifest-uri."
         ),
+    )
+    certify.add_argument(
+        "--accept-regional-model-mismatch",
+        metavar="REASON",
+        help=(
+            "UK only: route regions to a regional release on another model "
+            "version, recording this reviewed reason; forwarded to "
+            "scripts/certify_data_release.py."
+        ),
+    )
+    certify.add_argument(
+        "--regional-input-surface-evidence",
+        help="Audited regional input-surface JSON; required for an accepted mismatch.",
     )
     certify.add_argument(
         "--regional-artifact-prefix",

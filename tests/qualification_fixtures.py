@@ -20,6 +20,44 @@ from policyengine.provenance.qualification import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "uk_replay"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+#: The last packaged bundle certified on the policyengine-uk-data line (main at
+#: 5f97905e, the 6.9.0 release, before Microcosm UK became the default).
+#: ``make_pair`` builds candidates on that line, so qualification tests run
+#: against this bundle.
+UK_DATA_LINE_BUNDLE_PATH = (
+    Path(__file__).parent / "fixtures" / "uk_qualification" / "uk_data_line_bundle.json"
+)
+UK_DATA_LINE_BUNDLE = json.loads(UK_DATA_LINE_BUNDLE_PATH.read_text())
+#: A main certified on the Microcosm line with its area regions routed to a
+#: local-area release: the bundle #685 certified, frozen, so that tests of
+#: other-line pairs do not depend on what main certifies now.
+MICROCOSM_ROUTED_BUNDLE_PATH = (
+    Path(__file__).parent
+    / "fixtures"
+    / "uk_qualification"
+    / "microcosm_routed_bundle.json"
+)
+MICROCOSM_ROUTED_BUNDLE = json.loads(MICROCOSM_ROUTED_BUNDLE_PATH.read_text())
+
+
+def load_candidate_cli(
+    name: str = "check_uk_candidate_for_test",
+    bundle_path: Path = UK_DATA_LINE_BUNDLE_PATH,
+):
+    """``scripts/check_uk_candidate.py``, reading ``bundle_path`` as main's bundle."""
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        name, REPO_ROOT / "scripts" / "check_uk_candidate.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.BUNDLE_PATH = bundle_path
+    return module
+
+
 VENDORED_SCHEMAS = (
     Path(__file__).resolve().parents[1]
     / "src"

@@ -875,7 +875,13 @@ def _make_state(path: Path, state: str) -> None:
     _write_year_file(path, **written)
 
 
-def _create_current_files(datasets, years, data_folder, allow_unmanaged=False):
+def _create_current_files(
+    datasets,
+    years,
+    data_folder,
+    allow_unmanaged=False,
+    allow_unsupported_years=False,
+):
     """Stand in for ``create_datasets``: write current year files."""
     for year in years:
         _write_year_file(

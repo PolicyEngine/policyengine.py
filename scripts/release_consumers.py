@@ -29,6 +29,10 @@ os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 
 import requests  # noqa: E402
 
+from policyengine.provenance.manifest import (  # noqa: E402
+    https_dataset_uri,
+    hugging_face_auth_headers,
+)
 from policyengine.provenance.qualification_ledger import (  # noqa: E402
     fetch_ledger_receipt,
 )
@@ -52,15 +56,46 @@ def _pypi(path: str) -> dict:
     return response.json()
 
 
-def _hf_file(repo_id: str, revision: str, path: str) -> bytes:
-    token = os.environ.get("HUGGING_FACE_TOKEN") or os.environ.get("HF_TOKEN")
+def _hf_file(repo_id: str, revision: str, path: str, repo_type: str = "model") -> bytes:
     response = requests.get(
-        f"https://huggingface.co/{repo_id}/resolve/{revision}/{path}",
-        headers={"Authorization": f"Bearer {token}"} if token else {},
+        https_dataset_uri(repo_id, path, revision, repo_type=repo_type),
+        headers=hugging_face_auth_headers(),
         timeout=TIMEOUT,
     )
     response.raise_for_status()
     return response.content
+
+
+def _hf_size(repo_id: str, revision: str, path: str, repo_type: str = "model") -> int:
+    """A file's size from Hugging Face's response headers, without downloading it.
+
+    A large-file pointer answers HEAD with a redirect that carries
+    ``X-Linked-Size``. A small file answers with its own ``Content-Length``,
+    or with a redirect that leads to it, which is then followed.
+    """
+
+    url = https_dataset_uri(repo_id, path, revision, repo_type=repo_type)
+    # A compressed answer has no Content-Length, so ask for the bytes as they
+    # are, as huggingface_hub does.
+    headers = {**hugging_face_auth_headers(), "Accept-Encoding": "identity"}
+    response = requests.head(
+        url, headers=headers, timeout=TIMEOUT, allow_redirects=False
+    )
+    response.raise_for_status()
+    size = response.headers.get("X-Linked-Size")
+    if size is None and response.status_code == 200:
+        size = response.headers.get("Content-Length")
+    elif size is None:
+        followed = requests.head(
+            url, headers=headers, timeout=TIMEOUT, allow_redirects=True
+        )
+        followed.raise_for_status()
+        size = followed.headers.get("Content-Length")
+    if not size:
+        raise SystemExit(
+            f"Hugging Face reports no size for {repo_id}/{path}@{revision}."
+        )
+    return int(size)
 
 
 def cmd_payload(args: argparse.Namespace) -> int:
@@ -126,6 +161,7 @@ def cmd_scorecard_request(args: argparse.Namespace) -> int:
         ).hexdigest(),
         release_bundle=release_bundle,
         hf_file=_hf_file,
+        hf_size=_hf_size,
         pypi_project=_pypi,
         requested_by={
             "repository": repository,

@@ -90,9 +90,9 @@ national UK dataset.
 
 The package ships the area lists: the 650 parliamentary constituencies (2024
 boundaries, including Northern Ireland) and the 361 local authority districts
-(April 2023, including Ards and North Down, `N09000011`), each with a name and
-a hex-map position (`src/policyengine/data/uk_geography/`, sources in its
-`SOURCES.md`). Building these regions needs no network access.
+(April 2023, including Ards and North Down, `N09000011`), each with a name
+(`src/policyengine/data/uk_geography/`, sources in its `SOURCES.md`). The lists
+have no hex-map positions. Building these regions needs no network access.
 
 Constituency regions (`constituency/<code>`) row-filter `constituency_code_oa`
 and local-authority regions (`local_authority/<code>`) row-filter `la_code_oa`.
@@ -102,12 +102,22 @@ when nothing is routed:
 
 | `regional_release_kind` | Area regions load | In the default registry |
 | --- | --- | --- |
-| none (today) | the national dataset | no |
+| none | the national dataset | no |
 | `area_coded_national` | another release's area-coded national dataset (the enhanced FRS), while the default is a national file without area codes | no |
-| `local_area` | a certified local-area release | yes |
+| `local_area` | a local-area release that certification vets and pins | yes |
 
-Pass `include_constituencies=True` and `include_local_authorities=True` to
-`build_uk_region_registry` to include them regardless.
+Certification checks a local-area release's role, its single H5 file and its
+own model claims, checks its core claims (refusing an unclaimed core with
+`--core-version`, warning about one without it), and pins the file's bytes. The
+certificate covers the national dataset only: receipts for runs on the
+local-area file are uncertified.
+
+The certified bundle routes both to the Microcosm local-area release
+(`local_area`, `microcosm_uk_2024_25_dense.h5`), so the default registry has
+all 650 constituencies and 361 local authorities. Pass
+`include_constituencies=True` and `include_local_authorities=True` to
+`build_uk_region_registry` to include them regardless of routing, or `False`
+to leave them out.
 
 ```python
 from policyengine.countries.uk.regions import build_uk_region_registry
@@ -126,9 +136,9 @@ The functions in this section and the next are deprecated: their output is
 not disclosure-controlled.
 
 Constituency-level impacts group household output rows by the longwise
-`constituency_code_oa` column carried by the dataset. Names and map coordinates
-come from the packaged constituency list; codes it does not list use the code
-as the label.
+`constituency_code_oa` column carried by the dataset. Names come from the
+packaged constituency list; codes it does not list use the code as the label.
+Result rows carry no map positions.
 
 ```python
 from policyengine.outputs import compute_uk_constituency_impacts

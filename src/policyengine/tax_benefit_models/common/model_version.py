@@ -30,6 +30,8 @@ import h5py
 import pandas as pd
 
 from policyengine.core import (
+    Entity,
+    EnumValue,
     Parameter,
     ParameterNode,
     StaleOutputError,
@@ -91,6 +93,18 @@ def build_runtime_dataset_provenance(
             }
         )
     return provenance
+
+
+# The value types an EnumValue label may hold.
+_ENUM_LABEL_TYPES = (str, int, float, bool, type(None))
+
+
+def _core_input_flag(core_variable: Any) -> Optional[bool]:
+    """Return whether users enter a core variable, or None if core cannot say."""
+    is_input_variable = getattr(core_variable, "is_input_variable", None)
+    if is_input_variable is None:
+        return None
+    return bool(is_input_variable())
 
 
 class MicrosimulationModelVersion(TaxBenefitModelVersion):
@@ -166,6 +180,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         self.id = f"{self.model.id}@{self.version}"
 
         system = self._load_system()
+        self._populate_entities(system)
         self._populate_variables(system)
         self._populate_parameters(system)
 
@@ -189,6 +204,18 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         raise NotImplementedError
 
     # --- Shared loading helpers ------------------------------------------
+    def _populate_entities(self, system) -> None:
+        """Copy the entities and basic inputs the country package declares."""
+        self.entities = [
+            Entity(
+                key=core_entity.key,
+                plural=core_entity.plural,
+                is_person=bool(core_entity.is_person),
+            )
+            for core_entity in system.entities
+        ]
+        self.basic_inputs = list(getattr(system, "basic_inputs", None) or [])
+
     def _populate_variables(self, system) -> None:
         from policyengine_core.enums import Enum
         from policyengine_core.parameters.operations.get_parameter import (
@@ -225,6 +252,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     var_obj, "is_period_size_independent", None
                 ),
                 metadata=getattr(var_obj, "metadata", None) or {},
+                is_input_variable=_core_input_flag(var_obj),
+                hidden_input=getattr(var_obj, "hidden_input", None),
+                module_name=getattr(var_obj, "module_name", None),
             )
             if (
                 hasattr(var_obj, "possible_values")
@@ -236,13 +266,25 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                         var_obj.possible_values._value2member_map_.values(),
                     )
                 )
+                members = list(var_obj.possible_values)
+                # A label is a scalar. A model whose members declare any
+                # other value still loads, without labels.
+                if all(
+                    isinstance(member.value, _ENUM_LABEL_TYPES) for member in members
+                ):
+                    variable.enum_values = [
+                        EnumValue(value=member.name, label=member.value)
+                        for member in members
+                    ]
             # Resolve parameter-path adds/subtracts to concrete lists so
-            # consumers always see list[str].
+            # consumers always see list[str], and record the path itself,
+            # since the parameter's list can differ in other years.
             for attr in ("adds", "subtracts"):
                 value = getattr(var_obj, attr, None)
                 if value is None:
                     continue
                 if isinstance(value, str):
+                    setattr(variable, f"{attr}_parameter_path", value)
                     try:
                         param = get_parameter(system.parameters, value)
                         setattr(variable, attr, list(param("2025-01-01")))
@@ -255,6 +297,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
     def _populate_parameters(self, system) -> None:
         from policyengine_core.parameters import Parameter as CoreParameter
         from policyengine_core.parameters import ParameterNode as CoreParameterNode
+        from policyengine_core.parameters import ParameterScale as CoreParameterScale
 
         scale_lookup = build_scale_lookup(system)
 
@@ -270,9 +313,24 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     description=param_node.description,
                     data_type=type(param_node(2025)),
                     unit=param_node.metadata.get("unit"),
+                    economy=bool(param_node.metadata.get("economy", True)),
+                    household=bool(param_node.metadata.get("household", True)),
                     _core_param=param_node,
                 )
                 self.add_parameter(parameter)
+            elif isinstance(param_node, CoreParameterScale):
+                # A bracket schedule is not a core ParameterNode, but it groups
+                # its brackets (``name[0]``, ``name[1]``, ...) as a node does.
+                if not param_node.brackets:
+                    continue
+                schedule = ParameterNode(
+                    id=self.id + "-" + param_node.name,
+                    name=param_node.name,
+                    label=param_node.metadata.get("label"),
+                    description=param_node.description,
+                    tax_benefit_model_version=self,
+                )
+                self.add_parameter_node(schedule)
             elif isinstance(param_node, CoreParameterNode):
                 if not param_node.children:
                     continue

@@ -36,16 +36,15 @@ def test_bundle_manifest_exposes_data_releases():
     assert manifest["bundle_version"] == manifest["policyengine_version"]
     assert manifest["data_releases"]["us"]["data_producer"] == "populace"
     assert manifest["data_releases"]["us"]["version"].startswith("populace-us-2024-")
-    # UK certified default reverted to the policyengine-uk-data enhanced FRS per
-    # the UC caseload postmortem (policyengine-uk-data discussion #464); the
-    # "populace" producer label names the strict verification contract, not the
-    # producing repo.
+    # The UK certified default is a Microcosm national release; the "populace"
+    # producer label names the strict verification contract, not the producing
+    # repo.
     assert manifest["data_releases"]["uk"]["data_producer"] == "populace"
     assert manifest["data_releases"]["uk"]["version"].startswith(
-        "policyengine-uk-data-"
+        "microcosm-uk-2024-25-national-"
     )
     assert manifest["data_releases"]["uk"]["default_dataset_uri"].startswith(
-        "hf://policyengine/policyengine-uk-data-private/enhanced_frs_"
+        "hf://policyengine/populace-uk-private/microcosm_uk_"
     )
 
 
@@ -89,11 +88,14 @@ def test_selected_dataset_plan_uses_certified_release_metadata(tmp_path):
         bundle.get_current_bundle(), ["uk"], data_dir=tmp_path
     )
 
+    # Only the national default: area regions' local-area dataset is not
+    # installed with the bundle.
+    assert [entry_plan.dataset for entry_plan, _ in entries] == ["microcosm_uk_2024_25"]
     plan, release = entries[0]
     assert plan.country_id == "uk"
-    assert plan.data_package_name == "policyengine-uk-data"
-    assert plan.repo_type == "model"
-    assert plan.destination == tmp_path / "enhanced_frs_2024_25.h5"
+    assert plan.data_package_name == "microcosm-data"
+    assert plan.repo_type == "dataset"
+    assert plan.destination == tmp_path / "microcosm_uk_2024_25.h5"
     assert plan.sha256 == release["datasets"][plan.dataset]["sha256"]
 
 
@@ -202,7 +204,7 @@ def test_install_bundle_materializes_defaults_and_records_receipt(
     )
 
     assert [plan.country_id for plan in calls] == ["uk"]
-    assert result["datasets"][0]["data_package_name"] == "policyengine-uk-data"
+    assert result["datasets"][0]["data_package_name"] == "microcosm-data"
     assert result["datasets"][0]["installed_sha256"] == calls[0].sha256
     receipt = bundle.read_receipt(tmp_path)
     assert receipt is not None

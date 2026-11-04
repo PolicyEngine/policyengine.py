@@ -136,9 +136,11 @@ dataset = datasets["populace_us_2024_2026"]
 
 The default US dataset is **Populace US 2024** — a Populace-built dataset
 calibrated to IRS, CMS, SNAP, Census, and other administrative totals. The
-current UK certified default is **Enhanced FRS 2024–25**, supplied by
-`policyengine-uk-data`. **Populace UK 2023** remains available as a named,
-non-default bundle dataset.
+current UK certified default is **Microcosm UK 2024–25**, a Microcosm build
+calibrated to HMRC, DWP, OBR and other administrative totals; constituency and
+local-authority regions use its local-area release. **Enhanced FRS 2024–25**
+(`enhanced_frs_2024_25`, policyengine-uk-data 1.58.1) and **Populace UK 2023**
+remain available as named, non-default bundle datasets.
 
 PolicyEngine.py obtains the repository type, immutable revision, and SHA-256
 from the installed release bundle. An existing file in the configured data
@@ -149,6 +151,42 @@ List datasets already known to the country:
 ```python
 pe.us.load_datasets()  # or pe.uk.load_datasets()
 ```
+
+### Supported years
+
+A dataset is supported only for the years the installed country model
+projects it to. `supported_years` builds that projection from a single-year
+dataset file as the model's own `Simulation` does, with the model's
+`extend_single_year_dataset` and without running any formula, and returns
+the years from the dataset's data year onwards:
+
+```python
+from policyengine.provenance import supported_years
+
+supported_years("us", "./data/populace_us_2024.h5")  # 2024 to 2035
+supported_years("uk", "./data/microcosm_uk_2024_25.h5")  # 2024 to 2032
+```
+
+- **UK:** from the data year to policyengine-uk's default projection end,
+  `PROJECTION_END_YEAR` (2032 in policyengine-uk 2.151.0), or the end of a
+  capital gains projection that ends earlier.
+- **US:** from the data year to the earlier of policyengine-us's default
+  projection end (the last year in its `gov.bls.cpi.cpi_u` parameter file,
+  2035 in policyengine-us 2.2.1) and the last year of spm-calculator's SPM
+  forecast (2035 in spm-calculator 1.0.0), after which the poverty figures
+  have no thresholds. Society-wide runs are not supported for years before
+  the data year, such as 2022 and 2023 for Populace US 2024, because the
+  certified dataset holds almost no data for them.
+
+A calculation for another year still returns results, because
+policyengine-core carries the latest projected inputs forward or uprates
+them, so a successful run is not evidence of support. `create_datasets` and
+`ensure_datasets` therefore raise `UnsupportedDatasetYearError` (from
+`policyengine.provenance`) for any other year before they create a year
+file. The error's `country_id`, `dataset`, `years` and `supported_years`
+attributes name the request and the years that are supported. Pass
+`allow_unsupported_years=True` to create the year files anyway. Year files
+that already exist in the data folder are loaded without the check.
 
 ### US local-area dataset
 
@@ -199,9 +237,10 @@ ca = Simulation(
 ### UK private data and raw h5 access
 
 UK population data uses licensed Family Resources Survey inputs. The default
-UK release bundle points to the private
-`policyengine/policyengine-uk-data-private` Hugging Face repository. Set
-`HUGGING_FACE_TOKEN` to a token from a Hugging Face account with access:
+UK release bundle points to the private `policyengine/populace-uk-private`
+Hugging Face repository, and the Enhanced FRS datasets to
+`policyengine/policyengine-uk-data-private`. Set `HUGGING_FACE_TOKEN` to a
+token from a Hugging Face account with access:
 
 ```bash
 export HUGGING_FACE_TOKEN=hf_...
@@ -216,11 +255,11 @@ import policyengine as pe
 from policyengine.core import Simulation
 
 datasets = pe.uk.ensure_datasets(
-    datasets=["enhanced_frs_2024_25"],
+    datasets=["microcosm_uk_2024_25"],
     years=[2026],
     data_folder="./data",
 )
-dataset = datasets["enhanced_frs_2024_25_2026"]
+dataset = datasets["microcosm_uk_2024_25_2026"]
 
 simulation = Simulation(
     dataset=dataset,
@@ -237,7 +276,7 @@ from policyengine.provenance import materialize_dataset
 
 result = materialize_dataset(
     "uk",
-    "enhanced_frs_2024_25",
+    "microcosm_uk_2024_25",
 )
 
 print(result.path)
@@ -261,7 +300,7 @@ projected year's tables to policyengine-uk as observed data would make the
 State Pension follow CPI instead.
 
 Each projected year file therefore keeps its data year, `dataset.data_year`
-(2024 for Enhanced FRS 2024–25), and that year's tables,
+(2024 for Microcosm UK 2024–25), and that year's tables,
 `dataset.data_year_data`. `Simulation.run()` projects the data year's tables
 forward as policyengine-uk does, and uses the file's own tables for the
 simulated year. A run of a year file then gives the same result, record by

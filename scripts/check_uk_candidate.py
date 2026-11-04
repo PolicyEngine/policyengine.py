@@ -34,6 +34,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
@@ -75,6 +76,8 @@ from policyengine.provenance.uk_qualification import (  # noqa: E402
     candidate_action,
     candidate_branch,
     candidate_pr_body,
+    certified_data_line,
+    data_line,
     expected_release_bundle,
     finalize_attempt,
     load_attempt_budget_inputs,
@@ -464,10 +467,14 @@ def cmd_finalize(args: argparse.Namespace) -> int:
         attempt, Path(args.ledger), issued_by=issued_by(), completed_at=utc_now()
     )
     payload = read_json(attempt / "candidate.json")
-    body = candidate_pr_body(
-        receipt, receipt.pair, ledger_url=ledger_url(receipt.pair_id)
-    )
     if args.pr_body:
+        line = certified_data_line(json.loads(BUNDLE_PATH.read_text()))
+        body = candidate_pr_body(
+            receipt,
+            receipt.pair,
+            ledger_url=ledger_url(receipt.pair_id),
+            on_main_line=data_line(receipt.pair) == line,
+        )
         Path(args.pr_body).write_text(body)
     print(f"verdict {receipt.verdict}; receipt {receipt.receipt_sha256}")
     set_output(
@@ -528,6 +535,7 @@ def owner_run_failed(run_id: str) -> bool:
 
 def cmd_recoverable(args: argparse.Namespace) -> int:
     now = utc_now()
+    line = certified_data_line(json.loads(BUNDLE_PATH.read_text()))
     for pair_dir in sorted((Path(args.ledger) / "uk").glob("*")):
         receipt = pair_dir / "qualification_receipt.json"
         stages = list((pair_dir / "attempts").glob("*/staging.json"))
@@ -544,8 +552,22 @@ def cmd_recoverable(args: argparse.Namespace) -> int:
                 attempt, terminal
             ):
                 continue
-        if attempt_is_recoverable(attempt, now=now, owner_is_failed=owner_run_failed):
-            print(json.dumps(read_json(attempt / "candidate.json")))
+        if not attempt_is_recoverable(
+            attempt, now=now, owner_is_failed=owner_run_failed
+        ):
+            continue
+        candidate = read_json(attempt / "candidate.json")
+        # The catch-up re-dispatches without force, and a pair from another
+        # data line then resolves as other_line before any recovery, so the
+        # dispatch would clear nothing. A forced run is re-run by hand.
+        if data_line(CandidatePair.model_validate(candidate["pair"])) != line:
+            print(
+                f"::notice::not recovering {pair_dir.name}: its pair is not on "
+                "main's data line; re-run it by hand with force",
+                file=sys.stderr,
+            )
+            continue
+        print(json.dumps(candidate))
     return 0
 
 
@@ -856,7 +878,12 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
 
     pull_requests = {pr["headRefName"]: pr for pr in _candidate_pull_requests()}
     now = _now()
+    line = certified_data_line(json.loads(BUNDLE_PATH.read_text()))
     for receipt in latest_receipts(Path(args.ledger)):
+        if data_line(receipt.pair) != line:
+            # Promotion never takes a pair from another line, so its runs
+            # are not worth re-running.
+            continue
         branch = candidate_branch(receipt.pair)
         head = receipt.harness.git_commit
         pull_request = pull_requests.get(branch)
@@ -909,6 +936,35 @@ def cmd_refresh_pr_checks(args: argparse.Namespace) -> int:
     return 0
 
 
+def _close_pull_requests(closes: Sequence[tuple[str, str]]) -> set[str]:
+    """Close each ``(number, comment)``; return the numbers GitHub closed.
+
+    A failed close is reported, and the pull request stays open for the next
+    run to close.
+    """
+
+    closed = set()
+    for number, comment in closes:
+        result = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "close",
+                number,
+                "--repo",
+                LEDGER_REPOSITORY,
+                "--comment",
+                comment,
+            ],
+            check=False,
+        )
+        if result.returncode == 0:
+            closed.add(number)
+        else:
+            print(f"::warning::could not close pull request {number}")
+    return closed
+
+
 def cmd_promote(args: argparse.Namespace) -> int:
     bundle = json.loads(BUNDLE_PATH.read_text())
     problems: list[str] = []
@@ -930,29 +986,37 @@ def cmd_promote(args: argparse.Namespace) -> int:
         )
     for branch in plan.close_branches:
         print(f"superseded {branch}")
+    for branch in plan.close_off_line:
+        print(f"off main's data line {branch}")
     if not args.apply:
         return 0
-    for branch in plan.close_branches:
-        subprocess.run(
-            [
-                "gh",
-                "pr",
-                "close",
-                numbers.get(branch, branch),
-                "--repo",
-                LEDGER_REPOSITORY,
-                "--comment",
-                f"Superseded: {plan.reason}. The ledger keeps this candidate's evidence.",
-            ],
-            check=False,
-        )
+    closed = _close_pull_requests(
+        [
+            (
+                numbers[branch],
+                f"Superseded: {plan.reason}. The ledger keeps this candidate's "
+                "evidence.",
+            )
+            for branch in plan.close_branches
+        ]
+        + [
+            (
+                numbers[branch],
+                "This pair is not on main's data line, so it is never promoted. "
+                "The ledger keeps this candidate's evidence.",
+            )
+            for branch in plan.close_off_line
+        ]
+    )
     # Only the plan's target may be ready, and only while _promote finds it
     # on current main: any other ready candidate (left by a run that could
     # not undo it, or by older code) goes back to draft.
     returned = [
         _set_ready(str(pr["number"]), False)
         for pr in sorted(pull_requests, key=lambda pr: pr["number"])
-        if not pr["isDraft"] and pr["headRefName"] != plan.ready_branch
+        if not pr["isDraft"]
+        and pr["headRefName"] != plan.ready_branch
+        and str(pr["number"]) not in closed
     ]
     safe = True
     if plan.ready_branch is not None and plan.ready_commit is not None:

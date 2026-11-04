@@ -1,3 +1,84 @@
+## [6.13.0] - 2026-11-03
+
+### Added
+
+- Added `policyengine.provenance.supported_years(country_id, dataset_path)`, which returns the years the installed country model supports a single-year dataset for: the years its `extend_single_year_dataset` projects the file to, built as the model's own `Simulation` builds them and without running any formula, from the data year onwards. The UK runs to policyengine-uk's default projection end (2024–2032 for a 2024–25 dataset on policyengine-uk 2.151.0). The US runs from the data year to the earlier of policyengine-us's default projection end and the last year of spm-calculator's SPM forecast (2024–2035 for `populace_us_2024` on policyengine-us 2.2.1 and spm-calculator 1.0.0), so society-wide runs no longer accept US years before the data year, such as 2022 and 2023. The UK qualification check and execution receipts now use this function rather than their own copies of the rule. Added `UnsupportedDatasetYearError`, a `ValueError` whose message and `country_id`, `dataset`, `years` and `supported_years` attributes name the refused years, the country and the supported years.
+
+### Changed
+
+- `create_datasets` and `ensure_datasets` (UK and US) now raise `UnsupportedDatasetYearError` for a requested year the source dataset is not supported for, after making the source available and before creating any year file; `allow_unsupported_years=True` turns the check off. The US used to create year files for any year, from inputs policyengine-core carried forward or uprated, and the UK failed with `No dataset found for year ...`. Year files that already exist are loaded without the check, so a US year file that an earlier release created for an unsupported year is still reused until it is deleted.
+
+### Removed
+
+- Constituency and local-authority result rows (`compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts`, `ConstituencyImpact` and `LocalAuthorityImpact`) no longer have `x` and `y` keys, the hex-map positions copied from the area lists. A lookup CSV passed as `constituency_csv_path` or `local_authority_csv_path` may still have `x` and `y` columns; they are ignored.
+
+  The packaged UK area lists no longer have `x` and `y` columns: `data/uk_geography/constituencies_2024.csv` now has `code,name,region,country` and `local_authorities_2023.csv` has `code,name`, with every row, code, name and the row order unchanged.
+
+
+## [6.12.1] - 2026-11-03
+
+### Changed
+
+- The pull-request and push-to-main Test jobs may run for 105 minutes instead of 90. On Python 3.11 to 3.13 they now take 65 to 90 minutes, and one of them was often cancelled at the 90-minute limit with no failing test.
+
+
+## [6.12.0] - 2026-11-02
+
+### Added
+
+- `certify-data --accept-regional-model-mismatch REASON --regional-input-surface-evidence AUDIT.json` (UK only) keeps a local-area release routed when it was built on another policyengine-uk version, and records the reviewed mismatch as `regional_certification` in the bundle instead of refusing; area receipts are uncertified. `scripts/audit_regional_input_surface.py` writes the audit, reading the release's build model in a throwaway `uv run` environment, and `verify_regional_certification` checks an area receipt's record of the exception.
+- Model versions publish the metadata the Public API could only read through the private `_load_system()` method: each model version's `entities` (key, plural and person flag) and `basic_inputs`; each variable's `is_input_variable`, `hidden_input`, `module_name`, `enum_values` (each value with its label, as declared) and, where its `adds` or `subtracts` names a parameter, `adds_parameter_path` or `subtracts_parameter_path`; each parameter's `economy` and `household` flags; and each bracket schedule as a parameter node with its stored label. Existing fields are unchanged: `adds` and `subtracts` still hold the list as of 2025-01-01.
+
+### Fixed
+
+- Require a byte-bound input-surface audit when accepting a UK regional model mismatch. The audit compares the regional H5's stored columns with the regional release's build model as well as the target model: it refuses columns the build model defines and the target does not, records columns neither model defines as never modelled, and reports as defaulted only target inputs the file does not store that were not build-model inputs. Certification reads both models again rather than trusting the evidence's lists, records that the stored columns are the auditor's (`stored_columns: auditor_attested`), and adds a limitation naming the defaulted inputs. The bundle and TRACE record the result and limitations and preserve the regional manifest digest and area build model; an area run's execution receipt carries a summary bound to the record's digest and stays uncertified. Dropping the regional release removes its exception record.
+
+  Refuse regional releases that explicitly name a different model package, and forward empty CLI reasons so certification rejects them, as it rejects reasons with no visible character. Document that the UK loader silently skips unknown columns.
+
+
+## [6.11.1] - 2026-10-27
+
+### Changed
+
+- Certify the Microcosm UK pair built on policyengine-uk 2.151.0 (microcosm `67ee2ddf3`): the national cut `microcosm-uk-2024-25-national-20261025T091414Z-a6299504` (`microcosm_uk_2024_25`) and, for constituency and local-authority regions, the local-area cut `microcosm-uk-2024-25-dense-20261026T105309Z-c9df4b86` (`microcosm_uk_2024_25_dense`), both built from one spine. The UK model pin moves from policyengine-uk 2.132.6 to 2.151.0 (policyengine-core stays 3.33.3), so UK results change with both the model and the data. From policyengine-uk 2.134.0 a capital gains tax reform scales realised gains by a retention-rate elasticity of 1 by default (`gov.simulation.capital_gains_responses.elasticity`); set it to 0 for a static costing. With a Hugging Face token set, importing policyengine with any policyengine-uk other than 2.151.0 raises.
+
+
+## [6.11.0] - 2026-10-25
+
+### Added
+
+- Support opt-in local data release manifests pinned by the installed bundle TRO, with fail-closed verification and a distinct runtime certification basis for offline Budget-day runners. Reject conflicting TRO hash assertions and require local and fetched manifest artifacts to agree with the installed bundle.
+
+### Fixed
+
+- UK runs now recalculate after each step that changes the built simulation: the policy's simulation modifier, the dynamic's parameter values written after it, and the dynamic's simulation modifier. Each step ends by dropping every value the simulation has calculated, keeping its inputs, including values a modifier stores with `set_input`, so the next step and the output read values calculated from the simulation as that step left it. Before, a value calculated before one of these steps kept its old value. A dynamic's parameter values written after a policy modifier missed every value the modifier had calculated, so a dynamic adding £1,000 a year to Child Benefit left a policy-warmed Child Benefit unchanged. Values a policy modifier calculated before storing an input with `set_input` did not include that input. A failed step still drops what it calculated, then ends the run. Runs without a simulation modifier are unchanged; with one, values the modifier calculated are calculated again afterwards. Labour supply responses to dynamic elasticities written after a policy modifier also need a policyengine-uk release with PolicyEngine/policyengine-uk#2673; on policyengine-uk 2.132.6 the response stays zero even without a modifier.
+
+
+## [6.10.2] - 2026-10-24
+
+### Changed
+
+- - CI test and check jobs can run on another runner pool named by the repository variables `CI_RUNNER_X64`, `CERTIFY_RUNNER_X64` and `CI_RUNNER_EVENTS`, and the jobs `CI_RUNNER_X64` can move now hold a read-only token. With no variable set, every job runs where it does today.
+
+
+## [6.10.1] - 2026-10-22
+
+### Fixed
+
+- Stop trusting the compromised eMudhra (emSign) intermediate CA certificates in CI and in environments installed from `uv.lock`. The lock now pins certifi 2026.10.19 (was 2025.8.3), which removes the root "emSign ECC Root CA - G3", and hf-xet 1.7.0 (was 1.1.9), which checks certificates against the operating-system CA store instead of a compiled-in CA list that included that root. Every workflow now pins uv 0.13.4 (was 0.12.14), whose compiled-in CA list also removes it, and `uv.lock` is regenerated with that uv. The package's dependency ranges are unchanged.
+
+
+## [6.10.0] - 2026-10-21
+
+### Changed
+
+- Switch the UK default dataset from the Enhanced FRS 2024-25 (policyengine-uk-data 1.58.1) to Microcosm UK 2024-25 (`microcosm_uk_2024_25`, cut `microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71`), certified with policyengine-uk 2.132.6 and policyengine-core 3.33.3, the versions it was built with. Constituency and local-authority regions now load the Microcosm local-area release (`microcosm_uk_2024_25_dense`, cut `microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe`) and are in the default UK region registry. UK results change with the data. The national file has no constituency or local-authority codes, so constituency and local-authority outputs (`compute_uk_geography_disclosure` at those levels, `compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts`) need simulations on `microcosm_uk_2024_25_dense`, and receipts for those runs are uncertified: the certificate covers the national dataset only. The Enhanced FRS 2024-25 datasets stay loadable by name. Data certificates now say how they cover policyengine-core: by default one follows the bundle's core pin (`core_binding: bundle_pin`, as the UK certificate does; the Microcosm releases claim core 3.33.3), and certification and `bundle.py check --include-tros --strict-tros` warn when the pin is outside a release's core claims, as it is for the US release today; `--core-version` binds the core instead (`core_binding: certified`). With a Hugging Face token set, importing policyengine with any policyengine-uk other than 2.132.6 raises, as it did before for versions the Enhanced FRS release did not claim. The certified default is below the Universal Credit caseload floor (0.897 of the floor's 6.7m benchmark, policyengine-uk-data's derivation; Microcosm calibrates to DWP Stat-Xplore's 6.2m), an exception accepted and recorded in the data certification skill. UK candidate promotion now closes the pull requests of pairs from another data line than main's certificate, at the commit their receipt qualified, and recovery no longer re-dispatches attempts for such pairs.
+
+### Removed
+
+- The Enhanced FRS weight matrices (`parliamentary_constituency_weights`, `local_authority_weights`, `local_geography_weights`) no longer resolve by name, now that the UK default is Microcosm UK and its area regions use the Microcosm local-area release.
+
+
 ## [6.9.0] - 2026-10-20
 
 ### Added

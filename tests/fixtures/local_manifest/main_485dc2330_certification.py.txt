@@ -1,0 +1,167 @@
+# Unmodified certification function from policyengine.py main 485dc2330.
+def certify_data_release_compatibility(
+    country_id: str,
+    runtime_model_version: str,
+    runtime_data_build_fingerprint: Optional[str] = None,
+    runtime_core_version: Optional[str] = None,
+) -> DataCertification:
+    country_manifest = get_release_manifest(country_id)
+    try:
+        data_release_manifest = get_data_release_manifest(country_id)
+    except DataReleaseManifestUnavailableError as exc:
+        bundled_certification = country_manifest.certification
+        if bundled_certification is not None:
+            if (
+                runtime_data_build_fingerprint is not None
+                and bundled_certification.data_build_fingerprint is not None
+                and bundled_certification.compatibility_basis
+                not in CLAIM_BASED_COMPATIBILITY
+                and runtime_data_build_fingerprint
+                != bundled_certification.data_build_fingerprint
+            ):
+                raise ValueError(
+                    "Runtime data build fingerprint does not match the bundled "
+                    "data certification."
+                )
+            if (
+                bundled_certification.certified_for_model_version
+                == runtime_model_version
+                and _runtime_core_is_certified(
+                    bundled_certification, runtime_core_version
+                )
+            ):
+                return bundled_certification
+            return DataCertification(
+                compatibility_basis="unverified_data_release_manifest_unavailable",
+                certified_for_model_version=runtime_model_version,
+                data_build_id=bundled_certification.data_build_id,
+                built_with_model_version=(
+                    bundled_certification.built_with_model_version
+                ),
+                built_with_model_git_sha=(
+                    bundled_certification.built_with_model_git_sha
+                ),
+                data_build_fingerprint=(bundled_certification.data_build_fingerprint),
+                certified_by=bundled_certification.certified_by,
+            )
+        raise exc
+
+    # A remote build-model, fingerprint or publisher claim cannot broaden an
+    # exact-pair certificate beyond the model, core and recorded data build
+    # that qualification tested. Check them before any acceptance path returns.
+    bundled_certification = country_manifest.certification
+    # Named as certification names it: the cut tag when the release has one.
+    remote_build_id = release_build_id(data_release_manifest.build)
+    if (
+        bundled_certification is not None
+        and bundled_certification.compatibility_basis == "qualified_exact_pair"
+    ):
+        if bundled_certification.certified_for_model_version != runtime_model_version:
+            raise ValueError(
+                "Data release manifest is not certified for the runtime model "
+                f"version {runtime_model_version} in country '{country_id}'; "
+                "the exact pair requires "
+                f"{bundled_certification.certified_for_model_version}."
+            )
+        if not _runtime_core_is_certified(bundled_certification, runtime_core_version):
+            raise ValueError(
+                "Data release manifest is not certified for the runtime core "
+                f"version {runtime_core_version} in country '{country_id}'; "
+                "the exact pair requires "
+                f"{bundled_certification.certified_for_core_version}."
+            )
+        if (
+            bundled_certification.data_build_id is not None
+            and bundled_certification.data_build_id != remote_build_id
+        ):
+            raise ValueError(
+                "Data release manifest is not certified for the remote data "
+                f"build {remote_build_id} in country '{country_id}'; the exact "
+                f"pair requires {bundled_certification.data_build_id}."
+            )
+    built_with_model = (
+        data_release_manifest.build.built_with_model_package
+        if data_release_manifest.build is not None
+        else None
+    )
+
+    if (
+        built_with_model is not None
+        and built_with_model.name != country_manifest.model_package.name
+    ):
+        raise ValueError(
+            "Data release manifest was built with a different model package: "
+            f"expected {country_manifest.model_package.name}, "
+            f"got {built_with_model.name}."
+        )
+
+    if (
+        built_with_model is not None
+        and built_with_model.version == runtime_model_version
+    ):
+        return DataCertification(
+            compatibility_basis="exact_build_model_version",
+            certified_for_model_version=runtime_model_version,
+            data_build_id=release_build_id(data_release_manifest.build),
+            built_with_model_version=built_with_model.version,
+            built_with_model_git_sha=built_with_model.git_sha,
+            data_build_fingerprint=built_with_model.data_build_fingerprint,
+        )
+
+    if (
+        built_with_model is not None
+        and built_with_model.data_build_fingerprint is not None
+        and runtime_data_build_fingerprint is not None
+        and built_with_model.data_build_fingerprint == runtime_data_build_fingerprint
+    ):
+        return DataCertification(
+            compatibility_basis="matching_data_build_fingerprint",
+            certified_for_model_version=runtime_model_version,
+            data_build_id=release_build_id(data_release_manifest.build),
+            built_with_model_version=built_with_model.version,
+            built_with_model_git_sha=built_with_model.git_sha,
+            data_build_fingerprint=built_with_model.data_build_fingerprint,
+        )
+
+    for compatible_model_package in data_release_manifest.compatible_model_packages:
+        if compatible_model_package.name != country_manifest.model_package.name:
+            continue
+        if _specifier_matches(
+            version=runtime_model_version,
+            specifier=compatible_model_package.specifier,
+        ):
+            return DataCertification(
+                compatibility_basis="legacy_compatible_model_package",
+                certified_for_model_version=runtime_model_version,
+                data_build_id=release_build_id(data_release_manifest.build),
+                built_with_model_version=(
+                    built_with_model.version if built_with_model is not None else None
+                ),
+                built_with_model_git_sha=(
+                    built_with_model.git_sha if built_with_model is not None else None
+                ),
+                data_build_fingerprint=(
+                    built_with_model.data_build_fingerprint
+                    if built_with_model is not None
+                    else None
+                ),
+            )
+
+    # An automated qualification of exactly this model and data build: the
+    # bundled certificate names the pair, and the ledger evidence for it is
+    # enforced when the bundle is built (tests/test_certification_evidence.py).
+    bundled_certification = country_manifest.certification
+    if (
+        bundled_certification is not None
+        and bundled_certification.compatibility_basis == "qualified_exact_pair"
+        and bundled_certification.certified_for_model_version == runtime_model_version
+        and bundled_certification.qualification_pair_id is not None
+        and bundled_certification.data_build_id == remote_build_id
+        and _runtime_core_is_certified(bundled_certification, runtime_core_version)
+    ):
+        return bundled_certification
+
+    raise ValueError(
+        "Data release manifest is not certified for the runtime model version "
+        f"{runtime_model_version} in country '{country_id}'."
+    )

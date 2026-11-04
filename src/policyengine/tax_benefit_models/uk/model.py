@@ -245,14 +245,20 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             dataset=_policyengine_uk_input(dataset), reform=reform_dict
         )
 
+        # Each step on the built simulation ends by dropping the values it
+        # calculated, so the next step and the output read values calculated
+        # from the simulation as that step left it (see _apply_step).
         if policy_modifier is not None:
-            policy_modifier(microsim)
+            _apply_step(policy_modifier, microsim)
 
         if late_dynamic_values is not None:
-            simulation_modifier_from_parameter_values(late_dynamic_values)(microsim)
+            _apply_step(
+                simulation_modifier_from_parameter_values(late_dynamic_values),
+                microsim,
+            )
 
         if dynamic_modifier is not None:
-            dynamic_modifier(microsim)
+            _apply_step(dynamic_modifier, microsim)
 
         # The capital gains realisation response this run applies, read once
         # every reform and modifier has run.
@@ -308,6 +314,29 @@ class PolicyEngineUKLatest(MicrosimulationModelVersion):
             ),
             metadata={capital_gains_responses.RECORD_KEY: response_record},
         )
+
+
+def _apply_step(step, microsim) -> None:
+    """Run one step that changes a built simulation, then drop what it calculated.
+
+    policyengine-uk keeps each value it calculates. A modifier can calculate
+    values and then change what they were calculated from: a parameter, whose
+    change refreshes nothing calculated before, or an input it replaces with
+    ``set_input``, whose dependants policyengine-core refreshes only on a
+    branch. The late dynamic values change parameters that values a policy
+    modifier calculated may read. Without the drop, the next step and the
+    output would read those values as they were
+    (PolicyEngine/policyengine.py#717).
+
+    ``drop_computed_arrays`` keeps every input, including those a modifier
+    stored with ``set_input``, and deletes every other value, which is
+    calculated again when next read. It runs when the step fails too; the
+    failure then ends the run.
+    """
+    try:
+        step(microsim)
+    finally:
+        microsim.drop_computed_arrays()
 
 
 def _policyengine_uk_input(dataset: PolicyEngineUKDataset):

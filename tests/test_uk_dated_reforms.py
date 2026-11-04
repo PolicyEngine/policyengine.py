@@ -128,6 +128,11 @@ def test_merged_override_periods_come_last_and_win_where_they_overlap():
     ]
 
 
+# Each step on the built simulation ends by dropping the values the
+# simulation calculated (#717).
+DROP = "drop calculated values"
+
+
 class _StopRun(Exception):
     pass
 
@@ -152,6 +157,9 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
     class RecordingMicrosimulation:
         def __init__(self, *, dataset, reform=None):
             events.append(("construct", reform))
+
+        def drop_computed_arrays(self):
+            events.append(DROP)
 
         def calculate(self, *args, **kwargs):
             raise _StopRun
@@ -223,6 +231,7 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
             [
                 ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.21}}),
                 "dynamic modifier",
+                DROP,
             ],
         ),
         (
@@ -232,13 +241,15 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
             [
                 ("construct", None),
                 "policy modifier",
+                DROP,
                 ("late parameter values", [(INCOME_TAX_RATE, 0.30)]),
+                DROP,
             ],
         ),
         (
             "custom",
             "custom",
-            [("construct", None), "policy modifier", "dynamic modifier"],
+            [("construct", None), "policy modifier", DROP, "dynamic modifier", DROP],
         ),
         # A modifier never replaces its object's parameter values (#572: a
         # Policy or Dynamic sum carrying both lost its values).
@@ -248,6 +259,7 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
             [
                 ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.21}}),
                 "policy modifier",
+                DROP,
             ],
         ),
         (
@@ -256,7 +268,9 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
             [
                 ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.21}}),
                 "policy modifier",
+                DROP,
                 ("late parameter values", [(INCOME_TAX_RATE, 0.30)]),
+                DROP,
             ],
         ),
         (
@@ -265,6 +279,7 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
             [
                 ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.30}}),
                 "dynamic modifier",
+                DROP,
             ],
         ),
         (
@@ -273,8 +288,11 @@ def _run_population_route(monkeypatch, policy, dynamic, events):
             [
                 ("construct", {INCOME_TAX_RATE: {"2027-04-06.2100-12-31": 0.21}}),
                 "policy modifier",
+                DROP,
                 ("late parameter values", [(INCOME_TAX_RATE, 0.30)]),
+                DROP,
                 "dynamic modifier",
+                DROP,
             ],
         ),
     ],

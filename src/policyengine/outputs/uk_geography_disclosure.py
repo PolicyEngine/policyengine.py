@@ -26,6 +26,7 @@ from policyengine.disclosure import (
     Release,
     estimate_change,
 )
+from policyengine.provenance.manifest import uk_area_dataset_hint
 
 if TYPE_CHECKING:
     from policyengine.core.simulation import Simulation
@@ -252,9 +253,11 @@ class UKGeographyDisclosure(Output):
             if areas is None:
                 if level in self.levels:
                     columns = UK_DISCLOSURE_LEVEL_COLUMNS[level]
+                    hint = uk_area_dataset_hint(level)
                     raise ValueError(
                         f"The household output gives no household an area in "
                         f"any of {list(columns)} for level {level!r}"
+                        + (f". {hint}" if hint else "")
                     )
                 continue
             estimated[level] = areas

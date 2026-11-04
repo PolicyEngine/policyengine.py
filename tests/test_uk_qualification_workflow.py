@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import subprocess
@@ -23,6 +22,7 @@ from tests.qualification_fixtures import (
     HARNESS,
     gates,
     graphql_base_changes_output,
+    load_candidate_cli,
     make_pair,
     make_receipt,
     rest_pulls_output,
@@ -35,12 +35,7 @@ WORKFLOW_PATH = REPO_ROOT / ".github/workflows/certify-uk-release.yaml"
 
 
 def _cli():
-    spec = importlib.util.spec_from_file_location(
-        "qualification_workflow_cli", REPO_ROOT / "scripts/check_uk_candidate.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return load_candidate_cli("qualification_workflow_cli")
 
 
 def _workflow():

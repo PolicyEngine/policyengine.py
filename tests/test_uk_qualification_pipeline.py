@@ -17,6 +17,7 @@ Invariants:
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -24,6 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import jsonschema
 import pytest
@@ -36,6 +38,7 @@ from policyengine.provenance.uk_qualification import (
     build_replay_request,
     candidate_action,
     candidate_branch,
+    candidate_pr_body,
     certified_constant_replacements,
     choose_core_version,
     core_requirement,
@@ -49,11 +52,15 @@ from policyengine.provenance.uk_qualification import (
 from tests.qualification_fixtures import (
     HARNESS,
     ISSUED,
+    MICROCOSM_ROUTED_BUNDLE,
+    MICROCOSM_ROUTED_BUNDLE_PATH,
+    UK_DATA_LINE_BUNDLE,
     VENDORED_SCHEMAS,
     gates,
     golden,
     graphql_base_changes_output,
     jq,
+    load_candidate_cli,
     make_pair,
     make_receipt,
     rest_pulls_output,
@@ -61,9 +68,13 @@ from tests.qualification_fixtures import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BUNDLE = json.loads(
+#: The bundle this checkout packages.
+PACKAGED_BUNDLE = json.loads(
     (REPO_ROOT / "src/policyengine/data/bundle/manifest.json").read_text()
 )
+#: The candidates these tests build are on the policyengine-uk-data line, so
+#: they are qualified against the last bundle certified on that line.
+BUNDLE = UK_DATA_LINE_BUNDLE
 
 
 def _wheel(name, version, digest):
@@ -150,14 +161,7 @@ def test_resolve_refuses_a_pair_other_than_the_one_requested(
     resolve to another (a moved data tag, another core), the run fails and
     nothing else is qualified."""
 
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_pair_pin",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_candidate_pair_pin")
     pair = make_pair(model="2.200.0")
     resolved = cli.ResolvedCandidate(
         pair,
@@ -471,14 +475,8 @@ def test_requalify_names_the_target_only_while_its_baseline_is_stale(
     monkeypatch, tmp_path, capsys
 ):
     import argparse
-    import importlib.util
 
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_requalify",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_candidate_requalify")
     current = _promotion_receipt(pair=_promotable_pair_and_branch())
     stale = current.model_copy(
         update={
@@ -522,13 +520,16 @@ def test_incomplete_pairs_requalify_on_a_new_base_only(tmp_path):
     )
 
 
-def _new_record(old):
+SUCCESSOR_CUT = "microcosm-uk-2024-25-national-20261101T000000Z-aaaaaaaa"
+
+
+def _successor_record(old):
+    """The next certificate on the packaged bundle's own data line."""
     new = json.loads(json.dumps(old))
-    new["model_package"]["version"] = "2.126.8"
-    new["certification"]["built_with_model_version"] = "2.126.0"
-    new["certification"]["data_build_id"] = "policyengine-uk-data-1.59.0"
-    new["data_package"]["version"] = "1.59.0"
-    new["data_package"]["release_manifest_revision"] = "1" * 40
+    new["model_package"]["version"] = "2.140.0"
+    new["certification"]["built_with_model_version"] = "2.140.0"
+    new["certification"]["data_build_id"] = SUCCESSOR_CUT
+    new["data_package"]["release_manifest_revision"] = SUCCESSOR_CUT
     return new
 
 
@@ -540,8 +541,10 @@ def test_constant_rewrite_leaves_no_old_values(tmp_path):
     ):
         (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(REPO_ROOT / relative, tmp_path / relative)
-    old = BUNDLE["data_releases"]["uk"]
-    new = _new_record(old)
+    # The constant files pin the packaged certificate, so promotion rewrites
+    # them from it.
+    old = PACKAGED_BUNDLE["data_releases"]["uk"]
+    new = _successor_record(old)
     replacements = certified_constant_replacements(old, new)
     changed = rewrite_certified_constants(tmp_path, replacements)
     assert set(changed) == {
@@ -554,17 +557,23 @@ def test_constant_rewrite_leaves_no_old_values(tmp_path):
         for before, after in replacements:
             assert f'"{before}"' not in text and f'@{before}"' not in text
     manifests = (tmp_path / "tests/test_release_manifests.py").read_text()
-    assert 'UK_MODEL_VERSION = "2.126.8"' in manifests
-    assert 'UK_DATA_RELEASE_PATH = "releases/1.59.0/release_manifest.json"' in manifests
-    assert 'UK_DATA_RELEASE_REVISION = "' + "1" * 40 + '"' in manifests
+    assert 'UK_MODEL_VERSION = "2.140.0"' in manifests
+    assert f'UK_DATA_RELEASE_REVISION = "{SUCCESSOR_CUT}"' in manifests
     assert rewrite_certified_constants(tmp_path, replacements) == []
 
 
+@pytest.mark.parametrize(
+    "routed", [False, True], ids=["uk-data main", "main routed to Microcosm"]
+)
 @pytest.mark.parametrize("qualification_only", [False, True])
 def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
-    tmp_path, monkeypatch, qualification_only
+    tmp_path, monkeypatch, qualification_only, routed
 ):
-    """Run preparation, certification and real TRO generation without a network."""
+    """Run preparation, certification and real TRO generation without a network.
+
+    On a main routed to another line's local-area release, the uk-data
+    candidate (a forced qualification) drops the routing it cannot keep.
+    """
 
     from policyengine.provenance import certification, manifest
     from policyengine.provenance.uk_qualification import prepare_candidate_commit
@@ -591,7 +600,7 @@ def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
     pair = resolved.pair
     bundle_dir = tmp_path / "src/policyengine/data/bundle"
     bundle_dir.mkdir(parents=True)
-    source = json.loads(json.dumps(BUNDLE))
+    source = json.loads(json.dumps(MICROCOSM_ROUTED_BUNDLE if routed else BUNDLE))
     source["data_releases"].pop("us")
     source["packages"].pop("policyengine-us")
     for packages in source["extras"].values():
@@ -688,12 +697,58 @@ def test_preparation_generates_new_sidecars_and_verifies_the_exact_pair(
     assert (tmp_path / prepared["changelog_fragment"]).is_file()
     assert maintenance.main(["check", "--include-tros", "--strict-tros"]) == 0
     assert calls[-1][2:] == ["check", "--include-tros", "--strict-tros"]
+    certify = next(command for command in calls if "certify-data" in command)
+    record = json.loads(bundle_path.read_bytes())["data_releases"]["uk"]
+    assert ("--drop-regional-release" in certify) == routed
+    assert "regional_source_manifest_uri" not in record
+    if routed:
+        # The constant files pin main's line, not the candidate's.
+        assert prepared["constant_files"] == []
     if qualification_only:
         changed = json.loads(bundle_path.read_bytes())
         changed["packages"]["policyengine-core"]["version"] = "99.0.0"
         write_json(bundle_path, changed)
-        with pytest.raises(ValueError, match="runtime core.*qualified exact pair"):
+        with pytest.raises(ValueError, match="runtime core 99.0.0 differs.*requalify"):
             tros.generated_tros(strict=True)
+
+
+def test_regional_flags_keep_routing_on_its_line_and_drop_it_across_lines():
+    from policyengine.provenance.uk_qualification import (
+        regional_certification_arguments,
+    )
+
+    uk_data_pair = make_pair()
+    record = MICROCOSM_ROUTED_BUNDLE["data_releases"]["uk"]
+
+    def microcosm_pair(model, core):
+        pair = make_pair(model=model, core=core)
+        return pair.model_copy(
+            update={
+                "data": pair.data.model_copy(
+                    update={
+                        "data_package": record["data_package"]["name"],
+                        "repo_id": record["data_package"]["repo_id"],
+                    }
+                )
+            }
+        )
+
+    certified = (
+        record["model_package"]["version"],
+        MICROCOSM_ROUTED_BUNDLE["packages"]["policyengine-core"]["version"],
+    )
+
+    assert regional_certification_arguments(BUNDLE, uk_data_pair) == []
+    assert regional_certification_arguments(MICROCOSM_ROUTED_BUNDLE, uk_data_pair) == [
+        "--drop-regional-release"
+    ]
+    # A same-line pair needs a local-area cut for its versions, which no
+    # candidate carries, whatever those versions are.
+    for model, core in (certified, ("2.140.0", certified[1]), (certified[0], "3.34.0")):
+        with pytest.raises(ValueError, match="certify such a pair by hand"):
+            regional_certification_arguments(
+                MICROCOSM_ROUTED_BUNDLE, microcosm_pair(model, core)
+            )
 
 
 def test_replay_request_is_valid_for_the_scorecard():
@@ -762,7 +817,7 @@ def test_the_real_cli_generates_replay_requests_despite_country_import_suppressi
     candidate = request["candidate"]
     assert candidate["policyengine"]["source"]["git"]["commit"] == HARNESS.git_commit
     bundle = candidate["expected_release_bundle"]
-    record = BUNDLE["data_releases"]["uk"]
+    record = PACKAGED_BUNDLE["data_releases"]["uk"]
     assert bundle["model_version"] == record["model_package"]["version"]
     assert bundle["data_version"] == record["data_package"]["version"]
     assert bundle["default_dataset"] == record["default_dataset"]
@@ -930,8 +985,8 @@ def test_a_pair_from_another_data_line_is_never_ordered_against_main(tmp_path):
     """A uk-data release number says nothing about a Microcosm build. With a
     Microcosm certificate on main, every uk-data pair compared as newer
     (1.58.x > 0.1.0) and would have been qualified and promoted back. Now
-    automated qualification skips it unless forced, and promotion neither
-    readies nor closes it."""
+    automated qualification skips it unless forced, and promotion never
+    readies it and closes its pull request."""
 
     from policyengine.provenance.uk_qualification import requalification_target
 
@@ -951,6 +1006,9 @@ def test_a_pair_from_another_data_line_is_never_ordered_against_main(tmp_path):
     plan = plan_promotion([promotable], bundle, {branch: promotable.harness.git_commit})
     assert plan.target is None and plan.ready_branch is None
     assert branch not in plan.close_branches
+    assert plan.close_off_line == [branch]
+    body = candidate_pr_body(promotable, uk_data, ledger_url="u", on_main_line=False)
+    assert "never promoted" in body and "promotes the pair" not in body
     assert requalification_target([promotable], bundle, tmp_path, "b" * 40) is None
 
     # On main's own data line the same pair still advances.
@@ -966,6 +1024,127 @@ def _promotable_pair_and_branch(core=None):
     current = BUNDLE["data_releases"]["uk"]["data_package"]["version"]
     core = core or BUNDLE["packages"]["policyengine-core"]["version"]
     return make_pair(model="2.200.0", data=current, core=core)
+
+
+def _other_line_pair(model="2.900.0"):
+    """A pair on the Microcosm line, which BUNDLE (a uk-data main) is not."""
+
+    pair = make_pair(model=model)
+    return pair.model_copy(
+        update={
+            "data": pair.data.model_copy(
+                update={
+                    "data_package": "microcosm-data",
+                    "repo_id": "policyengine/populace-uk-private",
+                }
+            )
+        }
+    )
+
+
+def test_promotion_closes_other_line_prs_only_at_their_qualified_commit():
+    target = _promotion_receipt(pair=_promotable_pair_and_branch())
+    other = _promotion_receipt(pair=_other_line_pair())
+    target_branch = candidate_branch(target.pair)
+    other_branch = candidate_branch(other.pair)
+
+    plan = plan_promotion(
+        [target, other],
+        BUNDLE,
+        {
+            target_branch: target.harness.git_commit,
+            other_branch: other.harness.git_commit,
+        },
+    )
+    assert plan.ready_branch == target_branch
+    assert plan.close_off_line == [other_branch]
+    assert other_branch not in plan.close_branches
+
+    # A newer head is a forced re-run still in flight: its own receipt decides.
+    in_flight = plan_promotion(
+        [target, other],
+        BUNDLE,
+        {target_branch: target.harness.git_commit, other_branch: "f" * 40},
+    )
+    assert in_flight.ready_branch == target_branch
+    assert in_flight.close_off_line == []
+
+
+def test_promote_closes_other_line_prs_and_never_drafts_a_closed_one(monkeypatch):
+    import argparse
+
+    cli = load_candidate_cli("check_uk_promote_line", MICROCOSM_ROUTED_BUNDLE_PATH)
+    receipt = _promotion_receipt(pair=make_pair(model="2.200.0"))
+    branch = candidate_branch(receipt.pair)
+    monkeypatch.setattr(cli, "latest_receipts", lambda ledger, problems=None: [receipt])
+    monkeypatch.setattr(
+        cli,
+        "_candidate_pull_requests",
+        lambda: [
+            {
+                "number": 7,
+                "headRefName": branch,
+                "headRefOid": receipt.harness.git_commit,
+                "isDraft": False,
+                "isCrossRepository": False,
+            }
+        ],
+    )
+    commands = []
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda command, **kwargs: (
+            commands.append(command) or subprocess.CompletedProcess(command, 0)
+        ),
+    )
+    drafted = []
+    monkeypatch.setattr(
+        cli, "_set_ready", lambda number, ready: drafted.append(number) or True
+    )
+
+    assert cli.cmd_promote(argparse.Namespace(ledger="ledger", apply=True)) == 0
+    assert commands == [
+        [
+            "gh",
+            "pr",
+            "close",
+            "7",
+            "--repo",
+            cli.LEDGER_REPOSITORY,
+            "--comment",
+            "This pair is not on main's data line, so it is never promoted. "
+            "The ledger keeps this candidate's evidence.",
+        ]
+    ]
+    # gh refuses to return a closed pull request to draft.
+    assert drafted == []
+
+
+def test_finalize_says_an_other_line_pair_is_never_promoted(monkeypatch, tmp_path):
+    import argparse
+
+    cli = load_candidate_cli("check_uk_finalize_line", MICROCOSM_ROUTED_BUNDLE_PATH)
+    receipt = _promotion_receipt(pair=make_pair(model="2.200.0"))
+    attempt = tmp_path / "attempt"
+    write_json(
+        attempt / "candidate.json",
+        {
+            "pair": receipt.pair.canonical_payload(),
+            "branch": candidate_branch(receipt.pair),
+        },
+    )
+    monkeypatch.setattr(cli, "finalize_attempt", lambda *args, **kwargs: receipt)
+    monkeypatch.setattr(cli, "issued_by", lambda: ISSUED)
+    monkeypatch.setattr(cli, "set_output", lambda **kwargs: None)
+    body = tmp_path / "body.md"
+
+    namespace = argparse.Namespace(
+        attempt=str(attempt), ledger=str(tmp_path / "ledger"), pr_body=str(body)
+    )
+    assert cli.cmd_finalize(namespace) == 0
+    text = body.read_text()
+    assert "never promoted" in text and "promotes the pair" not in text
 
 
 def test_pairs_that_share_versions_never_share_a_branch():
@@ -1368,7 +1547,6 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     moves main to it with a push leased on that parent."""
 
     import argparse
-    import importlib.util
 
     checks, runs, at_commit, main, push_code, automatic, promotes, readiness = (
         PROMOTION_CASES[case]
@@ -1377,12 +1555,7 @@ def test_promotion_makes_main_exactly_the_qualified_commit(
     branch = candidate_branch(qualified.pair)
     commit = qualified.harness.git_commit
     parent = "p" * 40
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_for_test",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_candidate_for_test")
     calls = []
 
     target = {
@@ -1499,8 +1672,6 @@ def _sweep_cli(
     ``shared_fails`` fails the REST listing of a branch's pull requests
     ("listing") or the base-change query ("history")."""
 
-    import importlib.util
-
     qualified = _promotion_receipt(pair=_promotable_pair_and_branch())
     branch = candidate_branch(qualified.pair)
     commit = qualified.harness.git_commit
@@ -1508,12 +1679,7 @@ def _sweep_cli(
     if superseded:
         receipts.append(_promotion_receipt(pair=SUPERSEDED_PAIR))
     stale = "candidate/uk/stale-pair"
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_for_test",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_candidate_for_test")
     calls = []
     listing = [
         {
@@ -1657,14 +1823,7 @@ def test_a_candidate_listing_at_its_limit_is_refused(monkeypatch, listed, refuse
     listing that reaches it may have missed the target; promotion refuses to
     go on rather than act on part of the list."""
 
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_for_test",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_candidate_for_test")
     listing = [
         {
             "number": number,
@@ -1882,14 +2041,7 @@ def test_only_pull_requests_to_main_are_candidates(monkeypatch):
     branch cannot collapse into one entry that sends readiness changes to
     the wrong one."""
 
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_candidate_for_test",
-        Path(__file__).resolve().parents[1] / "scripts" / "check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_candidate_for_test")
     calls = []
     listing = [
         {
@@ -2691,8 +2843,6 @@ def _publish_as_attempt(ledger, pair, receipt, key):
 def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
     tmp_path, verdict, main_advanced, staged_base, monkeypatch, capsys
 ):
-    import importlib.util
-
     from policyengine.provenance.qualification_ledger import attempt_directory
     from policyengine.provenance.uk_qualification import stage_attempt
 
@@ -2716,11 +2866,7 @@ def test_forced_stage_recovery_binds_the_terminal_receipt_it_supersedes(
         candidate_action(pair, BUNDLE, tmp_path, base_commit=base, now=now)[0]
         == "qualify"
     )
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_bound_recovery_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_bound_recovery_for_test")
     monkeypatch.setattr(cli, "utc_now", lambda: now)
     assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
     assert json.loads(capsys.readouterr().out) == payload
@@ -2790,17 +2936,10 @@ def test_forced_recovery_preserves_newer_work_on_another_base(tmp_path, protecte
 def test_resolution_preserves_authorization_to_recover_forced_work(
     tmp_path, monkeypatch, verdict, main_advanced, abandonment
 ):
-    import importlib.util
-
     from policyengine.provenance.qualification_ledger import attempt_directory
     from policyengine.provenance.uk_qualification import stage_attempt
 
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_resolve_recovery_for_test",
-        REPO_ROOT / "scripts/check_uk_candidate.py",
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_resolve_recovery_for_test")
     pair = make_pair(model="2.200.0")
     terminal = make_receipt(
         pair=pair,
@@ -2919,13 +3058,7 @@ def test_cross_base_recovery_allocates_new_keys_without_overwriting_evidence(tmp
 def test_recovery_requires_a_confirmed_failed_owner(
     monkeypatch, status, conclusion, expected
 ):
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_owner_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
-    )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    cli = load_candidate_cli("check_uk_owner_for_test")
     calls = []
 
     def run(argv, **kwargs):
@@ -2946,19 +3079,76 @@ def test_recovery_requires_a_confirmed_failed_owner(
     assert not cli.owner_run_failed("42")
 
 
-def test_catchup_finds_abandoned_stages_without_replay_requests(
-    tmp_path, monkeypatch, capsys
+@pytest.mark.parametrize("force", [False, True])
+def test_recovery_skips_pairs_from_another_data_line(
+    tmp_path, monkeypatch, capsys, force
 ):
-    import importlib.util
+    """The catch-up re-dispatches without force, so even a forced run of a
+    pair from another line would resolve as other_line and clear nothing."""
 
     from policyengine.provenance.qualification_ledger import attempt_directory
     from policyengine.provenance.uk_qualification import stage_attempt
 
-    spec = importlib.util.spec_from_file_location(
-        "check_uk_recovery_for_test", REPO_ROOT / "scripts/check_uk_candidate.py"
+    # Main is a routed Microcosm bundle; make_pair builds a uk-data pair.
+    cli = load_candidate_cli("check_uk_recovery_line", MICROCOSM_ROUTED_BUNDLE_PATH)
+    pair = make_pair()
+    attempt = attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12)
+    payload = {"pair": pair.canonical_payload(), "force": force}
+    stage_attempt(attempt, payload, HARNESS)
+    write_json(
+        attempt / "staging.json",
+        {"sequence": 1, "owner_run_id": "42", "expires_at": "2026-10-14T14:00:00Z"},
     )
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
+    monkeypatch.setattr(cli, "utc_now", lambda: "2026-10-14T11:00:00Z")
+
+    # A live attempt is not recoverable, and logs nothing.
+    monkeypatch.setattr(cli, "owner_run_failed", lambda run_id: False)
+    assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
+    assert capsys.readouterr() == ("", "")
+
+    monkeypatch.setattr(cli, "owner_run_failed", lambda run_id: run_id == "42")
+    assert cli.main(["recoverable", "--ledger", str(tmp_path)]) == 0
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert "not on main's data line" in out.err
+
+
+def test_check_refresh_skips_pairs_from_another_data_line(tmp_path, monkeypatch):
+    import argparse
+
+    cli = load_candidate_cli("check_uk_refresh_line", MICROCOSM_ROUTED_BUNDLE_PATH)
+    receipt = _promotion_receipt(pair=make_pair(model="2.200.0"))
+    assert receipt.promotable
+    branch = candidate_branch(receipt.pair)
+    monkeypatch.setattr(cli, "latest_receipts", lambda ledger: [receipt])
+    monkeypatch.setattr(
+        cli,
+        "_candidate_pull_requests",
+        lambda: [
+            {
+                "number": 1,
+                "headRefName": branch,
+                "headRefOid": receipt.harness.git_commit,
+            }
+        ],
+    )
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError("a pair from another data line was refreshed")
+
+    monkeypatch.setattr(cli, "_shared_branch_pull_requests", unexpected)
+    monkeypatch.setattr(cli, "_candidate_runs", unexpected)
+
+    assert cli.cmd_refresh_pr_checks(argparse.Namespace(ledger=str(tmp_path))) == 0
+
+
+def test_catchup_finds_abandoned_stages_without_replay_requests(
+    tmp_path, monkeypatch, capsys
+):
+    from policyengine.provenance.qualification_ledger import attempt_directory
+    from policyengine.provenance.uk_qualification import stage_attempt
+
+    cli = load_candidate_cli("check_uk_recovery_for_test")
     pair = make_pair()
     attempt = attempt_directory(tmp_path, "uk", pair.pair_id, "a" * 12)
     payload = {"pair": pair.canonical_payload()}
@@ -3291,39 +3481,58 @@ def test_release_payload_names_the_qualification_receipt():
     }
 
 
-def test_released_bundle_request_is_valid_for_the_scorecard():
+@pytest.mark.parametrize(
+    ("bundle", "manifest_size"),
+    [(BUNDLE, 128369110), (MICROCOSM_ROUTED_BUNDLE, None)],
+    ids=["uk-data model repo", "Microcosm dataset repo without sizes"],
+)
+def test_released_bundle_request_is_valid_for_the_scorecard(bundle, manifest_size):
     from policyengine.provenance.uk_qualification import released_bundle_request
 
-    record = BUNDLE["data_releases"]["uk"]
+    record = bundle["data_releases"]["uk"]
     dataset = record["default_dataset"]
+    reference = record["datasets"][dataset]
+    artifact = {
+        "kind": "microdata",
+        "path": reference["path"],
+        "repo_id": reference.get("repo_id") or record["data_package"]["repo_id"],
+        "revision": reference["revision"],
+        "sha256": reference["sha256"],
+    }
+    if manifest_size is not None:
+        artifact["size_bytes"] = manifest_size
     manifest = {
         "schema_version": 1,
         "data_package": {
-            "name": "policyengine-uk-data",
+            "name": record["data_package"]["name"],
             "version": record["data_package"]["version"],
         },
         "default_datasets": {"national": dataset},
-        "artifacts": {
-            dataset: {
-                "kind": "microdata",
-                "path": record["datasets"][dataset]["path"],
-                "repo_id": record["datasets"][dataset]["repo_id"],
-                "revision": record["datasets"][dataset]["revision"],
-                "sha256": record["datasets"][dataset]["sha256"],
-                "size_bytes": 128369110,
-            }
-        },
+        "artifacts": {dataset: artifact},
     }
-    core = BUNDLE["packages"]["policyengine-core"]["version"]
+    data_package = record["data_package"]
+    repo_type = data_package["repo_type"]
+    fetched = []
+
+    def hf_file(*request):
+        fetched.append(("file", *request))
+        return json.dumps(manifest).encode()
+
+    def hf_size(*request):
+        fetched.append(("size", *request))
+        return 321798995
+
+    core = bundle["packages"]["policyengine-core"]["version"]
     request = released_bundle_request(
-        BUNDLE,
-        version=BUNDLE["policyengine_version"],
+        bundle,
+        version=bundle["policyengine_version"],
         wheel_sha256=sha("7"),
         packaged_manifest_sha256=sha("8"),
         release_bundle=golden("qualification_request_golden")["candidate"][
             "expected_release_bundle"
         ],
-        hf_file=lambda repo, rev, path: json.dumps(manifest).encode(),
+        hf_file=hf_file,
+        hf_size=hf_size,
         pypi_project=lambda name: {
             "releases": {core: [_wheel("policyengine-core", core, sha("6"))]}
         },
@@ -3341,6 +3550,215 @@ def test_released_bundle_request_is_valid_for_the_scorecard():
     assert request.document()["candidate"]["policyengine"]["source"] == {
         "pypi": {"wheel_sha256": sha("7")}
     }
+    data = request.document()["candidate"]["data"]
+    assert data["repo_type"] == repo_type
+    # The manifest's size when it records one, else the file's own size.
+    assert data["size_bytes"] == manifest_size or (
+        manifest_size is None and data["size_bytes"] == 321798995
+    )
+    manifest_request = (
+        "file",
+        data_package["repo_id"],
+        data_package["release_manifest_revision"],
+        data_package["release_manifest_path"],
+        repo_type,
+    )
+    size_request = (
+        "size",
+        reference.get("repo_id") or data_package["repo_id"],
+        reference["revision"],
+        reference["path"],
+        reference.get("repo_type") or repo_type,
+    )
+    assert fetched == (
+        [manifest_request]
+        if manifest_size is not None
+        else [manifest_request, size_request]
+    )
+
+
+def test_released_bundle_request_uses_the_datasets_own_location():
+    from policyengine.provenance.uk_qualification import released_bundle_request
+
+    bundle = json.loads(json.dumps(MICROCOSM_ROUTED_BUNDLE))
+    record = bundle["data_releases"]["uk"]
+    reference = record["datasets"]["microcosm_uk_2024_25"]
+    reference.update(
+        repo_id="policyengine/other-repo", revision="other-revision", repo_type="model"
+    )
+    manifest = {
+        "schema_version": 1,
+        "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+        "default_datasets": {"national": "microcosm_uk_2024_25"},
+        "artifacts": {
+            "microcosm_uk_2024_25": {
+                "kind": "microdata",
+                "path": "microcosm_uk_2024_25.h5",
+                "repo_id": "policyengine/other-repo",
+                "revision": "other-revision",
+                "sha256": reference["sha256"],
+            }
+        },
+    }
+    manifest_bytes = json.dumps(manifest).encode()
+    fetched = []
+
+    def hf_file(*request):
+        fetched.append(("file", *request))
+        return manifest_bytes
+
+    def hf_size(*request):
+        fetched.append(("size", *request))
+        return 1234
+
+    core = bundle["packages"]["policyengine-core"]["version"]
+    request = released_bundle_request(
+        bundle,
+        version=bundle["policyengine_version"],
+        wheel_sha256=sha("7"),
+        packaged_manifest_sha256=sha("8"),
+        release_bundle=golden("qualification_request_golden")["candidate"][
+            "expected_release_bundle"
+        ],
+        hf_file=hf_file,
+        hf_size=hf_size,
+        pypi_project=lambda name: {
+            "releases": {core: [_wheel("policyengine-core", core, sha("6"))]}
+        },
+        requested_by={
+            "repository": "PolicyEngine/policyengine.py",
+            "workflow_run_id": 5,
+            "commit": "e" * 40,
+        },
+    )
+
+    cut = "microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71"
+    assert fetched == [
+        (
+            "file",
+            "policyengine/populace-uk-private",
+            cut,
+            "releases/microcosm-uk-2024-25-national/release_manifest.json",
+            "dataset",
+        ),
+        (
+            "size",
+            "policyengine/other-repo",
+            "other-revision",
+            "microcosm_uk_2024_25.h5",
+            "model",
+        ),
+    ]
+    assert request.document()["candidate"]["data"] == {
+        "build_id": cut,
+        "dataset": "microcosm_uk_2024_25",
+        "repo_id": "policyengine/other-repo",
+        "repo_type": "model",
+        "revision": "other-revision",
+        "path": "microcosm_uk_2024_25.h5",
+        "sha256": reference["sha256"],
+        "size_bytes": 1234,
+        "release_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+    }
+
+
+def test_released_bundle_request_needs_a_size_source():
+    from policyengine.provenance.uk_qualification import released_bundle_request
+
+    record = MICROCOSM_ROUTED_BUNDLE["data_releases"]["uk"]
+    dataset = record["default_dataset"]
+    reference = record["datasets"][dataset]
+    manifest = {
+        "schema_version": 1,
+        "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+        "default_datasets": {"national": dataset},
+        "artifacts": {
+            dataset: {
+                "kind": "microdata",
+                "path": reference["path"],
+                "repo_id": reference["repo_id"],
+                "revision": reference["revision"],
+                "sha256": reference["sha256"],
+            }
+        },
+    }
+    with pytest.raises(ValueError, match="records no size"):
+        released_bundle_request(
+            MICROCOSM_ROUTED_BUNDLE,
+            version=MICROCOSM_ROUTED_BUNDLE["policyengine_version"],
+            wheel_sha256=sha("7"),
+            packaged_manifest_sha256=sha("8"),
+            release_bundle={},
+            hf_file=lambda *args: json.dumps(manifest).encode(),
+            pypi_project=lambda name: {},
+            requested_by={},
+        )
+
+
+def test_release_consumers_address_dataset_repositories(monkeypatch):
+    monkeypatch.setenv("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+    for name in ("HUGGING_FACE_TOKEN", "HF_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    # The shared helper reads every token variable the script lists.
+    monkeypatch.setenv("HUGGINGFACE_HUB_TOKEN", "hub-token")
+    spec = importlib.util.spec_from_file_location(
+        "release_consumers_for_test", REPO_ROOT / "scripts" / "release_consumers.py"
+    )
+    consumers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(consumers)
+    url = "https://huggingface.co/datasets/org/data/resolve/v1/releases/a%20b.h5"
+    authorized = {"Authorization": "Bearer hub-token"}
+    # A compressed answer carries no Content-Length.
+    sized = {**authorized, "Accept-Encoding": "identity"}
+    calls = []
+
+    def response(status, headers, content=b""):
+        answer = MagicMock(status_code=status, headers=headers, content=content)
+        answer.raise_for_status = lambda: None
+        return answer
+
+    def get(target, **kwargs):
+        calls.append(("get", target, kwargs["headers"]))
+        return response(200, {}, b"manifest")
+
+    answers = []
+
+    def head(target, **kwargs):
+        calls.append(("head", target, kwargs["headers"], kwargs["allow_redirects"]))
+        return answers.pop(0)
+
+    monkeypatch.setattr(consumers.requests, "get", get)
+    monkeypatch.setattr(consumers.requests, "head", head)
+
+    assert consumers._hf_file("org/data", "v1", "releases/a b.h5", "dataset") == (
+        b"manifest"
+    )
+    assert calls.pop() == ("get", url, authorized)
+
+    # A large file's redirect carries its size.
+    answers.append(response(302, {"X-Linked-Size": "321", "Content-Length": "1152"}))
+    assert consumers._hf_size("org/data", "v1", "releases/a b.h5", "dataset") == 321
+    assert calls == [("head", url, sized, False)]
+    calls.clear()
+
+    # A small file answers with its own length, or with a redirect to it.
+    answers.append(response(200, {"Content-Length": "4288"}))
+    assert consumers._hf_size("org/data", "v1", "releases/a b.h5", "dataset") == 4288
+    answers.extend(
+        [
+            response(307, {"Content-Length": "0"}),
+            response(200, {"Content-Length": "77"}),
+        ]
+    )
+    assert consumers._hf_size("org/data", "v1", "releases/a b.h5", "dataset") == 77
+    assert calls[-2:] == [
+        ("head", url, sized, False),
+        ("head", url, sized, True),
+    ]
+
+    model_url = "https://huggingface.co/org/model/resolve/v1/a.h5"
+    consumers._hf_file("org/model", "v1", "a.h5", "model")
+    assert calls.pop() == ("get", model_url, authorized)
 
 
 def test_expected_release_bundle_uses_the_scorecard_certification_environment(

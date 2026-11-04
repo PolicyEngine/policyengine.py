@@ -7,7 +7,8 @@
 # mandatory gates on that exact commit, replayed by policyengine-scorecard,
 # and recorded in the uk-qualification-ledger branch. Promotion is
 # serialized: it readies the newest promotable candidate PR that advances
-# main, closes superseded ones, and (cos d1344) fast-forwards main to its
+# main, closes superseded ones and those of pairs from another data line
+# (which are never promoted), and (cos d1344) fast-forwards main to its
 # qualified commit once every check on it has passed, which succeeds only
 # while main is still the commit it was built on; otherwise the catch-up
 # requalifies it on current main.
@@ -57,7 +58,7 @@ permissions:
 
 env:
   LEDGER_BRANCH: uk-qualification-ledger
-  UV_VERSION: "0.12.14"
+  UV_VERSION: "0.13.4"
   PYTHON_VERSION: "3.13"
   # Keep equal to PYTHON_VERSION. The repository's .python-version asks for a
   # newer Python, and every uv command here must use the 3.13 environment the
@@ -293,7 +294,7 @@ jobs:
   qualify:
     needs: [resolve, prepare]
     if: needs.prepare.outputs.duplicate == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CERTIFY_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CERTIFY_RUNNER_X64 || 'ubuntu-latest' }}
     # The local gates took 80-89 minutes while every wrapper.household
     # contract row errored at once. Since #651 those rows run the household
     # calculator, which takes the gates past two hours, so a 120-minute limit
@@ -354,7 +355,7 @@ jobs:
   replay:
     needs: [resolve, prepare, qualify]
     if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.duplicate == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CERTIFY_RUNNER_X64 != '' && (vars.CI_RUNNER_EVENTS == '' || contains(format(',{0},', vars.CI_RUNNER_EVENTS), format(',{0},', github.event_name))) && vars.CERTIFY_RUNNER_X64 || 'ubuntu-latest' }}
     timeout-minutes: 355
     permissions:
       contents: write
