@@ -50,6 +50,13 @@ RELEASE_FOLDER_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 #: The publisher refuses any other release role
 #: (``microcosm_emitter_interface.identifiers.ROLE_IDENTIFIER``).
 RELEASE_ROLE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+#: A build-folder manifest's build details, at its top level (microcosm#1505,
+#: decided 2026-10-29); older manifests keep them inside the ``build`` object.
+BUILD_DETAIL_FIELDS = (
+    "built_at",
+    "built_with_model_package",
+    "built_with_core_package",
+)
 _RELEASES_RECORD_KEYS = frozenset({"schema_version", "default", "releases"})
 _RELEASE_ENTRY_KEYS = frozenset({"role", "current", "builds"})
 _BUILD_ENTRY_KEYS = frozenset({"published_at", "withdrawn"})
@@ -213,8 +220,11 @@ class DataReleaseManifest(BaseModel):
     release: Optional[str] = None
     """The release of a build published in its own folder,
     ``releases/<release>/<build>/``. Such a manifest names its ``release``
-    and ``build`` as strings; ``build`` is read as ``DataBuildInfo`` with only
-    ``build_id`` set, and written back as the string. ``None`` for a manifest
+    and ``build`` as strings, and records the build's details
+    (``built_at``, ``built_with_model_package``, ``built_with_core_package``)
+    at its top level. ``build`` is read as ``DataBuildInfo`` with the build
+    name as ``build_id`` and those details, and written back as the string
+    with the details at the top level again. ``None`` for a manifest
     published before that layout, whose ``build`` is an object."""
     build: Optional[DataBuildInfo] = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
@@ -253,7 +263,10 @@ class DataReleaseManifest(BaseModel):
         for label, name in (("release", release), ("build", build)):
             if not isinstance(name, str) or not RELEASE_FOLDER_NAME.fullmatch(name):
                 raise ValueError(f"{label} must match {RELEASE_FOLDER_NAME.pattern}.")
-        return {**data, "build": {"build_id": build}}
+        # microcosm#1505 records the build's details at the top level.
+        details = {name: data[name] for name in BUILD_DETAIL_FIELDS if name in data}
+        rest = {key: value for key, value in data.items() if key not in details}
+        return {**rest, "build": {"build_id": build, **details}}
 
     @model_validator(mode="after")
     def _require_revision_pins_outside_build_folders(self) -> "DataReleaseManifest":
@@ -281,7 +294,12 @@ class DataReleaseManifest(BaseModel):
             and isinstance(data, dict)
             and "build" in data
         ):
+            build = data["build"]
             data["build"] = self.build.build_id
+            if isinstance(build, dict):
+                for name in BUILD_DETAIL_FIELDS:
+                    if name in build:
+                        data[name] = build[name]
         return data
 
     @property

@@ -267,6 +267,41 @@ def https_releases_record_url(parts: dict) -> str:
     )
 
 
+#: Hugging Face's error codes for a 404 that is not about the file: the
+#: repository or the revision is missing (or unreadable with this token).
+_MISSING_REPOSITORY_OR_REVISION = frozenset({"RepoNotFound", "RevisionNotFound"})
+
+
+def _releases_record_at_main(parts: dict, headers: dict) -> Optional[bytes]:
+    """The repository's ``releases.json`` at ``main``, or ``None`` when it has
+    none.
+
+    Only Hugging Face's 404 for the file means "none", unless its error code
+    (``X-Error-Code``) says the repository or the revision is missing. Any
+    other answer is a ``CertificationError``, so certification never takes a
+    failed read for a repository without the record.
+    """
+    url = https_releases_record_url(parts)
+    response = requests.get(url, headers=headers, timeout=HF_REQUEST_TIMEOUT_SECONDS)
+    error_code = (getattr(response, "headers", None) or {}).get("X-Error-Code")
+    if response.status_code == 404 and error_code not in (
+        _MISSING_REPOSITORY_OR_REVISION
+    ):
+        return None
+    if response.status_code != 200:
+        detail = (
+            f"{response.status_code}, {error_code}"
+            if error_code
+            else (f"{response.status_code}")
+        )
+        raise CertificationError(
+            f"Could not fetch {RELEASES_RECORD_NAME} ({detail}) from {url}; "
+            "certification reads it to tell which layout the repository "
+            "publishes."
+        )
+    return response.content
+
+
 def _require_listed_build(
     manifest: DataReleaseManifest, parts: dict, headers: dict
 ) -> None:
@@ -279,18 +314,42 @@ def _require_listed_build(
     release, build = manifest.release, release_build_id(manifest.build)
     if release is None or build is None:
         return
-    url = https_releases_record_url(parts)
-    response = requests.get(url, headers=headers, timeout=HF_REQUEST_TIMEOUT_SECONDS)
-    if response.status_code != 200:
+    record = _releases_record_at_main(parts, headers)
+    if record is None:
         raise CertificationError(
-            f"Could not fetch {RELEASES_RECORD_NAME} ({response.status_code}) "
-            f"from {url}; a build in its own release folder is certified only "
-            "while that record lists it."
+            f"{parts['repo_id']} has no {RELEASES_RECORD_NAME} at "
+            f"{RELEASES_RECORD_REVISION}; a build in its own release folder is "
+            "certified only while that record lists it."
         )
     try:
-        check_build_listed(response.content, release=release, build=build)
+        check_build_listed(record, release=release, build=build)
     except ReleaseBuildFolderError as exc:
         raise CertificationError(str(exc)) from exc
+
+
+def require_tagged_layout(
+    manifest: DataReleaseManifest, parts: dict, token: Optional[str] = None
+) -> None:
+    """Refuse a manifest in the tagged layout from a repository that has
+    ``releases.json`` at ``main``.
+
+    A repository is read in one layout only. Once it records its builds in
+    ``releases.json``, only builds in their own release folders are
+    certified, so a stray tag or pointer file has no effect; where it has no
+    ``releases.json``, its tagged builds are certified as before. A build in
+    its own folder is checked by ``fetch_release_manifest`` instead.
+    """
+    if manifest.build_folder is not None:
+        return
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    if _releases_record_at_main(parts, headers) is not None:
+        raise CertificationError(
+            f"{parts['repo_id']} has {RELEASES_RECORD_NAME} at "
+            f"{RELEASES_RECORD_REVISION}, so only builds in their own release "
+            "folders are certified; certify "
+            "releases/<release>/<build>/release_manifest.json instead of "
+            f"{parts['path']}."
+        )
 
 
 def fetch_release_manifest(
@@ -1525,6 +1584,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         manifest, manifest_sha256, uri_parts = fetch_release_manifest(
             manifest_uri, token=token
         )
+        require_tagged_layout(manifest, uri_parts, token)
         primary_manifest = manifest
         regional_manifest = None
         regional_manifest_sha256 = None
@@ -1548,6 +1608,7 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
             regional_manifest, regional_manifest_sha256, regional_uri_parts = (
                 fetch_release_manifest(regional_manifest_uri, token=token)
             )
+            require_tagged_layout(regional_manifest, regional_uri_parts, token)
             _regional_build_model_version(regional_manifest, model_package)
             # The regional release runs on the same model and core, so it must
             # cover the pinned versions by its own build or claims. A qualified

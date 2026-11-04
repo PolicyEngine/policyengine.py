@@ -163,7 +163,7 @@ class TestBuildFolderManifest:
         assert manifest.build.built_at == BUILT_AT
         assert manifest.build.built_with_model_package is not None
         assert (
-            manifest.build.built_with_model_package.model_dump()
+            manifest.build.built_with_model_package.model_dump(exclude_none=True)
             == (BUILD_DETAILS["built_with_model_package"])
         )
         assert manifest.build.built_with_core_package is not None

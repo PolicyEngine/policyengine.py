@@ -58,7 +58,7 @@ python scripts/bundle.py certify-data --country uk --data-producer populace \
   `current` doesn't matter: a certificate pins one build.
 - The whole record must also be one the release writer's parser
   (microcosm-emitter's `ReleasesRecord.parse`) accepts, or certification
-  refuses it. .py repeats the writer's rules: exactly the keys the writer
+  refuses it. policyengine.py repeats the writer's rules: exactly the keys the writer
   writes, at every level; `schema_version` 1; safe release and build names and
   valid roles; a non-empty `published_at` and a boolean `withdrawn` on every
   build; a `default` that is null or a listed release; a `current` that is null
@@ -68,6 +68,11 @@ python scripts/bundle.py certify-data --country uk --data-producer populace \
   one's `path` must be a bare file name, alone or after the folder, as the
   release writer publishes it; a nested path, a `.` or `..` segment or a
   backslash is refused. Artifacts from other repositories keep their own pins.
+- The build's details are at the manifest's top level: `built_at`,
+  `built_with_model_package` and `built_with_core_package`. They are read as
+  the build's own, as an older manifest's `build` object holds them, so the
+  `built_with_model_package` basis, the data build fingerprint and the TRO's
+  start time apply as before. A dump writes them back at the top level.
 - The certificate names the build by `build`
   (`data_releases.<country>.version`, the certification's `data_build_id` and
   the changelog fragment name), so two builds of one release never match.
@@ -78,7 +83,13 @@ python scripts/bundle.py certify-data --country uk --data-producer populace \
   it. Certifying again changes only the .py releases published afterwards.
 
 Manifests published before this layout, whose `build` is an object, are
-certified as described above.
+certified as described above, but only from a repository that has no
+`releases.json` at `main`. A repository is read in one layout: once it has
+`releases.json`, a tagged manifest (primary or `--regional-manifest-uri`) is
+refused, and the build is certified from its own folder instead. Only Hugging
+Face's 404 for `releases.json` means the repository has none; a 404 whose
+error code is `RepoNotFound` or `RevisionNotFound`, or any other failure,
+refuses certification rather than being taken for a tagged repository.
 
 ### UK constituency and local-authority regions
 
