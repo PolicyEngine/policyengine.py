@@ -19,6 +19,7 @@ Invariants:
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -955,6 +956,58 @@ class TestImportCheckBuildFolder:
             pytest.raises(ReleaseBuildFolderError, match="directly inside"),
         ):
             get_data_release_manifest("uk")
+
+    def _local_manifest(self, tmp_path, monkeypatch, payload: dict):
+        """A bundle-pinned local copy of a manifest (main's
+        ``POLICYENGINE_UK_DATA_MANIFEST_FILE``), with nothing fetched."""
+
+        source = json.dumps(payload).encode()
+        local_file = tmp_path / "release_manifest.json"
+        local_file.write_bytes(source)
+        monkeypatch.setenv("POLICYENGINE_UK_DATA_MANIFEST_FILE", str(local_file))
+        return (
+            patch(
+                "policyengine.provenance.manifest.get_release_manifest",
+                return_value=folder_layout_country_manifest(),
+            ),
+            patch(
+                "policyengine.provenance.manifest.bundled_data_release_manifest_sha256",
+                return_value=hashlib.sha256(source).hexdigest(),
+            ),
+            patch("policyengine.provenance.manifest.requests.get"),
+        )
+
+    def test__given_local_manifest_of_its_folder__then_artifacts_resolve_in_it(
+        self, tmp_path, monkeypatch
+    ):
+        bundle_patch, pin_patch, request_patch = self._local_manifest(
+            tmp_path, monkeypatch, folder_layout_manifest_payload()
+        )
+        with bundle_patch, pin_patch, request_patch as get:
+            try:
+                manifest = get_data_release_manifest("uk")
+            except ValueError as error:
+                pytest.fail(f"The local manifest was refused: {error}")
+
+        get.assert_not_called()
+        assert manifest.artifacts["microcosm_uk_2024_25"].uri == (
+            f"hf://{REPOSITORY}/{NATIONAL_FOLDER}/microcosm_uk_2024_25.h5"
+            f"@{NATIONAL_COMMIT}"
+        )
+
+    def test__given_local_manifest_naming_another_build__then_refuses(
+        self, tmp_path, monkeypatch
+    ):
+        bundle_patch, pin_patch, request_patch = self._local_manifest(
+            tmp_path,
+            monkeypatch,
+            folder_layout_manifest_payload(build=EARLIER_NATIONAL_BUILD),
+        )
+        with bundle_patch, pin_patch, request_patch:
+            with pytest.raises(ValueError) as refusal:
+                get_data_release_manifest("uk")
+
+        assert isinstance(refusal.value, ReleaseBuildFolderError), refusal.value
 
     def test__given_mismatched_remote_manifest__then_bundled_certificate_is_not_used(
         self,
