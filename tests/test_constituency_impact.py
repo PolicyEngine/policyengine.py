@@ -19,6 +19,16 @@ pytestmark = pytest.mark.filterwarnings(
     "ignore:.*not disclosure-controlled.*:DeprecationWarning"
 )
 
+# Every key of a constituency result row. Rows carry no hex-map position:
+# the app places areas from its own layout files.
+CONSTITUENCY_RESULT_KEYS = {
+    "constituency_code",
+    "constituency_name",
+    "average_household_income_change",
+    "relative_household_income_change",
+    "population",
+}
+
 
 def _make_sim(household_data: dict) -> MagicMock:
     """Create a mock Simulation with household-level data."""
@@ -39,7 +49,10 @@ def _write_lookup_csv(tmp_path, rows) -> str:
 
 
 def test_basic_constituency_longwise_grouping(tmp_path):
-    """Two constituencies with household geography codes produce metrics."""
+    """Two constituencies with household geography codes produce metrics.
+
+    The lookup's ``x`` and ``y`` columns are ignored.
+    """
     baseline = _make_sim(
         {
             "constituency_code_oa": ["C001", "C001", b"C002", ""],
@@ -77,14 +90,14 @@ def test_basic_constituency_longwise_grouping(tmp_path):
     c1 = by_code["C001"]
     assert abs(c1["average_household_income_change"] - 2000.0) < 1e-6
     assert c1["constituency_name"] == "Constituency A"
-    assert c1["x"] == 10
-    assert c1["y"] == 20
     assert c1["population"] == 3.0
 
     c2 = by_code["C002"]
     assert abs(c2["average_household_income_change"] - 3000.0) < 1e-6
     assert c2["constituency_name"] == "Constituency B"
     assert c2["population"] == 3.0
+    for row in (c1, c2):
+        assert set(row) == CONSTITUENCY_RESULT_KEYS
 
 
 def test_zero_weight_constituency_skipped(tmp_path):
@@ -106,8 +119,8 @@ def test_zero_weight_constituency_skipped(tmp_path):
     csv_path = _write_lookup_csv(
         tmp_path,
         [
-            {"code": "C001", "name": "A", "x": 0, "y": 0},
-            {"code": "C002", "name": "B", "x": 0, "y": 0},
+            {"code": "C001", "name": "A"},
+            {"code": "C002", "name": "B"},
         ],
     )
 
@@ -140,7 +153,7 @@ def test_relative_change(tmp_path):
     )
     csv_path = _write_lookup_csv(
         tmp_path,
-        [{"code": "C001", "name": "A", "x": 0, "y": 0}],
+        [{"code": "C001", "name": "A"}],
     )
 
     impact = compute_uk_constituency_impacts(
@@ -176,7 +189,7 @@ def test_compute_labels_with_packaged_area_list_by_default(
     )
     # A stale lookup in a local search dir (the old GCS download cache) is
     # ignored.
-    pd.DataFrame([{"code": "E14001063", "name": "Stale", "x": 0, "y": 0}]).to_csv(
+    pd.DataFrame([{"code": "E14001063", "name": "Stale"}]).to_csv(
         tmp_path / CONSTITUENCY_ASSET_SPEC.lookup_csv_filename, index=False
     )
 
@@ -194,9 +207,9 @@ def test_compute_labels_with_packaged_area_list_by_default(
     assert impact.constituency_csv_path.endswith("constituencies_2024.csv")
     by_code = {row["constituency_code"]: row for row in impact.constituency_results}
     assert by_code["E14001063"]["constituency_name"] == "Aldershot"
-    assert (by_code["E14001063"]["x"], by_code["E14001063"]["y"]) == (56, -40)
     assert by_code["UNLISTED"]["constituency_name"] == "UNLISTED"
-    assert by_code["UNLISTED"]["x"] is None
+    for row in by_code.values():
+        assert set(row) == CONSTITUENCY_RESULT_KEYS
 
 
 def test_compute_constituency_impacts_does_not_require_lookup_csv_or_matrix(
@@ -234,8 +247,7 @@ def test_compute_constituency_impacts_does_not_require_lookup_csv_or_matrix(
     result = impact.constituency_results[0]
     assert result["constituency_code"] == "C001"
     assert result["constituency_name"] == "C001"
-    assert result["x"] is None
-    assert result["y"] is None
+    assert set(result) == CONSTITUENCY_RESULT_KEYS
 
 
 def test_compute_constituency_impacts_requires_longwise_geography_column():

@@ -79,9 +79,9 @@ def compute_uk_constituency_impacts(
         reform_simulation: Completed reform simulation.
         weight_matrix_path: Deprecated and ignored. Constituency outputs now
             group by ``constituency_code_oa`` on the household output.
-        constituency_csv_path: Optional path to a lookup CSV with ``code``,
-            ``name``, ``x`` and ``y`` columns. If omitted, the packaged 2024
-            constituency list supplies names and hex positions. Codes missing
+        constituency_csv_path: Optional path to a lookup CSV with ``code``
+            and ``name`` columns; other columns are ignored. If omitted, the
+            packaged 2024 constituency list supplies the names. Codes missing
             from the lookup use the code as the name.
         year: Deprecated and ignored.
         asset_strategies: Deprecated and ignored.

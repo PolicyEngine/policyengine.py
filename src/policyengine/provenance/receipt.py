@@ -127,6 +127,7 @@ from pydantic import (
     model_validator,
 )
 
+from policyengine.provenance import dataset_years
 from policyengine.provenance.bytecode import code_shape as _code_shape
 from policyengine.provenance.bytecode import compile_source
 from policyengine.provenance.canonical import (
@@ -3818,25 +3819,14 @@ def _receipt_years(years: Any) -> list[int]:
 def _projected_years(
     dataset_path: str, dataset_sha256: str, model_version: str
 ) -> tuple[int, ...]:
-    """Years the installed policyengine-uk projects a single-year dataset to.
+    """Years the installed policyengine-uk supports a single-year dataset for.
 
-    The same rule as the qualification ``supported_years`` gate: build the
-    multi-year dataset as ``policyengine_uk.Simulation`` does for a
-    single-year file, without running a formula, and keep the years from the
-    dataset's own year onwards. Cached by file bytes and model version.
+    :func:`policyengine.provenance.dataset_years.supported_years` for the UK,
+    the rule the qualification ``supported_years`` check also uses, cached by
+    file bytes and model version.
     """
 
-    from policyengine_uk.data.dataset_schema import UKSingleYearDataset
-    from policyengine_uk.data.economic_assumptions import extend_single_year_dataset
-    from policyengine_uk.system import system
-
-    dataset = UKSingleYearDataset(dataset_path)
-    first = int(str(dataset.time_period)[:4])
-    multi_year = extend_single_year_dataset(dataset, system.parameters)
-    years = getattr(multi_year, "years", None)
-    if years is None:
-        years = list(multi_year.datasets)
-    return tuple(sorted(int(year) for year in years if int(year) >= first))
+    return tuple(dataset_years.supported_years("uk", dataset_path))
 
 
 def _certificate_fields(

@@ -13,8 +13,8 @@ to a separate weight matrix whose household dimension can drift from the
 default dataset. They load the dataset the certified bundle routes them to
 (``region_datasets``), and the national dataset when it routes none.
 
-Their codes, names and hex positions come from the area lists shipped with the
-package (``data/uk_geography``), so building them needs no network access.
+Their codes and names come from the area lists shipped with the package
+(``data/uk_geography``), so building them needs no network access.
 """
 
 import csv
