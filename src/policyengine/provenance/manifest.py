@@ -890,10 +890,7 @@ def _load_data_release_manifest(country_id: str) -> DataReleaseManifest:
     manifest = DataReleaseManifest.model_validate_json(source_bytes)
     manifest.source_sha256 = actual
     manifest._source_is_local = True
-    country_manifest = get_release_manifest(country_id)
-    _apply_release_revision(manifest, country_manifest)
-    _validate_bundle_artifacts(manifest, country_manifest)
-    return manifest
+    return _bind_to_bundle(manifest, get_release_manifest(country_id))
 
 
 @lru_cache
