@@ -49,7 +49,7 @@ class TestUKModel:
         assert (
             uk_latest.default_dataset_uri
             == "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
-            "@microcosm-uk-2024-25-national-20261102T103421Z-f6e33b93"
+            "@microcosm-uk-2024-25-national-20261103T154302Z-0639b9c7"
         )
 
     def test_has_hundreds_of_parameters(self):
