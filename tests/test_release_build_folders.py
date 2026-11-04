@@ -6,9 +6,15 @@ each release is current, and no new Hugging Face tags are made. Each build's
 ``release_manifest.json`` names its ``release`` and ``build`` as strings
 (microcosm-emitter#24 checks that they equal the folder's names).
 
-The manifest shape below is assumed until Microcosm's release writer change
-(H2c) defines it: top-level ``release`` and ``build`` strings, the existing
+The manifest shape below follows Microcosm's release writer change (H2c,
+microcosm#1505): top-level ``release`` and ``build`` strings, the build's
+details (``built_at``, ``built_with_model_package`` and
+``built_with_core_package``) at the top level too, the existing
 ``artifacts`` entries with bare file names, and no ``cut_tag``.
+
+A repository is read in one layout only: where it has ``releases.json`` at
+``main``, only builds in their own folders are certified; where it has none,
+tagged builds are certified as before.
 
 Invariants:
 
@@ -84,6 +90,26 @@ def folder_layout_manifest_payload(
     }
 
 
+BUILT_AT = "2026-10-19T08:33:23+00:00"
+BUILD_DETAILS = {
+    "built_at": BUILT_AT,
+    "built_with_model_package": {
+        "name": "policyengine-uk",
+        "version": UK_MODEL_VERSION,
+        "git_sha": "c" * 40,
+        "data_build_fingerprint": "sha256:" + "d" * 64,
+    },
+    "built_with_core_package": {"name": "policyengine-core", "version": "3.33.0"},
+}
+
+
+def folder_layout_payload_with_build_details() -> dict:
+    """A build-folder manifest with its build details at the top level, where
+    microcosm#1505's release writer puts them (decided 2026-10-29)."""
+
+    return {**folder_layout_manifest_payload(), **json.loads(json.dumps(BUILD_DETAILS))}
+
+
 def tagged_layout_manifest_payload() -> dict:
     """A manifest published before the layout: ``build`` is an object."""
 
@@ -125,9 +151,42 @@ class TestBuildFolderManifest:
 
         assert release_build_id(newer.build) != release_build_id(earlier.build)
 
-    def test__given_folder_layout_manifest__then_records_no_build_details(self):
-        # The string build carries no built_with_* packages; until Microcosm
-        # says where they go, certification relies on compatibility claims.
+    def test__given_folder_layout_manifest__then_reads_top_level_build_details(
+        self,
+    ):
+        manifest = DataReleaseManifest.model_validate(
+            folder_layout_payload_with_build_details()
+        )
+
+        assert manifest.build is not None
+        assert manifest.build.build_id == NATIONAL_BUILD
+        assert manifest.build.built_at == BUILT_AT
+        assert manifest.build.built_with_model_package is not None
+        assert (
+            manifest.build.built_with_model_package.model_dump()
+            == (BUILD_DETAILS["built_with_model_package"])
+        )
+        assert manifest.build.built_with_core_package is not None
+        assert manifest.build.built_with_core_package.version == "3.33.0"
+        assert manifest.build.cut_tag is None
+
+    def test__given_folder_layout_manifest__then_dump_keeps_build_details_on_top(
+        self,
+    ):
+        manifest = DataReleaseManifest.model_validate(
+            folder_layout_payload_with_build_details()
+        )
+
+        dumped = manifest.model_dump(mode="json", exclude_none=True)
+
+        assert dumped["build"] == NATIONAL_BUILD
+        for name, value in BUILD_DETAILS.items():
+            assert dumped.get(name) == value
+        assert DataReleaseManifest.model_validate(dumped) == manifest
+
+    def test__given_folder_layout_manifest_without_build_details__then_has_none(
+        self,
+    ):
         manifest = DataReleaseManifest.model_validate(folder_layout_manifest_payload())
 
         assert manifest.build is not None
@@ -257,10 +316,24 @@ def manifest_response(payload: dict) -> MagicMock:
 
 
 def missing_file_response() -> MagicMock:
+    """Hugging Face's 404 for a file the revision does not have."""
+
     response = MagicMock()
     response.status_code = 404
     response.content = b"Entry not found"
     response.text = response.content.decode()
+    response.headers = {"X-Error-Code": "EntryNotFound"}
+    return response
+
+
+def status_response(status_code: int) -> MagicMock:
+    """Any other failed answer, with no error code."""
+
+    response = MagicMock()
+    response.status_code = status_code
+    response.content = b"unavailable"
+    response.text = response.content.decode()
+    response.headers = {}
     return response
 
 
@@ -341,6 +414,7 @@ def certify_uk(
     manifest_uri: str = NATIONAL_URI,
     releases_record: dict | bytes | None = None,
     requested_urls: list[str] | None = None,
+    releases_record_status: int = 200,
     **options,
 ):
     """Certify with fetched files and reachability checks replaced.
@@ -361,6 +435,8 @@ def certify_uk(
         if requested_urls is not None:
             requested_urls.append(url)
         if url == RELEASES_RECORD_URL:
+            if releases_record_status != 200:
+                return status_response(releases_record_status)
             if not record_payload:
                 return missing_file_response()
             if isinstance(record_payload, bytes):
@@ -561,13 +637,32 @@ class TestCertifyBuildFolder:
         dense = release["datasets"]["microcosm_uk_2024_25_dense"]
         assert (dense["path"], dense["revision"]) == (dense_path, DENSE_COMMIT)
 
+    def test__given_build_built_with_the_model__then_certified_on_its_build(
+        self, tmp_path
+    ):
+        payload = folder_layout_payload_with_build_details()
+        payload["compatible_model_packages"] = []
+
+        try:
+            _, release, _ = certify_uk(empty_bundle(tmp_path), [payload])
+        except CertificationError as error:
+            pytest.fail(f"The build's own build details were not used: {error}")
+
+        certification = release["certification"]
+        assert certification["compatibility_basis"] == "built_with_model_package"
+        assert certification["built_with_model_version"] == UK_MODEL_VERSION
+        assert certification["built_with_model_git_sha"] == "c" * 40
+        assert certification["data_build_fingerprint"] == "sha256:" + "d" * 64
+
     def test__given_tagged_release__then_paths_and_tag_are_as_before(self, tmp_path):
         tag = f"{NATIONAL_RELEASE}-20261019T083323Z-6cba5d71"
 
+        # The repository has no releases.json, so it still publishes tags.
         result, release, _ = certify_uk(
             empty_bundle(tmp_path),
             [tagged_layout_manifest_payload()],
             manifest_uri=manifest_uri(f"releases/{NATIONAL_RELEASE}", tag),
+            releases_record={},
         )
 
         assert release["datasets"]["microcosm_uk_2024_25"]["path"] == (
@@ -850,18 +945,53 @@ class TestCertifyOnlyListedBuilds:
                 releases_record={},
             )
 
-    def test__given_tagged_release__then_releases_record_is_not_read(self, tmp_path):
+    def test__given_tagged_release_without_releases_record__then_certifies(
+        self, tmp_path
+    ):
+        # A repository without releases.json still publishes tagged builds
+        # through its pointer files, and they are certified as before.
         tag = f"{NATIONAL_RELEASE}-20261019T083323Z-6cba5d71"
         requested_urls: list[str] = []
 
-        certify_uk(
+        result, _, _ = certify_uk(
             empty_bundle(tmp_path),
             [tagged_layout_manifest_payload()],
             manifest_uri=manifest_uri(f"releases/{NATIONAL_RELEASE}", tag),
+            releases_record={},
             requested_urls=requested_urls,
         )
 
-        assert RELEASES_RECORD_URL not in requested_urls
+        assert result.build_id == tag
+        assert RELEASES_RECORD_URL in requested_urls
+
+    def test__given_tagged_release_where_releases_record_exists__then_refuses(
+        self, tmp_path
+    ):
+        # Readers accept nothing else: once the repository has releases.json,
+        # a tagged build is certified from its own build folder instead.
+        tag = f"{NATIONAL_RELEASE}-20261019T083323Z-6cba5d71"
+
+        with pytest.raises(CertificationError, match="releases.json"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [tagged_layout_manifest_payload()],
+                manifest_uri=manifest_uri(f"releases/{NATIONAL_RELEASE}", tag),
+            )
+
+    def test__given_tagged_release_and_unreadable_releases_record__then_refuses(
+        self, tmp_path
+    ):
+        # Only a 404 says the repository has no releases.json.
+        tag = f"{NATIONAL_RELEASE}-20261019T083323Z-6cba5d71"
+
+        with pytest.raises(CertificationError, match="releases.json"):
+            certify_uk(
+                empty_bundle(tmp_path),
+                [tagged_layout_manifest_payload()],
+                manifest_uri=manifest_uri(f"releases/{NATIONAL_RELEASE}", tag),
+                releases_record=b"",
+                releases_record_status=503,
+            )
 
 
 PAIR_ID = "a" * 64

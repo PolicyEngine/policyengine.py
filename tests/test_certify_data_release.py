@@ -642,7 +642,7 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                return_value=response,
+                side_effect=_without_releases_record(response),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
@@ -705,7 +705,9 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                side_effect=[primary_response, regional_response],
+                side_effect=_without_releases_record(
+                    [primary_response, regional_response]
+                ),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
@@ -833,7 +835,7 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                return_value=response,
+                side_effect=_without_releases_record(response),
             ),
             patch(
                 "policyengine.provenance.certification.head_release_file",
@@ -857,7 +859,7 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                return_value=response,
+                side_effect=_without_releases_record(response),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
@@ -889,7 +891,7 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                return_value=response,
+                side_effect=_without_releases_record(response),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
@@ -1172,13 +1174,41 @@ def _response(payload: dict) -> MagicMock:
     return response
 
 
+def _without_releases_record(responses):
+    """Serve each manifest request in turn, and answer the repository's
+    ``releases.json`` with Hugging Face's 404: these repositories publish
+    tagged builds, so certification finds no record there.
+
+    ``responses`` is a list, served in order, or one response served for every
+    manifest request.
+    """
+
+    remaining = list(responses) if isinstance(responses, list) else None
+
+    def get(url, headers=None, timeout=None):
+        if url.endswith("/resolve/main/releases.json"):
+            missing = MagicMock()
+            missing.status_code = 404
+            missing.content = b"Entry not found"
+            missing.headers = {"X-Error-Code": "EntryNotFound"}
+            return missing
+        if remaining is None:
+            return responses
+        response = remaining.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+    return get
+
+
 def _certify_uk(
     bundle_path: Path, responses: list, manifest_uri: str = UK_NATIONAL_URI, **kwargs
 ):
     with (
         patch(
             "policyengine.provenance.certification.requests.get",
-            side_effect=responses,
+            side_effect=_without_releases_record(responses),
         ),
         patch(
             "policyengine.provenance.certification.head_artifact",
@@ -1629,10 +1659,12 @@ class TestUKRegionalCertification:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                side_effect=[
-                    _response(_microcosm_uk_national_payload()),
-                    _response(self._older_dense()),
-                ],
+                side_effect=_without_releases_record(
+                    [
+                        _response(_microcosm_uk_national_payload()),
+                        _response(self._older_dense()),
+                    ]
+                ),
             ),
             pytest.raises(SystemExit) as error,
         ):
@@ -1740,10 +1772,12 @@ class TestUKRegionalCertification:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                side_effect=[
-                    _response(_microcosm_uk_national_payload()),
-                    _response(_microcosm_uk_dense_payload()),
-                ],
+                side_effect=_without_releases_record(
+                    [
+                        _response(_microcosm_uk_national_payload()),
+                        _response(_microcosm_uk_dense_payload()),
+                    ]
+                ),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
