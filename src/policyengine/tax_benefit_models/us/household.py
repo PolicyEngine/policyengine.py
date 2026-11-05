@@ -185,7 +185,9 @@ def _resolve_groups(
             )
         members = group["members"]
         if isinstance(members, np.ndarray) and members.ndim == 1:
-            members = members.tolist()
+            # list(), not tolist(): tolist() turns dates and durations into
+            # integers before _person_index can refuse them.
+            members = list(members)
         if isinstance(
             members, (str, bytes, bytearray, memoryview, Mapping)
         ) or not isinstance(members, Sequence):
@@ -315,10 +317,12 @@ def calculate_household(
             pathway for seniors and people with disabilities applies the
             couple income limit to a marital unit of exactly two people, and
             SSI treats two aged, blind or disabled heads or spouses in one
-            marital unit as a couple and then adds up income across the whole
-            unit. So a household with children or other adults needs the list
-            form, e.g. ``marital_unit=[{"members": [0, 1]}, {"members": [2]}]``
-            for a married couple and their child.
+            marital unit as a joint claim and, unless exactly one member
+            counts as living in a medical treatment facility, adds up income
+            across the whole unit. So a household with children or other
+            adults needs the list form, e.g.
+            ``marital_unit=[{"members": [0, 1]}, {"members": [2]}]`` for a
+            married couple and their child.
         year: Calendar year to compute for. Defaults to 2026.
         reform: Optional reform as ``{parameter_path: value}`` or
             ``{parameter_path: {effective_date: value}}``. Scalar

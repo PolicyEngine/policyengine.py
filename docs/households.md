@@ -39,7 +39,7 @@ A mapping puts every person in one group of that entity, and the household alway
 
 To split people into several marital units, families, SPM units or tax units, pass a list of groups. Each group is a mapping with `members`, a list of indexes into `people`, plus that group's own inputs. Each person belongs to exactly one group of the entity: `calculate_household` raises if a list leaves someone out, names someone twice or names an index outside `people`.
 
-policyengine-us defines a marital unit as one unmarried person or one married couple, and two of its rules depend on that. Medicaid's optional pathway for seniors and people with disabilities applies the couple income limit to a marital unit of exactly two people. SSI treats two aged, blind or disabled heads or spouses in one marital unit as a couple, and then adds up countable income across the whole unit. So pass marital units whenever the household holds anyone besides one person or one couple:
+policyengine-us defines a marital unit as one unmarried person or one married couple, and two of its rules depend on that. Medicaid's optional pathway for seniors and people with disabilities applies the couple income limit to a marital unit of exactly two people. SSI treats two aged, blind or disabled heads or spouses in one marital unit as a joint claim and, unless exactly one member counts as living in a medical treatment facility, adds up countable income across the whole unit. So pass marital units whenever the household holds anyone besides one person or one couple:
 
 ```python
 result = pe.us.calculate_household(

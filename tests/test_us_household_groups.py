@@ -200,7 +200,19 @@ class TestResolveGroups:
             ),
             (
                 [{"members": np.array([True, False])}],
-                r"integer indexes into people; got True",
+                r"integer indexes into people; got np\.True_",
+            ),
+            (
+                [{"members": np.array([0, 1], dtype="datetime64[ns]")}],
+                r"integer indexes into people; got np\.datetime64",
+            ),
+            (
+                [{"members": np.array([0, 1], dtype="timedelta64[ns]")}],
+                r"integer indexes into people; got np\.timedelta64",
+            ),
+            (
+                [{"members": np.array([0.0, 1.0])}],
+                r"integer indexes into people; got np\.float64",
             ),
             (
                 [{"members": []}, {"members": [0, 1]}],
