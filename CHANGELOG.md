@@ -1,3 +1,10 @@
+## [6.15.0] - 2026-11-05
+
+### Added
+
+- Certify Microcosm builds published side by side in their own release folders (`releases/<release>/<build>/`, with no Hugging Face tag): a release manifest that names its `release` and `build` as strings is certified from that folder, its own files are pinned inside it at the certified revision, and its `build` names the certificate, so two builds of one release never match. Certification refuses such a build unless the repository's `releases.json` at `main` lists it, has not withdrawn it, and is a record the release writer's parser accepts, and refuses any of its own files that is not a bare file name directly inside its folder. Such a manifest's build details (`built_at`, `built_with_model_package`, `built_with_core_package`) are read from its top level. At import, a remote or local manifest that names another release or build than the bundle's pinned folder is refused. Manifests published before this layout are read as before, and certified only from a repository with no `releases.json` at `main`.
+
+
 ## [6.14.0] - 2026-11-05
 
 ### Added
