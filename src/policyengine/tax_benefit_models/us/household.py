@@ -39,6 +39,8 @@ import operator
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional, Union
 
+import numpy as np
+
 from policyengine.tax_benefit_models.common import (
     EntityResult,
     HouseholdResult,
@@ -109,7 +111,9 @@ def _safe_convert(value: Any) -> Any:
 
 
 def _person_index(value: Any, *, location: str, people_count: int) -> int:
-    if isinstance(value, bool):
+    # NumPy booleans support operator.index (np.True_ gives 1), so they need
+    # their own check, like Python's.
+    if isinstance(value, (bool, np.bool_)):
         index = None
     else:
         try:
@@ -175,16 +179,23 @@ def _resolve_groups(
                 f"{location} must be a mapping with 'members' and the group's "
                 f"inputs; got {type(group).__name__}."
             )
-        members = group.get("members")
-        if (
-            members is None
-            or isinstance(members, (str, bytes, Mapping))
-            or not isinstance(members, Sequence)
-            or not members
-        ):
+        if "members" not in group:
             raise ValueError(
-                f"{location} must include 'members', a non-empty list of "
-                "indexes into people."
+                f"{location} must include 'members', a list of indexes into people."
+            )
+        members = group["members"]
+        if isinstance(members, np.ndarray) and members.ndim == 1:
+            members = members.tolist()
+        if isinstance(
+            members, (str, bytes, bytearray, memoryview, Mapping)
+        ) or not isinstance(members, Sequence):
+            raise ValueError(
+                f"{location}['members'] must be a list of indexes into "
+                f"people; got {type(members).__name__}."
+            )
+        if not members:
+            raise ValueError(
+                f"{location}['members'] is empty; each group holds at least one person."
             )
         indexes = []
         for value in members:
@@ -300,11 +311,14 @@ def calculate_household(
             mapping with ``members`` (indexes into ``people``) plus that
             group's inputs; each person must belong to exactly one group of
             the entity. policyengine-us defines a marital unit as one
-            unmarried person or one married couple, and its SSI and Medicaid
-            rules read a two-person marital unit as a couple, so a household
-            with children or other adults needs the list form, e.g.
-            ``marital_unit=[{"members": [0, 1]}, {"members": [2]}]`` for a
-            married couple and their child.
+            unmarried person or one married couple. Medicaid's optional
+            pathway for seniors and people with disabilities applies the
+            couple income limit to a marital unit of exactly two people, and
+            SSI treats two aged, blind or disabled heads or spouses in one
+            marital unit as a couple and then adds up income across the whole
+            unit. So a household with children or other adults needs the list
+            form, e.g. ``marital_unit=[{"members": [0, 1]}, {"members": [2]}]``
+            for a married couple and their child.
         year: Calendar year to compute for. Defaults to 2026.
         reform: Optional reform as ``{parameter_path: value}`` or
             ``{parameter_path: {effective_date: value}}``. Scalar
@@ -383,9 +397,11 @@ def calculate_household(
         name: [_group_inputs(group) for group in entity_groups]
         for name, entity_groups in groups.items()
     }
+    listed_entities = frozenset(name for name, is_list in listed.items() if is_list)
     year = validate_annual_household_inputs(
         year=year,
         entities={"people": people, **records},
+        listed_entities=listed_entities,
     )
 
     from policyengine_us import Simulation
@@ -396,6 +412,7 @@ def calculate_household(
     validate_household_input(
         model_version=us_latest,
         entities={"person": people, **records},
+        listed_entities=listed_entities,
     )
 
     extra_by_entity = dispatch_extra_variables(

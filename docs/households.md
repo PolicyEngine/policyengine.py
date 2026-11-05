@@ -39,7 +39,7 @@ A mapping puts every person in one group of that entity, and the household alway
 
 To split people into several marital units, families, SPM units or tax units, pass a list of groups. Each group is a mapping with `members`, a list of indexes into `people`, plus that group's own inputs. Each person belongs to exactly one group of the entity: `calculate_household` raises if a list leaves someone out, names someone twice or names an index outside `people`.
 
-policyengine-us defines a marital unit as one unmarried person or one married couple. Its SSI and Medicaid rules read a two-person marital unit as a couple and add up some incomes across it, so pass marital units whenever the household holds anyone besides one person or one couple:
+policyengine-us defines a marital unit as one unmarried person or one married couple, and two of its rules depend on that. Medicaid's optional pathway for seniors and people with disabilities applies the couple income limit to a marital unit of exactly two people. SSI treats two aged, blind or disabled heads or spouses in one marital unit as a couple, and then adds up countable income across the whole unit. So pass marital units whenever the household holds anyone besides one person or one couple:
 
 ```python
 result = pe.us.calculate_household(
@@ -58,7 +58,7 @@ result = pe.us.calculate_household(
 result.marital_unit[1]  # the 17-year-old's marital unit
 ```
 
-With one marital unit for all three, the couple's SSI would count the 17-year-old's earnings as their own income, and Medicaid's optional senior-or-disabled pathway would hold the couple to the individual income limit.
+With one marital unit for all three, SSI would add the 17-year-old's earnings to the couple's income, and Medicaid's optional senior-or-disabled pathway would hold the couple to the individual income limit.
 
 A list of tax units covers, for example, an adult child who files their own return:
 
@@ -80,6 +80,10 @@ result.tax_unit[1].income_tax  # the adult child's return
 ```
 
 An entity passed as a list comes back as a list of results in the same order. Under axes, each group's variables are axis series, as each person's are.
+
+Each group needs the people its rules expect. policyengine-us makes the oldest person aged 18 or over in each tax unit its head, so a tax unit of children has no head. SPM measurement needs an adult in each SPM unit: a unit of children raises `SPM_COMPOSITION_REQUIRED` when its poverty status computes, as it does among the default outputs.
+
+Group ids such as `tax_unit_id` keep the values you pass, 0 by default. To see each person's group in `result.person`, pass ids as group inputs, for example `tax_unit=[{"members": [0], "tax_unit_id": 1}, {"members": [1], "tax_unit_id": 2}]`.
 
 ### SPM geography and measurement selection
 
@@ -277,7 +281,7 @@ each variable on that person is its own axis series.
 ## Accessing the result
 
 ```python
-result.person[0].income_tax  # first person
+result.person[0].medicaid  # first person
 result.person[2].age  # third person
 result.tax_unit.income_tax  # single tax unit
 result.marital_unit[1]  # second marital unit, when passed as a list
