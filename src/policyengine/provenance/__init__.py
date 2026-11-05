@@ -7,7 +7,6 @@ force provenance imports on every consumer.
 .. code-block:: python
 
     from policyengine.provenance import (
-        supported_years,
         get_release_manifest,
         get_data_release_manifest,
         build_trace_tro_from_release_bundle,
@@ -42,12 +41,6 @@ from .dataset_materialization import (
 )
 from .dataset_materialization import (
     materialize_dataset as materialize_dataset,
-)
-from .dataset_years import (
-    UnsupportedDatasetYearError as UnsupportedDatasetYearError,
-)
-from .dataset_years import (
-    supported_years as supported_years,
 )
 from .manifest import (
     CertifiedDataArtifact as CertifiedDataArtifact,
