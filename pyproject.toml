@@ -33,6 +33,9 @@ dependencies = [
 policyengine = "policyengine.cli:main"
 
 [project.optional-dependencies]
+narration = [
+    "litellm==1.103.0",
+]
 plotting = [
     "plotly>=5.0.0",
 ]
@@ -55,6 +58,7 @@ us = [
     "spm-calculator==1.0.0",
 ]
 dev = [
+    "litellm==1.103.0",
     "pytest",
     "furo",
     "autodoc_pydantic",
