@@ -6,7 +6,6 @@ import argparse
 import copy
 import importlib.util
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -22,10 +21,6 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 BUNDLE_MANIFEST = (
     REPO_ROOT / "src" / "policyengine" / "data" / "bundle" / "manifest.json"
 )
-# Other maintenance subcommands explicitly load runtime helpers after this
-# module; retain their source-checkout and country-import behavior.
-os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
-sys.path.insert(0, str(REPO_ROOT / "src"))
 
 # These commands run before dependencies are installed in release/PR CI. Load
 # the same stdlib-only validator used at runtime without importing policyengine.
