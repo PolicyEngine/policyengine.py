@@ -73,9 +73,10 @@ def us_example() -> None:
     print(f"  Income tax:  ${single.tax_unit.income_tax:,.0f}")
     print(f"  Payroll tax: ${single.tax_unit.employee_payroll_tax:,.0f}")
 
-    # Married couple with two kids, Texas, lower income. Explicit national
-    # measurement is recorded in the result; state alone does not select an
-    # SPM area. Use an observed county_fips for local SPM measurement instead.
+    # Married couple with two kids, Texas, lower income. A state alone does not
+    # select an SPM area, so this household would be measured nationally even
+    # without the spm argument; choosing it explicitly records it as a
+    # selection. Use an observed county_fips for local SPM measurement instead.
     family = pe.us.calculate_household(
         people=[
             {"age": 35, "employment_income": 40_000},

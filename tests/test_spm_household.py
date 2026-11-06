@@ -128,7 +128,22 @@ def test_default_county_and_explicit_metro_resolve_the_same_area():
 @pytest.mark.parametrize(
     "location,settings,code",
     [
-        ({"state_code": "CA"}, {}, "SPM_GEOGRAPHY_REQUIRED"),
+        # A household that names no county falls back to national measurement
+        # only when no geography is chosen; an explicit county selection is
+        # used as given.
+        ({"state_code": "CA"}, {"geography_kind": "county"}, "SPM_GEOGRAPHY_REQUIRED"),
+        # A county named without its FIPS code keeps county measurement, and
+        # the error asks for county_fips rather than measuring nationally.
+        (
+            {"state_code": "CA", "county": "LOS_ANGELES_COUNTY_CA"},
+            {},
+            "SPM_GEOGRAPHY_REQUIRED",
+        ),
+        (
+            {"state_code": "CA", "county_str": "LOS_ANGELES_COUNTY_CA"},
+            {},
+            "SPM_GEOGRAPHY_REQUIRED",
+        ),
         (
             {"state_code": "CA", "county_fips": "99999"},
             {},
@@ -148,6 +163,8 @@ def test_default_resource_outputs_require_a_real_geography(location, settings, c
     assert caught.value.to_dict()["code"] == code
 
 
+COUNTY = {"geography_kind": "county"}
+
 RESOURCE_VARIABLES = (
     "household_net_income",
     "household_benefits",
@@ -162,10 +179,12 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
 ):
     """Geography is demanded by exactly the results that use the measurement.
 
-    Ordinary benefits and income use the actual housing award independently of
-    SPM geography. The country's cap consults the canonical housing portion only
-    for units allocated assistance, so assisted SPM resources require geography.
-    The threshold and SPM poverty status require geography either way.
+    Under an explicit county selection, ordinary benefits and income use the
+    actual housing award independently of SPM geography. The country's cap
+    consults the canonical housing portion only for units allocated assistance,
+    so assisted SPM resources require geography. The threshold and SPM poverty
+    status require geography either way. Without a chosen geography the same
+    households measure nationally instead (tests/test_spm_household_geography.py).
     """
     from policyengine.tax_benefit_models.us.model import us_latest
 
@@ -215,7 +234,8 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
         assert math.isfinite(entity[variable])
         assert computed.to_dict()["provenance"]["spm"]["years"] == {}
 
-    # Only the assisted SPM resource graph needs geography for its housing cap:
+    # Under an explicit county selection, only the assisted SPM resource graph
+    # needs geography for its housing cap:
     # the five variables the shipped contract names, and nothing household-level.
     for variable in (
         "spm_unit_capped_housing_subsidy",
@@ -225,14 +245,18 @@ def test_state_only_graphs_require_geography_only_where_measurement_is_used(
         "spm_unit_income_decile",
     ):
         with pytest.raises(SPMInputError) as caught:
-            pe.us.calculate_household(**assisted, extra_variables=[variable])
+            pe.us.calculate_household(
+                **assisted, spm=COUNTY, extra_variables=[variable]
+            )
         assert caught.value.code == "SPM_GEOGRAPHY_REQUIRED"
 
-    # SPM measurement always requires geography, assisted or not.
+    # County SPM measurement always requires the county, assisted or not.
     for situation in (inputs, assisted):
         for variable in ("spm_unit_spm_threshold", "spm_unit_is_in_spm_poverty"):
             with pytest.raises(SPMInputError) as caught:
-                pe.us.calculate_household(**situation, extra_variables=[variable])
+                pe.us.calculate_household(
+                    **situation, spm=COUNTY, extra_variables=[variable]
+                )
             assert caught.value.code == "SPM_GEOGRAPHY_REQUIRED"
 
     # Preserve the unassisted national and county controls.

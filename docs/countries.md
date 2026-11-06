@@ -39,8 +39,9 @@ Override in any output with `income_variable=`.
 
 US: Populace row scoping uses `state_fips` and `congressional_district_geoid`.
 `state_code` remains the human-readable state input for custom households.
-US resource and poverty calculations also require observed `county_fips` or an
-explicit national or SPM-area choice; see [Households](households.md#spm-geography-and-measurement-selection).
+US SPM thresholds use a household's observed `county_fips` to find its SPM
+estimation area; a household calculation without one is measured nationally and
+says so in its provenance. See [Households](households.md#spm-geography-and-measurement-selection).
 
 UK: constituency code and local authority code on every household where available.
 

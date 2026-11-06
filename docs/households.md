@@ -27,7 +27,7 @@ result = pe.us.calculate_household(
 | `people` | List of person dicts. Keys are any person-level variable on the model. |
 | `tax_unit` | Tax-unit inputs (e.g. `filing_status`). |
 | `spm_unit` | SPM-unit inputs. |
-| `household` | Household inputs, including `state_code` and observed five-digit `county_fips` for the default SPM geography selection. |
+| `household` | Household inputs, including `state_code` and, for area-adjusted SPM measurement, the observed five-digit `county_fips`. |
 | `family` | Family-level inputs. |
 | `marital_unit` | Marital-unit inputs. |
 
@@ -35,8 +35,11 @@ All adults default to one shared tax unit and household. For separate tax units 
 
 ### SPM geography and measurement selection
 
-US household results include SPM resources and poverty by default. Provide the
-household's county FIPS, as above, or explicitly select national measurement:
+US household results include SPM resources and poverty by default. With the
+household's county FIPS, as above, SPM thresholds use that county's Census SPM
+estimation area. A household that gives only its state is measured nationally,
+with no geographic adjustment, and the result says so. Missing values (`None`,
+`""`, NaN) and a `county` or `county_str` of `"UNKNOWN"` count as no county:
 
 ```python
 result = pe.us.calculate_household(
@@ -44,15 +47,27 @@ result = pe.us.calculate_household(
     tax_unit={"filing_status": "SINGLE"},
     household={"state_code": "CA"},
     year=2026,
-    spm={"geography_kind": "national"},
 )
+result.provenance["spm_config"]["geography_kind"]  # "national"
+result.provenance["spm_geography_source"]  # "national_fallback"
 receipt = result.to_dict()["provenance"]["spm"]
 result.write("household-result.json")  # Includes the JSON-compatible receipt.
 ```
 
+National measurement applies to everything that uses the SPM measurement: the
+thresholds and poverty status, and, for a unit allocated housing assistance, the
+capped SPM housing subsidy and the SPM resources built on it.
+
+`spm_geography_source` is `"national_fallback"` when national measurement
+replaced the default county selection because the household named no county,
+`"default"` when the bundle default applied as is, and `"selection"` when you
+chose the geography with `spm`. The same national result, recorded as your
+selection, comes from `spm={"geography_kind": "national"}`.
+
 County FIPS assigns a household to the selected year's Census SPM estimation
 area; it does not select a separately estimated county rent factor. National
-measurement is a conscious analytical choice and is recorded in provenance.
+measurement, whether chosen or used because no county was given, is recorded in
+provenance.
 A fixed SPM area can instead be selected with
 `spm={"geography_kind": "metro", "geography_id": area_id}`, using an area ID
 available in the pinned artifact for the requested year.
@@ -64,7 +79,7 @@ set of keys is:
 |---|---|
 | `forecast_content_sha256` | Optional assertion of the bundle's independently pinned artifact content hash. A different hash is rejected. |
 | `scenario` | Scenario within that artifact: `ce_trend` by default or the `zero_real` sensitivity. |
-| `geography_kind` | `county` by default; `national` or `metro` require an explicit choice. |
+| `geography_kind` | `county` by default. If you leave it out and the household has no `county_fips`, the calculation falls back to `national`. `national` or `metro` can be chosen explicitly. |
 | `geography_id` | Required only for a fixed `metro` SPM area. |
 | `county_vintage` | County assignment vintage, `"2020"` by default. |
 | `as_of` | Optional information-date cutoff accepted by the pinned artifact. |
@@ -75,14 +90,21 @@ national inputs from forecast components and research geography; an unsupported
 year fails instead of being extrapolated by the wrapper. Scenario forecasts
 are conditional research estimates, not agency forecasts or uncertainty bounds.
 
-State alone is insufficient for SPM and raises `SPM_GEOGRAPHY_REQUIRED`.
-Unknown counties or selected areas raise `SPM_GEOGRAPHY_UNAVAILABLE`; a measured
-unit with no classified adult raises `SPM_COMPOSITION_REQUIRED`. These are
-calculator `SPMInputError` exceptions with `code` and `to_dict()` attributes.
-Geography is checked when an SPM-dependent formula runs, and only for the units
-whose result depends on the measurement. SPM measurement itself — thresholds,
-the geographic factor and SPM poverty — always requires this choice. The
-ordinary resource outputs — household net income, benefits, income decile and
+A state alone does not identify a Census SPM estimation area, so a household
+without `county_fips` is measured nationally unless you choose a geography. A
+geography you choose is used as given: `spm={"geography_kind": "county"}` for a
+household without `county_fips` raises `SPM_GEOGRAPHY_REQUIRED`. So does a
+household that names its county only as `county` or `county_str`, because county
+measurement reads `county_fips`; it keeps the county selection rather than being
+measured nationally. Unknown counties or selected areas raise
+`SPM_GEOGRAPHY_UNAVAILABLE`; a measured unit with no classified adult raises
+`SPM_COMPOSITION_REQUIRED`. These are calculator `SPMInputError` exceptions with
+`code` and `to_dict()` attributes.
+
+Under a county selection, geography is checked when an SPM-dependent formula
+runs, and only for the units whose result depends on the measurement. SPM
+measurement itself — thresholds, the geographic factor and SPM poverty — always
+needs the county. The ordinary resource outputs — household net income, benefits, income decile and
 equivalized net income, and each person's marginal tax rate — take the
 household's housing assistance amount rather than the capped SPM subsidy, so
 they succeed on state alone and record an empty measurement receipt whether or
@@ -93,9 +115,7 @@ without a geography the cap and everything downstream of it —
 `spm_unit_benefits`, `spm_unit_net_income` and in turn
 `spm_unit_oecd_equiv_net_income` and `spm_unit_income_decile` — raise
 `SPM_GEOGRAPHY_REQUIRED`, while a unit allocated none has a capped subsidy of
-zero by construction and consults no measurement. A genuinely independent
-tax-only country-model calculation can use state alone; the wrapper's default
-outputs include SPM poverty and therefore always require the choice.
+zero by construction and consults no measurement.
 
 Supply observed inputs such as age, tenure, county and the source-backed
 `is_spm_independent_minor_role`. Computed SPM thresholds, geographic factors,

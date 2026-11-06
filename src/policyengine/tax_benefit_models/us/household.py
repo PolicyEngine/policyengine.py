@@ -37,6 +37,8 @@ an optional reform, get back a dot-accessible result.
 
 from __future__ import annotations
 
+import math
+import numbers
 from collections.abc import Mapping
 from typing import Any, Optional
 
@@ -52,9 +54,60 @@ from policyengine.tax_benefit_models.common import (
 from policyengine.utils.household_validation import validate_household_input
 
 from .model import us_latest
-from .spm import SPMSelection, calculation_provenance, resolve_spm_selection
+from .spm import (
+    SPMSelection,
+    calculation_provenance,
+    resolve_household_spm_selection,
+)
 
 _GROUP_ENTITIES = ("marital_unit", "family", "spm_unit", "tax_unit", "household")
+
+# Household inputs that name a county. SPM county measurement reads only
+# ``county_fips``, but a household that names its county another way still
+# asked for a county measurement, so it keeps the county selection and gets the
+# error that asks for ``county_fips`` instead of a national result.
+_COUNTY_INPUTS = ("county_fips", "county", "county_str")
+
+
+def _is_absent(name: str, value: Any) -> bool:
+    """Whether a county input's value means that no county was given.
+
+    Missing values (``None``, empty text, NaN or the text ``"nan"``,
+    ``pd.NA``) are absent, as the country model's county check also treats
+    them, and so is ``"UNKNOWN"``, the ``county`` enum's default, for
+    ``county`` and ``county_str`` only. Anything else, including a malformed
+    code such as ``6037``, names a county and so reaches the county
+    selection's typed error. This decides only the SPM selection: the country
+    model itself rejects some of these as inputs (``pd.NA`` and bytes fail to
+    serialize whatever the geography).
+    """
+    if value is None:
+        return True
+    if isinstance(value, bytes):
+        value = value.decode(errors="replace")
+    if isinstance(value, str):
+        if value == "" or value.lower() == "nan":
+            return True
+        return name != "county_fips" and value == "UNKNOWN"
+    if isinstance(value, numbers.Number) and not isinstance(value, bool):
+        try:
+            return math.isnan(value)
+        except TypeError:
+            return False
+    import pandas as pd
+
+    return value is pd.NA
+
+
+def _names_county(
+    household: Mapping[str, Any], axes: Optional[list[list[dict[str, Any]]]]
+) -> bool:
+    if any(
+        name in household and not _is_absent(name, household[name])
+        for name in _COUNTY_INPUTS
+    ):
+        return True
+    return any(axis["name"] in _COUNTY_INPUTS for group in axes or [] for axis in group)
 
 
 def _raise_unexpected_kwargs(unexpected: Mapping[str, Any]) -> None:
@@ -188,24 +241,28 @@ def calculate_household(
             values default to ``year``. When axes are present, result values
             are lists ordered by the axis grid instead of scalars.
         spm: SPMSelection or mapping selecting a scenario and geography from
-            the bundle's independently pinned artifact. Geography is demanded
-            only by the results that actually use the measurement. SPM
-            measurement itself — thresholds, the geographic factor and SPM
-            poverty — always requires household county_fips or an explicit
-            metro/national selection, and so do the default outputs, which
-            include SPM poverty. The ordinary resource outputs take the
-            household's housing assistance amount rather than the capped SPM
-            subsidy, so they compute on state alone whether or not the unit is
-            allocated assistance. The country's cap
-            (``spm_unit_capped_housing_subsidy``) is what consults the
-            canonical housing portion, and only for units allocated
-            assistance, so for an assisted unit without a geography the cap
-            and everything downstream of it — ``spm_unit_benefits``,
-            ``spm_unit_net_income`` and in turn
-            ``spm_unit_oecd_equiv_net_income`` and
-            ``spm_unit_income_decile`` — raise ``SPM_GEOGRAPHY_REQUIRED``;
-            a unit allocated none has a capped subsidy of zero by
-            construction.
+            the bundle's independently pinned artifact. When it chooses no
+            ``geography_kind``, a household with ``county_fips`` is measured
+            in its county's Census SPM estimation area, and a household that
+            names no county (no county input, only missing values, or
+            ``county``/``county_str`` of ``"UNKNOWN"``) is measured
+            nationally, with no geographic
+            adjustment, in its thresholds and in the capped SPM housing
+            subsidy; ``provenance["spm_geography_source"]`` is then
+            ``"national_fallback"`` (otherwise ``"default"``, or
+            ``"selection"`` when you chose the geography). A household that
+            names its county only as ``county`` or ``county_str`` keeps county
+            measurement and raises ``SPM_GEOGRAPHY_REQUIRED``, asking for
+            ``county_fips``. A ``geography_kind`` you choose is used as given,
+            so an explicit county selection without ``county_fips`` also
+            raises ``SPM_GEOGRAPHY_REQUIRED``. Under that selection only the
+            results that use the measurement need the county: SPM thresholds
+            and poverty, and, for a unit allocated housing assistance, the
+            capped SPM subsidy (``spm_unit_capped_housing_subsidy``) and the
+            SPM resources built on it (``spm_unit_benefits``,
+            ``spm_unit_net_income``, ``spm_unit_oecd_equiv_net_income``,
+            ``spm_unit_income_decile``). Ordinary resource outputs use the
+            actual housing assistance amount and never need one.
             Formula-owned SPM amounts and measurement counts cannot be
             supplied as inputs/axes.
 
@@ -213,6 +270,8 @@ def calculate_household(
         :class:`HouseholdResult` with dot-accessible per-entity
         variables. Singleton entities (``tax_unit``, ``household``, ...)
         return :class:`EntityResult`; ``person`` returns a list of them.
+        ``provenance`` holds the resolved ``spm_config``, the
+        ``spm_geography_source`` and the SPM calculation receipt (``spm``).
 
     Raises:
         ValueError: if any input dict uses an unknown variable name,
@@ -272,7 +331,10 @@ def calculate_household(
             }
         )
     axes_active = normalized_axes is not None
-    spm_config = resolve_spm_selection(spm)
+    spm_config, spm_geography_source = resolve_household_spm_selection(
+        spm,
+        household_names_county=_names_county(entities["household"], normalized_axes),
+    )
 
     simulation = Simulation(
         situation=_build_situation(
@@ -330,6 +392,7 @@ def calculate_household(
             )
     result["provenance"] = {
         "spm_config": dict(simulation.spm_config),
+        "spm_geography_source": spm_geography_source,
         "spm": calculation_provenance(simulation),
     }
     return result
