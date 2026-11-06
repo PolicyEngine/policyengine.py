@@ -240,6 +240,75 @@ def test_download_passes_hugging_face_token(monkeypatch, tmp_path):
     assert session.calls[0][1]["headers"] == {"Authorization": "Bearer secret-token"}
 
 
+def _clear_token_env(monkeypatch):
+    for name in ("HUGGING_FACE_TOKEN", "HF_TOKEN", "HUGGINGFACE_HUB_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_download_uses_hugging_face_cli_login(monkeypatch, tmp_path):
+    import policyengine.provenance.manifest as manifest
+
+    _clear_token_env(monkeypatch)
+    monkeypatch.setattr(manifest, "_cached_hugging_face_token", lambda: "cli-token")
+    payload = b"certified"
+    session = _Session(_Response(payload))
+
+    _download(_manifest_with_hash(_sha256(payload)), tmp_path, session)
+
+    assert session.calls[0][1]["headers"] == {"Authorization": "Bearer cli-token"}
+
+
+def test_environment_token_takes_precedence_over_cli_login(monkeypatch, tmp_path):
+    import policyengine.provenance.manifest as manifest
+
+    _clear_token_env(monkeypatch)
+    monkeypatch.setenv("HF_TOKEN", "env-token")
+    monkeypatch.setattr(manifest, "_cached_hugging_face_token", lambda: "cli-token")
+    payload = b"certified"
+    session = _Session(_Response(payload))
+
+    _download(_manifest_with_hash(_sha256(payload)), tmp_path, session)
+
+    assert session.calls[0][1]["headers"] == {"Authorization": "Bearer env-token"}
+
+
+def test_authentication_failure_without_token_says_none_was_found(
+    monkeypatch, tmp_path
+):
+    import policyengine.provenance.manifest as manifest
+
+    _clear_token_env(monkeypatch)
+    monkeypatch.setattr(manifest, "_cached_hugging_face_token", lambda: None)
+
+    with pytest.raises(DatasetMaterializationError) as error:
+        _download(
+            _manifest_with_hash(_sha256(b"certified")),
+            tmp_path,
+            _Session(_Response(status_code=401)),
+        )
+
+    message = str(error.value)
+    assert "no Hugging Face credentials were found" in message
+    assert "rejected" not in message
+    assert "hf auth login" in message
+    assert "contact@policyengine.org" in message
+
+
+def test_authentication_failure_with_token_says_it_was_rejected(monkeypatch, tmp_path):
+    _clear_token_env(monkeypatch)
+    monkeypatch.setenv("HUGGING_FACE_TOKEN", "secret-token")
+
+    with pytest.raises(DatasetMaterializationError) as error:
+        _download(
+            _manifest_with_hash(_sha256(b"certified")),
+            tmp_path,
+            _Session(_Response(status_code=403)),
+        )
+
+    assert "rejected the configured credentials" in str(error.value)
+    assert "secret-token" not in str(error.value)
+
+
 @pytest.mark.parametrize("status_code", [401, 403])
 def test_authentication_failure_does_not_retry_repository_type(tmp_path, status_code):
     session = _Session(_Response(status_code=status_code))
