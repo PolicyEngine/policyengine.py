@@ -1,3 +1,10 @@
+## [6.16.0] - 2026-11-06
+
+### Removed
+
+- Removed `policyengine.provenance.supported_years`, `UnsupportedDatasetYearError` and the `allow_unsupported_years` argument of the UK and US `create_datasets` and `ensure_datasets`, which no longer check requested years; the Public API defines the supported years instead. The US functions again create year files for any requested year, including years before the dataset's data year such as 2022 and 2023 for `populace_us_2024`, which holds almost no data for them, and a UK year outside policyengine-uk's projection again fails with `No dataset found for year ...`.
+
+
 ## [6.15.0] - 2026-11-05
 
 ### Added
