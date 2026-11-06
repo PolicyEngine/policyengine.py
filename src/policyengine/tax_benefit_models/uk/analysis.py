@@ -6,6 +6,7 @@ holds the population-level reform-analysis helpers.
 
 from __future__ import annotations
 
+import pandas as pd
 from pydantic import BaseModel
 
 from policyengine.core import OutputCollection, Simulation
@@ -24,6 +25,7 @@ from policyengine.outputs.decile_impact import (
     DecileImpact,
     calculate_decile_impacts,
 )
+from policyengine.outputs.extra_variables import add_extra_variables
 from policyengine.outputs.inequality import (
     Inequality,
     calculate_uk_inequality,
@@ -62,6 +64,62 @@ UK_PROGRAMS: dict[str, dict] = {
 }
 
 
+def uk_budget_component_programs(model_version) -> dict[str, dict]:
+    """Every tax and benefit the UK budget totals add up, beyond ``UK_PROGRAMS``.
+
+    The headline budgetary impact is the change in ``household_tax`` minus
+    the change in ``household_benefits``, and policyengine-uk builds those
+    two totals from ``HOUSEHOLD_TAX_VARIABLES`` and
+    ``HOUSEHOLD_BENEFIT_VARIABLES``. Reading the programs from those lists,
+    rather than from a fixed list here, means a program the country package
+    adds to the totals gets its own row with no change in this package, and
+    the rows explain the whole headline (for example Scottish Child Payment
+    lost with Universal Credit). Variables the model version doesn't define
+    are skipped.
+    """
+    from policyengine_uk.variables.gov.hmrc.household_tax import (
+        HOUSEHOLD_TAX_VARIABLES,
+    )
+    from policyengine_uk.variables.household.income.household_benefits import (
+        HOUSEHOLD_BENEFIT_VARIABLES,
+    )
+
+    programs: dict[str, dict] = {}
+    for names, is_tax in (
+        (HOUSEHOLD_TAX_VARIABLES, True),
+        (HOUSEHOLD_BENEFIT_VARIABLES, False),
+    ):
+        for name in names:
+            if (
+                name in UK_PROGRAMS
+                or name in programs
+                or name not in model_version.variables_by_name
+            ):
+                continue
+            programs[name] = {"is_tax": is_tax}
+    return programs
+
+
+def configure_uk_budget_component_variables(
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+) -> dict[str, dict]:
+    """Materialize the budget-total components on both simulations' outputs.
+
+    Returns the component programs (see :func:`uk_budget_component_programs`)
+    so the analysis reports the ones the reform changes.
+    """
+    model_version = baseline_simulation.tax_benefit_model_version
+    programs = uk_budget_component_programs(model_version)
+    variables_by_entity: dict[str, list[str]] = {}
+    for name in programs:
+        entity = model_version.get_variable(name).entity
+        variables_by_entity.setdefault(entity, []).append(name)
+    add_extra_variables(baseline_simulation, variables_by_entity)
+    add_extra_variables(reform_simulation, variables_by_entity)
+    return programs
+
+
 class PolicyReformAnalysis(BaseModel):
     """Complete policy reform analysis result."""
 
@@ -80,13 +138,48 @@ class PolicyReformAnalysis(BaseModel):
 def _validate_program_statistics_config(
     baseline_simulation: Simulation,
     reform_simulation: Simulation,
+    component_programs: dict[str, dict] | None = None,
 ) -> None:
     """Validate UK program-stat variables before running simulations."""
     validate_program_statistics_config(
-        UK_PROGRAMS,
+        {**UK_PROGRAMS, **(component_programs or {})},
         baseline_simulation,
         reform_simulation,
         "UK",
+    )
+
+
+def _build_uk_program_statistics(
+    component_programs: dict[str, dict],
+    baseline_simulation: Simulation,
+    reform_simulation: Simulation,
+) -> OutputCollection[ProgramStatistics]:
+    """``UK_PROGRAMS``' rows, always, then each budget component the reform changes.
+
+    The fixed rows keep their keys for existing consumers; the component rows
+    are only those with a non-zero change, so an output doesn't carry dozens
+    of empty rows.
+    """
+    fixed = build_program_statistics(
+        UK_PROGRAMS,
+        baseline_simulation,
+        reform_simulation,
+    )
+    components = build_program_statistics(
+        component_programs,
+        baseline_simulation,
+        reform_simulation,
+    )
+    changed = [program for program in components.outputs if program.change]
+    changed_names = {program.program_name for program in changed}
+    component_rows = components.dataframe
+    if not component_rows.empty:
+        component_rows = component_rows[
+            component_rows["program_name"].isin(changed_names)
+        ]
+    return OutputCollection(
+        outputs=[*fixed.outputs, *changed],
+        dataframe=pd.concat([fixed.dataframe, component_rows], ignore_index=True),
     )
 
 
@@ -103,7 +196,15 @@ def economic_impact_analysis(
     )
     if include_cliff_impacts:
         configure_cliff_impact_variables(baseline_simulation, reform_simulation)
-    _validate_program_statistics_config(baseline_simulation, reform_simulation)
+    component_programs = configure_uk_budget_component_variables(
+        baseline_simulation,
+        reform_simulation,
+    )
+    _validate_program_statistics_config(
+        baseline_simulation,
+        reform_simulation,
+        component_programs,
+    )
 
     baseline_simulation.ensure()
     reform_simulation.ensure()
@@ -137,8 +238,8 @@ def economic_impact_analysis(
         entity="household",
     )
 
-    program_collection = build_program_statistics(
-        UK_PROGRAMS,
+    program_collection = _build_uk_program_statistics(
+        component_programs,
         baseline_simulation,
         reform_simulation,
     )
