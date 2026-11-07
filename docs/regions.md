@@ -24,7 +24,7 @@ ca_snap.run()
 ```
 
 Each state is a region in the US registry. State regions load the ACS-local
-Populace dataset declared by `region.dataset_path`, then scope its rows by
+Microcosm dataset declared by `region.dataset_path`, then scope its rows by
 `state_fips`. They do not require separate state H5 files:
 
 ```python
@@ -218,7 +218,7 @@ df.groupby("geo").apply(lambda g: (g["change"] * g["weight"]).sum() / g["weight"
 
 ## Scoping datasets to a region
 
-For reforms defined only over a sub-national slice, pass a scoping strategy to `Simulation`. `RowFilterStrategy` keeps only matching households. `WeightReplacementStrategy` is legacy matrix infrastructure and is not used by the UK Populace constituency or local-authority registry.
+For reforms defined only over a sub-national slice, pass a scoping strategy to `Simulation`. `RowFilterStrategy` keeps only matching households. `WeightReplacementStrategy` is legacy matrix infrastructure and is not used by the UK Microcosm constituency or local-authority registry.
 
 ```python
 from policyengine.core.scoping_strategy import RowFilterStrategy
@@ -233,7 +233,7 @@ baseline = Simulation(
 )
 ```
 
-Regions that filter (US states and congressional districts, UK countries, and any region with `region.requires_filter == True`) carry their own `scoping_strategy`. Pull it off the region object rather than reconstructing it. US place regions are present as hierarchy metadata, but current Populace datasets do not carry `place_fips`, so they do not expose runtime scoping yet:
+Regions that filter (US states and congressional districts, UK countries, and any region with `region.requires_filter == True`) carry their own `scoping_strategy`. Pull it off the region object rather than reconstructing it. US place regions are present as hierarchy metadata, but current Microcosm datasets do not carry `place_fips`, so they do not expose runtime scoping yet:
 
 ```python
 ca = pe.us.model.region_registry.get("state/ca")

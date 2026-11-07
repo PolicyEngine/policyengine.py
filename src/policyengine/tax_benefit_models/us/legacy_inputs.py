@@ -441,7 +441,7 @@ def stored_entity_tables(
     renames whose live input belongs to it.
 
     policyengine-us loads an entity-table H5 (the layout of the certified
-    Populace default) into a multi-year dataset whose ``datasets`` map each
+    Microcosm default) into a multi-year dataset whose ``datasets`` map each
     year to that year's entity DataFrames. Those keep every stored column, including the
     ones the engine skipped, so they are returned as they are.
 

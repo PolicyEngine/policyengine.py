@@ -5,7 +5,7 @@ Synced with policyengine-app-v2 main branch.
 """
 
 # US cities/places with population over 100K (from Census data).
-# These are registry metadata until Populace emits place-level row keys.
+# These are registry metadata until Microcosm emits place-level row keys.
 # Total: 333 places
 US_PLACES: list[dict[str, str]] = [
     {

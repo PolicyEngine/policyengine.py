@@ -313,7 +313,7 @@ their `_tiny` files.
 
 ### US
 
-For US Populace certification, certify the Populace release manifest directly:
+For US Microcosm certification, certify the Microcosm release manifest directly:
 
 ```bash
 python scripts/bundle.py certify-data --country us --data-producer populace \
@@ -323,7 +323,7 @@ python scripts/bundle.py certify-data --country us --data-producer populace \
 ```
 
 US state and congressional-district regions are row filters over one shared,
-certified ACS-local Populace dataset. Its release manifest must declare
+certified ACS-local Microcosm dataset. Its release manifest must declare
 `dataset_role: non_default_local_area`, `is_default: false`, no default
 datasets, and exactly one pinned H5 microdata artifact. Certification writes:
 
@@ -338,7 +338,7 @@ datasets, and exactly one pinned H5 microdata artifact. Certification writes:
 The ACS-local artifact is a second entry in `data_releases.us.datasets`; it is
 not a dataset overlay and it never replaces the national `default_dataset`.
 
-If the Populace release publishes derived `states/*.h5` or `districts/*.h5`
+If the Microcosm release publishes derived `states/*.h5` or `districts/*.h5`
 files for compatibility checks, certification omits them from the runtime
 bundle. The country-wide default and ACS-local dataset are each single shared
 files; region registries select one and then filter its rows.
@@ -370,7 +370,7 @@ A certification PR should normally change only:
 Hard failures (certification refuses): missing national default dataset,
 default dataset absent from artifacts, any artifact without a revision pin,
 unreachable certified dataset, missing required supplemental release files
-(for example Populace-US `us_source_coverage.json`), a malformed shared
+(for example Microcosm-US `us_source_coverage.json`), a malformed shared
 local-area release, area-coded national release or legacy per-state artifacts
 when `--regional-manifest-uri` is used, a regional release that does not serve
 the pinned model version, an unreachable regional artifact, a re-certification

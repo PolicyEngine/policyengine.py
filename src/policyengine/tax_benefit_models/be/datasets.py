@@ -88,7 +88,7 @@ class BEYearData(YearData):
         return {"person": self.person, "household": self.household}
 
 
-class PopulaceBelgiumDataset(Dataset):
+class MicrocosmBelgiumDataset(Dataset):
     """Belgium pilot dataset loaded from a Microcosm-BE HDF5 artifact.
 
     ``year`` identifies the input dataset vintage. ``policy_period`` is set on
@@ -188,3 +188,8 @@ class PopulaceBelgiumDataset(Dataset):
                     self._POLICY_PERIOD_ATTRIBUTE,
                     int(self.policy_period),
                 )
+
+
+PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.16.1
+    MicrocosmBelgiumDataset
+)

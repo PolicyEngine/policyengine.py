@@ -186,7 +186,7 @@ class TestUSRegionRegistry:
     def test__given_at_large_district__then_filter_uses_zero_district_geoid(self):
         """Given: an at-large congressional district
         When: Checking its row filter
-        Then: It uses the Populace/Census SS00 district GEOID convention
+        Then: It uses the Microcosm/Census SS00 district GEOID convention
         """
         # When
         ak_al = us_region_registry.get("congressional_district/AK-01")

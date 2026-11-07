@@ -2,7 +2,7 @@
 
 Unlike the US and UK model versions, Belgium runs on the Axiom rules
 engine: statutes encoded as RuleSpec YAML in TheAxiomFoundation/rulespec-be,
-compiled and executed by ``axiom-rules-engine``, and driven over populace
+compiled and executed by ``axiom-rules-engine``, and driven over Microcosm
 entity tables through the ``microcosm.frame`` Axiom adapter. There is no
 policyengine-core country package and no certified release manifest, so this
 version subclasses ``TaxBenefitModelVersion`` directly and stays outside the
@@ -46,8 +46,12 @@ from policyengine.core import TaxBenefitModel, TaxBenefitModelVersion
 
 from .datasets import (
     BEYearData,
-    PopulaceBelgiumDataset,
+    MicrocosmBelgiumDataset,
     _person_with_household_weights,
+)
+
+PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.16.1
+    MicrocosmBelgiumDataset
 )
 
 if TYPE_CHECKING:
@@ -76,7 +80,7 @@ class AxiomBelgium(TaxBenefitModel):
     id: str = "axiom-rulespec-be"
     description: str = (
         "Belgium tax rules encoded as RuleSpec (TheAxiomFoundation/rulespec-be), "
-        "executed by the Axiom rules engine over populace entity tables."
+        "executed by the Axiom rules engine over Microcosm entity tables."
     )
 
 
@@ -126,7 +130,7 @@ class AxiomBelgiumPilot(TaxBenefitModelVersion):
             )
 
         dataset = simulation.dataset
-        assert isinstance(dataset, PopulaceBelgiumDataset)
+        assert isinstance(dataset, MicrocosmBelgiumDataset)
         if dataset.data is None:
             dataset.load()
         assert dataset.data is not None
@@ -186,7 +190,7 @@ class AxiomBelgiumPilot(TaxBenefitModelVersion):
             },
         ]
 
-        simulation.output_dataset = PopulaceBelgiumDataset(
+        simulation.output_dataset = MicrocosmBelgiumDataset(
             id=simulation.id,
             name=dataset.name,
             description=dataset.description,
