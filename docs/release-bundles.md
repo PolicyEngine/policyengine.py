@@ -164,7 +164,7 @@ It does not own final runtime bundle certification.
 
 ### Country data package
 
-Examples: `populace-data`, `policyengine-uk-data`
+Examples: `microcosm-data`, `policyengine-uk-data`
 
 The country data package owns:
 

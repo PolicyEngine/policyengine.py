@@ -89,10 +89,10 @@ UK_EFRS_FRS_DATASET_URI = (
     "hf://policyengine/policyengine-uk-data-private/frs_2024_25.h5@1.58.1"
 )
 # The prior certified default, kept resolvable via dataset_overlays.
-UK_POPULACE_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
-UK_POPULACE_DATASET_URI = (
+UK_MICROCOSM_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
+UK_MICROCOSM_DATASET_URI = (
     f"hf://policyengine/populace-uk-private/populace_uk_2023.h5"
-    f"@{UK_POPULACE_RELEASE_ID}"
+    f"@{UK_MICROCOSM_RELEASE_ID}"
 )
 UK_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 UK_CERTIFIED_DATASET_URI = (
@@ -363,7 +363,7 @@ class TestReleaseManifests:
         )
         assert (
             resolve_dataset_reference("uk", "populace_uk_2023")
-            == UK_POPULACE_DATASET_URI
+            == UK_MICROCOSM_DATASET_URI
         )
         assert (
             resolve_dataset_reference("uk", "enhanced_frs_2024_25")
@@ -377,7 +377,7 @@ class TestReleaseManifests:
         assert resolve_dataset_reference("us", url) == url
 
     def test__given_existing_local_path__then_resolution_is_noop(self, tmp_path):
-        dataset = tmp_path / "smoke_test_populace_us_2024.h5"
+        dataset = tmp_path / "smoke_test_microcosm_us_2024.h5"
         dataset.write_bytes(b"")
 
         assert resolve_dataset_reference("us", str(dataset)) == str(dataset)
@@ -500,7 +500,7 @@ class TestReleaseManifests:
         )
 
     def test__given_local_path__then_managed_resolution_requires_opt_in(self, tmp_path):
-        dataset = tmp_path / "smoke_test_populace_us_2024.h5"
+        dataset = tmp_path / "smoke_test_microcosm_us_2024.h5"
         dataset.write_bytes(b"")
 
         try:

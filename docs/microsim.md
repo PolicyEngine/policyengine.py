@@ -404,7 +404,7 @@ Smaller custom H5 datasets can be passed explicitly for testing:
 
 ```python
 datasets = pe.us.ensure_datasets(
-    datasets=["/path/to/smoke_test_populace_us_2024.h5"],
+    datasets=["/path/to/smoke_test_microcosm_us_2024.h5"],
     years=[2026],
     allow_unmanaged=True,
 )

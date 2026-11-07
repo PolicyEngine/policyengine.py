@@ -161,7 +161,7 @@ def mapped_run(tmp_path_factory):
 def mapped_managed(tmp_path_factory):
     """Load path 2 over the household's entity-table file, mapping on."""
     path = _write_entity_tables(
-        tmp_path_factory.mktemp("mapped_managed") / "populace_layout.h5"
+        tmp_path_factory.mktemp("mapped_managed") / "microcosm_layout.h5"
     )
     return pe.us.managed_microsimulation(dataset=path, allow_unmanaged=True)
 
@@ -432,7 +432,7 @@ def test_managed_without_the_mapping_gives_every_eligible_person_wic(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(legacy_inputs, "LEGACY_INPUT_RENAMES", {})
-    path = _write_entity_tables(tmp_path / "populace_layout.h5")
+    path = _write_entity_tables(tmp_path / "microcosm_layout.h5")
     microsim = pe.us.managed_microsimulation(dataset=path, allow_unmanaged=True)
 
     eligible = microsim.calculate("is_wic_eligible", MONTHS[0]).values
@@ -445,7 +445,7 @@ def test_managed_without_the_mapping_gives_every_eligible_person_wic(
 
 
 def test_managed_reform_maps_its_baseline_too(tmp_path):
-    path = _write_entity_tables(tmp_path / "populace_layout.h5")
+    path = _write_entity_tables(tmp_path / "microcosm_layout.h5")
     microsim = pe.us.managed_microsimulation(
         dataset=path,
         allow_unmanaged=True,
@@ -482,7 +482,7 @@ def test_managed_core_h5_with_a_part_year_draw_is_refused(tmp_path):
 def engine_microsim(tmp_path_factory):
     """A real managed Microsimulation the property below maps draws onto."""
     path = _write_entity_tables(
-        tmp_path_factory.mktemp("engine_microsim") / "populace_layout.h5"
+        tmp_path_factory.mktemp("engine_microsim") / "microcosm_layout.h5"
     )
     return pe.us.managed_microsimulation(dataset=path, allow_unmanaged=True)
 
@@ -545,7 +545,7 @@ def test_both_load_paths_give_the_same_take_up_and_wic(mapped_run, mapped_manage
 
 def _create_year_file(directory):
     """Cut the household's entity-table file into a year file."""
-    source = _write_entity_tables(directory / "populace_layout.h5")
+    source = _write_entity_tables(directory / "microcosm_layout.h5")
     created = create_datasets(
         datasets=[source],
         years=[YEAR],
@@ -771,7 +771,7 @@ def test_ensure_datasets_regenerates_a_year_file_with_only_the_renames_record(
 
 
 def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
-    source = _write_entity_tables(tmp_path / "populace_layout.h5")
+    source = _write_entity_tables(tmp_path / "microcosm_layout.h5")
     events = []
     save = PolicyEngineUSDataset.save
     stamp = us_datasets.write_year_file_stamp
@@ -807,7 +807,7 @@ def test_create_datasets_stamps_each_year_file_after_saving_it(tmp_path):
 
 
 def test_a_year_file_whose_stamp_was_never_written_is_out_of_date(tmp_path):
-    source = _write_entity_tables(tmp_path / "populace_layout.h5")
+    source = _write_entity_tables(tmp_path / "microcosm_layout.h5")
 
     def stop(path, value):
         raise RuntimeError("stopped before stamping")
