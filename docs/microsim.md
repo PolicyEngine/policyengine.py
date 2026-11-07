@@ -134,12 +134,12 @@ datasets = pe.us.ensure_datasets(
 dataset = datasets["populace_us_2024_2026"]
 ```
 
-The default US dataset is **Populace US 2024** — a Populace-built dataset
+The default US dataset is **Microcosm US 2024** — a Microcosm-built dataset
 calibrated to IRS, CMS, SNAP, Census, and other administrative totals. The
 current UK certified default is **Microcosm UK 2024–25**, a Microcosm build
 calibrated to HMRC, DWP, OBR and other administrative totals; constituency and
 local-authority regions use its local-area release. **Enhanced FRS 2024–25**
-(`enhanced_frs_2024_25`, policyengine-uk-data 1.58.1) and **Populace UK 2023**
+(`enhanced_frs_2024_25`, policyengine-uk-data 1.58.1) and **Microcosm UK 2023**
 remain available as named, non-default bundle datasets.
 
 PolicyEngine.py obtains the repository type, immutable revision, and SHA-256
@@ -156,7 +156,7 @@ pe.us.load_datasets()  # or pe.uk.load_datasets()
 
 Alongside the certified national default, the bundle registers a US dataset for
 finer geographic work: `populace_us_2024_acs_local`. It is a
-Populace US 2024 build of roughly **1.6 million households** on an **ACS 2024
+Microcosm US 2024 build of roughly **1.6 million households** on an **ACS 2024
 multispine**, with each household **PUMA-assigned** to a 119th-Congress
 congressional district, county, and state, and calibrated to **state
 administrative totals and state and congressional-district population**. Its
@@ -387,7 +387,7 @@ See [Outputs](outputs.md) for the full catalog.
 
 ## Memory and performance
 
-A full Populace US microsimulation uses roughly 4 GB of memory and takes 15-30 seconds on a laptop. For parameter sweeps, reuse the baseline:
+A full Microcosm US microsimulation uses roughly 4 GB of memory and takes 15-30 seconds on a laptop. For parameter sweeps, reuse the baseline:
 
 ```python
 baseline = Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)

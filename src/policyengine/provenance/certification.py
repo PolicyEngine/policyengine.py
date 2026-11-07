@@ -110,11 +110,11 @@ QUALIFICATION_LEDGER_URL = (
     "https://github.com/PolicyEngine/policyengine.py/tree/uk-qualification-ledger"
 )
 POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
-# The Populace US producer publishes under `microcosm-data` since the
+# The Microcosm US producer publishes under `microcosm-data` since the
 # source-enrichment releases; `populace-data` is its earlier name. Both denote
-# the same producer, so every Populace-specific rule below must accept either.
+# the same producer, so every Microcosm-specific rule below must accept either.
 POPULACE_DATA_PACKAGES = frozenset({"populace-data", "microcosm-data"})
-# The Hugging Face repos each country's Populace/Microcosm releases publish to.
+# The Hugging Face repos each country's Microcosm releases publish to.
 POPULACE_RELEASE_REPOS = {
     "us": "policyengine/populace-us",
     "uk": "policyengine/populace-uk-private",
@@ -985,7 +985,7 @@ def merge_us_state_release_manifest(
     artifact_prefix: str = "states/",
     path_template: str = "states/{state_code}.h5",
 ) -> DataReleaseManifest:
-    """Add legacy US state artifacts to a primary Populace release manifest."""
+    """Add legacy US state artifacts to a primary Microcosm release manifest."""
 
     primary_payload = primary_manifest.model_dump(mode="json", exclude_none=True)
     merged_artifacts = primary_payload.setdefault("artifacts", {})

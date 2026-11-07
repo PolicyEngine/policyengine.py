@@ -946,7 +946,7 @@ class TestVendoredSidecarBinding:
 def _source_enrichment_manifest_payload() -> dict:
     """A `microcosm-data` release whose sidecars use the `evidence` kind.
 
-    This is the shape the Populace US producer publishes for source-enrichment
+    This is the shape the Microcosm US producer publishes for source-enrichment
     releases: the data package is named `microcosm-data` rather than
     `populace-data`, and release-directory sidecars are labelled `evidence`
     rather than `diagnostics`.
@@ -966,7 +966,7 @@ def _source_enrichment_manifest_payload() -> dict:
 
 
 class TestSourceEnrichmentProducerRelease:
-    """The `microcosm-data` producer name must keep every Populace rule armed.
+    """The `microcosm-data` producer name must keep every Microcosm rule armed.
 
     A release published under the newer producer name previously fell through
     every `populace-data` guard, which both skipped the per-artifact

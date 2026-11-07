@@ -7,7 +7,7 @@ A Python package for tax-benefit microsimulation analysis. Run policy simulation
 
 Requires Python 3.11–3.14.
 
-> **Results are estimates.** PolicyEngine simulates a large, evolving body of tax-benefit law (the US model alone encodes more than 95,000 parameters across 5,500+ variables) over survey microdata calibrated to administrative targets. Treat outputs as estimates, and validate them against the policies relevant to your analysis, the scope of the rules engine, and external or back-of-the-envelope calculations. You can inspect the certified US dataset's calibration at https://calibration-diagnostics.vercel.app/populace.
+> **Results are estimates.** PolicyEngine simulates a large, evolving body of tax-benefit law (the US model alone encodes more than 95,000 parameters across 5,500+ variables) over survey microdata calibrated to administrative targets. Treat outputs as estimates, and validate them against the policies relevant to your analysis, the scope of the rules engine, and external or back-of-the-envelope calculations. You can inspect the certified US dataset's calibration at https://calibration-diagnostics.vercel.app/microcosm.
 
 
 ## Quick start

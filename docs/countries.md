@@ -32,12 +32,12 @@ Override in any output with `income_variable=`.
 
 | | Dataset |
 |---|---|
-| US | Populace US 2024 (`populace_us_2024.h5`) |
+| US | Microcosm US 2024 (`populace_us_2024.h5`) |
 | UK | Microcosm UK 2024-25 (`microcosm_uk_2024_25.h5`); constituency and local-authority regions use its local-area release (`microcosm_uk_2024_25_dense.h5`) |
 
 ## State / regional breakdown
 
-US: Populace row scoping uses `state_fips` and `congressional_district_geoid`.
+US: Microcosm row scoping uses `state_fips` and `congressional_district_geoid`.
 `state_code` remains the human-readable state input for custom households.
 US resource and poverty calculations also require observed `county_fips` or an
 explicit national or SPM-area choice; see [Households](households.md#spm-geography-and-measurement-selection).

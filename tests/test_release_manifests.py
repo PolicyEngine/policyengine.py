@@ -61,7 +61,7 @@ US_CERTIFIED_DATASET_URI = (
 US_RELEASE_MANIFEST_DATASET_URI = (
     f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
-# Certified local-area dataset: a Populace US artifact published in its own
+# Certified local-area dataset: a Microcosm US artifact published in its own
 # immutable release. It remains non-default nationally and is selected for
 # states and congressional districts.
 US_LOCAL_AREA_DATASET = "populace_us_2024_acs_local"
@@ -157,7 +157,7 @@ def _response_with_json(payload: dict) -> MagicMock:
 def _legacy_us_country_manifest(
     version: str = "1.73.0", package_name: str = "policyengine-us-data"
 ) -> CountryReleaseManifest:
-    """Pin the legacy fixture independently of the installed Populace bundle."""
+    """Pin the legacy fixture independently of the installed Microcosm bundle."""
     return CountryReleaseManifest.model_validate(
         {
             "country_id": "us",

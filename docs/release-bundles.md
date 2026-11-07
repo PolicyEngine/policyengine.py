@@ -196,7 +196,7 @@ python scripts/bundle.py certify-data --country us \
   --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json"
 ```
 
-US Populace certification uses the Populace release manifest directly:
+US Microcosm certification uses the Microcosm release manifest directly:
 
 ```bash
 python scripts/bundle.py certify-data --country us --data-producer populace \
@@ -205,7 +205,7 @@ python scripts/bundle.py certify-data --country us --data-producer populace \
   --model-version "<policyengine-us-version>"
 ```
 
-That produces one US bundle manifest entry containing the Populace national
+That produces one US bundle manifest entry containing the Microcosm national
 default dataset and the certified ACS-local regional dataset. State and
 congressional-district simulations use the latter with runtime row filters, so
 derived `states/*.h5` or `districts/*.h5` files are not vendored into

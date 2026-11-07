@@ -1,6 +1,6 @@
-# US Populace certification runbook
+# US Microcosm certification runbook
 
-Use this runbook to certify a new national US Populace release together with
+Use this runbook to certify a new national US Microcosm release together with
 the shared ACS-local release used for state and congressional-district
 simulations. For now, state and district simulations use the national release
 instead; see the interim exception in Step 2. Read the
@@ -25,7 +25,7 @@ interim exception in Step 2 holds).
   metadata and runs reachability `HEAD` checks against Hugging Face.
 - `HUGGING_FACE_TOKEN` (or `HF_TOKEN`) exported — required to regenerate the
   UK TRO in the `--include-tros` step and to run the UK data-release fetch in
-  the test suite. The US populace repo is public.
+  the test suite. The US microcosm repo is public.
 
 ## Step 1 — identify the releases
 
@@ -93,7 +93,7 @@ PE_UPDATE_SNAPSHOTS=1 pytest tests/test_household_calculator_snapshot.py
 The certification command passes the immutable ACS-local release manifest with
 `--regional-manifest-uri`. Confirm all of the following:
 
-- `default_dataset` remains the national Populace dataset;
+- `default_dataset` remains the national Microcosm dataset;
 - the local-area artifact appears in `data_releases.us.datasets` with its
   repository type, immutable revision, and SHA-256;
 - `region_datasets.national` selects the national artifact;

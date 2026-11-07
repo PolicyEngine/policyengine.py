@@ -1,7 +1,7 @@
 """The legacy WIC take-up draw reaches real policyengine-us simulations.
 
 Each test builds a tiny US household that stores its WIC take-up draw as
-``would_claim_wic`` (the layout of the certified Populace default, see
+``would_claim_wic`` (the layout of the certified Microcosm default, see
 PolicyEngine/microcosm#1026), loads it through one of the load paths, and
 checks that a WIC-eligible person whose stored draw is ``False`` gets no WIC,
 while the same person gets WIC when the mapping is switched off.
@@ -105,7 +105,7 @@ def _in_memory_dataset(directory, frames=None) -> PolicyEngineUSDataset:
 
 
 def _write_entity_tables(path) -> str:
-    """Write the household in the certified Populace default's layout."""
+    """Write the household in the certified Microcosm default's layout."""
     with pd.HDFStore(path, mode="w") as store:
         for entity, frame in _frames().items():
             store.put(entity, frame, format="table", data_columns=True)
