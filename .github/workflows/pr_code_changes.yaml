@@ -177,9 +177,12 @@ jobs:
     # 3.12 and 3.13 cancelled at the old 60-minute limit. By early Nov, 65 to 90
     # minutes on 3.11-3.13, where coverage.py 7.13.5 uses its C trace function
     # (sys.monitoring only on 3.14, which takes 47-60), and one of them was often
-    # cancelled at 90: 3.12 on #730, 3.11 on #735 (#736). Fail a hung job instead
-    # of holding a shared org runner for the 6-hour default.
-    timeout-minutes: 105
+    # cancelled at 90: 3.12 on #730, 3.11 on #735 (#736). With the UK pin on
+    # policyengine-uk 2.165.1 (#731, 4 Nov), 3.11 took 105 minutes, 3.13 100
+    # and 3.12 86, so 105 cancels them; 2.174.1 adds parameters and variables
+    # again. Fail a hung job instead of holding a shared org runner for the
+    # 6-hour default.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
