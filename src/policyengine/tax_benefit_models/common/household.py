@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 
@@ -8,10 +8,16 @@ def validate_annual_household_inputs(
     *,
     year: Any,
     entities: Mapping[str, Sequence[Mapping[str, Any]]],
+    listed_entities: Collection[str] = (),
 ) -> int:
-    """Validate annual-only household calculator inputs."""
+    """Validate annual-only household calculator inputs.
+
+    Errors name an input of an entity in ``listed_entities``, which the caller
+    passed as a list of groups, by its group's position, even in a list of
+    one group.
+    """
     validated_year = _validate_annual_year(year)
-    _validate_unperiodized_values(entities)
+    _validate_unperiodized_values(entities, listed_entities=listed_entities)
     return validated_year
 
 
@@ -36,16 +42,24 @@ def _annual_period_error(year: Any) -> ValueError:
 
 def _validate_unperiodized_values(
     entities: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    listed_entities: Collection[str] = (),
 ) -> None:
     for entity, records in entities.items():
         for index, record in enumerate(records):
             for variable, value in record.items():
                 if variable != "id" and isinstance(value, Mapping):
+                    location = _input_location(
+                        entity,
+                        index,
+                        len(records),
+                        variable,
+                        listed=entity in listed_entities,
+                    )
                     raise ValueError(
                         "Periodized household inputs are not supported by "
                         "calculate_household. Pass annual scalar input values "
-                        f"only; received a periodized value for "
-                        f"{_input_location(entity, index, len(records), variable)}."
+                        f"only; received a periodized value for {location}."
                     )
 
 
@@ -54,7 +68,9 @@ def _input_location(
     index: int,
     record_count: int,
     variable: str,
+    *,
+    listed: bool = False,
 ) -> str:
-    if record_count == 1 and entity != "people":
+    if record_count == 1 and entity != "people" and not listed:
         return f"{entity}.{variable}"
     return f"{entity}[{index}].{variable}"

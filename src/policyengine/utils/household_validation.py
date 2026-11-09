@@ -14,7 +14,7 @@ All errors include paste-able fixes.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from difflib import get_close_matches
 from typing import TYPE_CHECKING
 
@@ -48,6 +48,7 @@ def validate_household_input(
     *,
     model_version: TaxBenefitModelVersion,
     entities: Mapping[str, Iterable[Mapping[str, object]]],
+    listed_entities: Collection[str] = (),
 ) -> None:
     """Raise ``ValueError`` on unknown or mis-placed entity variables.
 
@@ -58,6 +59,10 @@ def validate_household_input(
       suggestion.
     - If the key is a known variable but defined on a different entity,
       the error names the correct entity and shows the kwarg swap.
+
+    ``listed_entities`` names the entities the caller passed as a list of
+    groups: errors name their groups by position, and a variable that
+    belongs on one of them is moved into a group rather than a mapping.
     """
     if "person" in entities and not list(entities["person"]):
         raise ValueError(
@@ -70,15 +75,20 @@ def validate_household_input(
     misplaced: list[tuple[str, str, str]] = []
 
     for entity_name, records in entities.items():
-        for record in records:
+        for index, record in enumerate(records):
+            location = (
+                f"{entity_name}[{index}]"
+                if entity_name in listed_entities
+                else entity_name
+            )
             for key in record:
                 if key in _STRUCTURAL_KEYS:
                     continue
                 variable = variables_by_name.get(key)
                 if variable is None:
-                    unknown.append((entity_name, key))
+                    unknown.append((location, key))
                 elif variable.entity != entity_name:
-                    misplaced.append((entity_name, key, variable.entity))
+                    misplaced.append((location, key, variable.entity))
 
     if not unknown and not misplaced:
         return
@@ -104,10 +114,15 @@ def validate_household_input(
             lines.append("")
         lines.append("Variables passed on the wrong entity:")
         for wrong_entity, key, correct_entity in misplaced:
+            if correct_entity in listed_entities:
+                move = (
+                    f"add '{key}': <value> to the {correct_entity} group it applies to"
+                )
+            else:
+                move = f"pass {correct_entity}={{'{key}': <value>}}"
             lines.append(
                 f"  - '{key}' was given on {wrong_entity}; it belongs on "
-                f"{correct_entity}. Move it: pass "
-                f"{correct_entity}={{'{key}': <value>}}."
+                f"{correct_entity}. Move it: {move}."
             )
 
     raise ValueError("\n".join(lines))

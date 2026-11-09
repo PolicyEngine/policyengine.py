@@ -41,9 +41,10 @@ class EntityResult(dict):
 class HouseholdResult(dict):
     """Full household calculation result; one key per entity.
 
-    Singleton entities (``household``, ``tax_unit``, ``benunit``, ...)
-    map to a single :class:`EntityResult`; multi-member entities (like
-    ``person``) map to a ``list[EntityResult]``.
+    ``person`` maps to a ``list[EntityResult]``, one per person. A group
+    entity (``household``, ``tax_unit``, ``benunit``, ...) maps to a single
+    :class:`EntityResult`, or to a ``list[EntityResult]`` in the caller's
+    order when the caller passed that entity as a list of groups.
     """
 
     def __getattr__(self, name: str) -> Any:
