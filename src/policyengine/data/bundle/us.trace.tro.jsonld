@@ -74,7 +74,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "eb55ec40c9d6d3d465c6555d1af18c66103d91f500d1c8d25950e76167248cac"
+            "trov:sha256": "ad56f3d87508050077491d3c0996ecd49fdf4778500e224bbd651b549a87f087"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -101,7 +101,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "04bc286d319dd4cdb391f31935e56427c9cd819c72c251340ed9782ba676511b"
+          "trov:sha256": "d1b16162405e00be9800178061f66b0530cb297c9c50e223991d1f8df4948763"
         }
       },
       "trov:hasPerformance": {
