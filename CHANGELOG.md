@@ -1,3 +1,31 @@
+## [6.16.1] - 2026-11-09
+
+### Changed
+
+- Certify Microcosm UK for policyengine-uk 2.174.1: the national `microcosm-uk-2024-25-national-20261107T020434Z-eeb6093e` (`microcosm_uk_2024_25`), built with 2.174.1 from PolicyEngine/microcosm#1535 at `dc00d158f`, and the local-area cut `microcosm-uk-2024-25-dense-20261107T173210Z-38605444` (`microcosm_uk_2024_25_dense`), which constituency and local-authority regions route to. The national adds the FRS full-time education flag, which Universal Credit's education condition reads, and binds ONS's single years of age 16 to 24 by sex. The local-area cut is built from the same spine at `03c31df56`, which adds two commits to `dc00d158f`: one local council tax cell deferred (`edd051ecc`) and its gate-only sign-off (`03c31df56`). It is also on 2.174.1, so both certify on their own build. The UK model pin moves from policyengine-uk 2.151.0 to 2.174.1 (policyengine-core stays 3.33.3), so UK results change with both the model and the data. From policyengine-uk 2.170.0 (PolicyEngine/policyengine-uk#2719), UK current law includes the Autumn Budget 2026 measures: the Household Energy Payment, the Pension Tax Allowance, the Carer's Allowance taper, the higher savings and property income rates, the £3,000 trading allowance, and the fuel duty and domestic electricity VAT extensions.
+
+
+## [6.16.0] - 2026-11-06
+
+### Removed
+
+- Removed `policyengine.provenance.supported_years`, `UnsupportedDatasetYearError` and the `allow_unsupported_years` argument of the UK and US `create_datasets` and `ensure_datasets`, which no longer check requested years; the Public API defines the supported years instead. The US functions again create year files for any requested year, including years before the dataset's data year such as 2022 and 2023 for `populace_us_2024`, which holds almost no data for them, and a UK year outside policyengine-uk's projection again fails with `No dataset found for year ...`.
+
+
+## [6.15.0] - 2026-11-05
+
+### Added
+
+- Certify Microcosm builds published side by side in their own release folders (`releases/<release>/<build>/`, with no Hugging Face tag): a release manifest that names its `release` and `build` as strings is certified from that folder, its own files are pinned inside it at the certified revision, and its `build` names the certificate, so two builds of one release never match. Certification refuses such a build unless the repository's `releases.json` at `main` lists it, has not withdrawn it, and is a record the release writer's parser accepts, and refuses any of its own files that is not a bare file name directly inside its folder. Such a manifest's build details (`built_at`, `built_with_model_package`, `built_with_core_package`) are read from its top level. At import, a remote or local manifest that names another release or build than the bundle's pinned folder is refused. Manifests published before this layout are read as before, and certified only from a repository with no `releases.json` at `main`.
+
+
+## [6.14.0] - 2026-11-05
+
+### Added
+
+- CI now fails a pull request whose head commit holds agent or job notes: a `.job/`, `.job-git/` or `.diag/` folder at any depth, or `HANDOFF.md`, `handoffs.jsonl`, `PR_BODY.md`, `PR-BODY.md`, `REPORT.md` or `PROGRESS.md` at the repository root. The new Agent notes workflow runs the default branch's `.github/check-agent-notes.sh` on every pull request, which the code workflow's path filter would skip, including when one is retargeted. It also checks main on every push and once a day, since a skip instruction in a commit message can skip the pull request and push runs but not the daily one. `.gitignore` now ignores the three folders.
+
+
 ## [6.13.0] - 2026-11-03
 
 ### Added
