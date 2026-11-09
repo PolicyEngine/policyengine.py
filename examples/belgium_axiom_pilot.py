@@ -37,7 +37,7 @@ from policyengine.tax_benefit_models.be import (
 DATASET = os.environ.get("MICROCOSM_BE_DATASET")
 if DATASET is None:
     DATASET = os.environ[
-        "POPULACE_BE_DATASET"  # compat: populace alias, remove after 6.16.1
+        "POPULACE_BE_DATASET"  # compat: populace alias, remove after 6.17.0
     ]
 RULESPEC = os.environ.get("RULESPEC_BE_ROOT", "~/TheAxiomFoundation/rulespec-be")
 

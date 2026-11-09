@@ -91,10 +91,10 @@ MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263 = LegacySPMSource(
     spm_universe_rule="acs_household_population",
 )
 
-POPULACE_US_2024_ACS_LOCAL_BUILD_O = (  # compat: populace alias, remove after 6.16.1
+POPULACE_US_2024_ACS_LOCAL_BUILD_O = (  # compat: populace alias, remove after 6.17.0
     MICROCOSM_US_2024_ACS_LOCAL_BUILD_O
 )
-POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263 = (  # compat: populace alias, remove after 6.16.1
+POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263 = (  # compat: populace alias, remove after 6.17.0
     MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263
 )
 

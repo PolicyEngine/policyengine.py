@@ -190,6 +190,6 @@ class MicrocosmBelgiumDataset(Dataset):
                 )
 
 
-PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.16.1
+PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.17.0
     MicrocosmBelgiumDataset
 )

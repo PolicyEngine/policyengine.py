@@ -17,7 +17,7 @@ from .model import (
     be_model,
 )
 
-PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.16.1
+PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.17.0
     MicrocosmBelgiumDataset
 )
 
@@ -28,7 +28,7 @@ __all__ = [
     "EMPLOYEE_SSC",
     "PIT_BEFORE_WITHHOLDING",
     "MicrocosmBelgiumDataset",
-    "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.16.1
+    "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.17.0
     "REMUNERATION",
     "be_model",
 ]

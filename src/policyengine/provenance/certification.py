@@ -119,13 +119,13 @@ MICROCOSM_RELEASE_REPOS = {
     "us": "policyengine/populace-us",
     "uk": "policyengine/populace-uk-private",
 }
-POPULACE_US_SOURCE_COVERAGE_FILE = (  # compat: populace alias, remove after 6.16.1
+POPULACE_US_SOURCE_COVERAGE_FILE = (  # compat: populace alias, remove after 6.17.0
     MICROCOSM_US_SOURCE_COVERAGE_FILE
 )
-POPULACE_DATA_PACKAGES = (  # compat: populace alias, remove after 6.16.1
+POPULACE_DATA_PACKAGES = (  # compat: populace alias, remove after 6.17.0
     MICROCOSM_DATA_PACKAGES
 )
-POPULACE_RELEASE_REPOS = (  # compat: populace alias, remove after 6.16.1
+POPULACE_RELEASE_REPOS = (  # compat: populace alias, remove after 6.17.0
     MICROCOSM_RELEASE_REPOS
 )
 # Region types a regional release serves. Their regions load the routed dataset
@@ -1764,7 +1764,7 @@ class MicrocosmDataProducerCertificationStrategy(DataProducerCertificationStrate
         )
 
 
-PopulaceDataProducerCertificationStrategy = (  # compat: populace alias, remove after 6.16.1
+PopulaceDataProducerCertificationStrategy = (  # compat: populace alias, remove after 6.17.0
     MicrocosmDataProducerCertificationStrategy
 )
 

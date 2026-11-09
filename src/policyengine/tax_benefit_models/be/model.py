@@ -50,7 +50,7 @@ from .datasets import (
     _person_with_household_weights,
 )
 
-PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.16.1
+PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.17.0
     MicrocosmBelgiumDataset
 )
 
