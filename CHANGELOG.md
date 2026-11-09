@@ -1,3 +1,14 @@
+## [6.17.0] - 2026-11-09
+
+### Added
+
+- `pe.us.calculate_household` accepts a list of groups for `marital_unit`, `family`, `spm_unit` and `tax_unit`. Each group is a mapping with `members`, a list of indexes into `people`, plus its own inputs, and each person belongs to exactly one group of the entity. An entity passed as a list comes back as a list of results in the same order, with one axis series per group under axes. A mapping still puts every person in one group, so existing calls return the same results. Callers can now give children and other adults their own marital units. With one marital unit for everyone, Medicaid's optional pathway for seniors and people with disabilities gave a single parent with one child the couple's income limit, and SSI added a child's earnings to the income of aged parents.
+
+### Changed
+
+- `calculate_household` now reads a list passed as `marital_unit`, `family`, `spm_unit` or `tax_unit` as a list of groups, so an empty list or a list of key-value pairs, which it used to turn into a mapping of inputs, now raises.
+
+
 ## [6.16.1] - 2026-11-09
 
 ### Changed
