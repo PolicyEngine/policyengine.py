@@ -25,7 +25,7 @@ interim exception in Step 2 holds).
   metadata and runs reachability `HEAD` checks against Hugging Face.
 - `HUGGING_FACE_TOKEN` (or `HF_TOKEN`) exported — required to regenerate the
   UK TRO in the `--include-tros` step and to run the UK data-release fetch in
-  the test suite. The US microcosm repo is public.
+  the test suite. The US release repo, `policyengine/populace-us`, is public.
 
 ## Step 1 — identify the releases
 

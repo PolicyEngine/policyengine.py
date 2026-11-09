@@ -36,9 +36,13 @@ from policyengine.tax_benefit_models.be import (
 
 DATASET = os.environ.get("MICROCOSM_BE_DATASET")
 if DATASET is None:
-    DATASET = os.environ[
+    DATASET = os.environ.get(
         "POPULACE_BE_DATASET"  # compat: populace alias, remove after 6.17.0
-    ]
+    )
+if DATASET is None:
+    raise SystemExit(
+        "Set MICROCOSM_BE_DATASET to the Microcosm-BE pilot dataset's .h5 path."
+    )
 RULESPEC = os.environ.get("RULESPEC_BE_ROOT", "~/TheAxiomFoundation/rulespec-be")
 
 # Ledger facts (PolicyEngine/ledger, Belgian publisher packages)

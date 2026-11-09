@@ -218,7 +218,7 @@ df.groupby("geo").apply(lambda g: (g["change"] * g["weight"]).sum() / g["weight"
 
 ## Scoping datasets to a region
 
-For reforms defined only over a sub-national slice, pass a scoping strategy to `Simulation`. `RowFilterStrategy` keeps only matching households. `WeightReplacementStrategy` is legacy matrix infrastructure and is not used by the UK Microcosm constituency or local-authority registry.
+For reforms defined only over a sub-national slice, pass a scoping strategy to `Simulation`. `RowFilterStrategy` keeps only matching households. `WeightReplacementStrategy` is legacy matrix infrastructure; neither the UK Microcosm constituency registry nor its local-authority registry uses it.
 
 ```python
 from policyengine.core.scoping_strategy import RowFilterStrategy

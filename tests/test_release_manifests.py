@@ -89,10 +89,10 @@ UK_EFRS_FRS_DATASET_URI = (
     "hf://policyengine/policyengine-uk-data-private/frs_2024_25.h5@1.58.1"
 )
 # The prior certified default, kept resolvable via dataset_overlays.
-UK_MICROCOSM_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
-UK_MICROCOSM_DATASET_URI = (
+UK_MICROCOSM_2023_RELEASE_ID = "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z"
+UK_MICROCOSM_2023_DATASET_URI = (
     f"hf://policyengine/populace-uk-private/populace_uk_2023.h5"
-    f"@{UK_MICROCOSM_RELEASE_ID}"
+    f"@{UK_MICROCOSM_2023_RELEASE_ID}"
 )
 UK_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 UK_CERTIFIED_DATASET_URI = (
@@ -363,7 +363,7 @@ class TestReleaseManifests:
         )
         assert (
             resolve_dataset_reference("uk", "populace_uk_2023")
-            == UK_MICROCOSM_DATASET_URI
+            == UK_MICROCOSM_2023_DATASET_URI
         )
         assert (
             resolve_dataset_reference("uk", "enhanced_frs_2024_25")

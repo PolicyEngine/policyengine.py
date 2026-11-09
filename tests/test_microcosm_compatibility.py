@@ -134,3 +134,16 @@ def test_belgium_example_accepts_both_dataset_environment_names(
 
     assert dataset_type.call_args.kwargs["filepath"] == expected_path
     simulation.run.assert_called_once_with()
+
+
+def test_belgium_example_names_the_new_variable_when_neither_is_set(monkeypatch):
+    for name in (
+        "MICROCOSM_BE_DATASET",
+        "POPULACE_BE_DATASET",  # compat: populace alias, remove after 6.17.0
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(SystemExit, match="MICROCOSM_BE_DATASET"):
+        runpy.run_path(
+            Path(__file__).resolve().parents[1] / "examples/belgium_axiom_pilot.py"
+        )
