@@ -1,3 +1,10 @@
+## [6.17.1] - 2026-11-10
+
+### Fixed
+
+- `Simulation.ensure()` now runs and saves the simulation after leaving the handler for its saved-output lookup, so an exception raised by `run()` or `save()` no longer carries the handled `FileNotFoundError`, `StaleOutputError` or unexpected load error as its implicit context, and its traceback no longer begins with the lookup's. What `ensure()` loads, runs, saves, caches and logs is unchanged.
+
+
 ## [6.17.0] - 2026-11-09
 
 ### Added
