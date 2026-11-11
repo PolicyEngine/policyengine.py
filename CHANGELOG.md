@@ -1,3 +1,10 @@
+## [6.17.2] - 2026-11-11
+
+### Changed
+
+- Test that each UK nation filter keeps exactly the households policyengine-uk's `country` formula assigns to that nation, for every value of its `Region` enum, so the registry's region lists and the model's mapping cannot drift apart unnoticed.
+
+
 ## [6.17.1] - 2026-11-10
 
 ### Fixed
