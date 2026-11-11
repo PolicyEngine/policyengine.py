@@ -1,5 +1,11 @@
 # Unified workflow for pushes to main.
 #
+# MAINTENANCE BRANCH COPY (release/uk-autumn-budget-2026): this branch publishes the Autumn
+# Budget 2026 dashboard's certified UK bundle (policyengine-uk 2.165.1) under a
+# version below main's line. Here the workflow runs on pushes to this branch,
+# never deploys docs or bumps the version (both are main-only), does not mark
+# the GitHub release as latest, and notifies only the Budget dashboard.
+#
 # Phase 1 (normal push): Lint + Test → Docs + Versioning
 #   Versioning commits with message "Update package version".
 #   The commit pushes to main, re-triggering this workflow for Phase 2.
@@ -18,7 +24,7 @@ name: Push to main
 on:
   push:
     branches:
-      - main
+      - release/uk-autumn-budget-2026
   workflow_dispatch:
 
 permissions:
@@ -85,7 +91,7 @@ jobs:
     name: Deploy documentation
     runs-on: ubuntu-latest
     needs: [Lint, Test]
-    if: github.event.head_commit.message != 'Update package version'
+    if: github.ref_name == 'main' && github.event.head_commit.message != 'Update package version'
     concurrency:
       group: 'pages'
       cancel-in-progress: false
@@ -116,7 +122,7 @@ jobs:
   Versioning:
     runs-on: ubuntu-latest
     needs: [Lint, Test]
-    if: github.event.head_commit.message != 'Update package version'
+    if: github.ref_name == 'main' && github.event.head_commit.message != 'Update package version'
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -236,8 +242,8 @@ jobs:
           VERSION=$(python .github/fetch_version.py)
           gh release create "$VERSION" \
             --title "v$VERSION" \
-            --notes "See [CHANGELOG.md](https://github.com/PolicyEngine/policyengine.py/blob/main/CHANGELOG.md) for details." \
-            --latest \
+            --notes "See [CHANGELOG.md](https://github.com/PolicyEngine/policyengine.py/blob/release/uk-autumn-budget-2026/CHANGELOG.md) for details." \
+            --latest=false \
             "release-assets/policyengine-bundle-$VERSION.json" \
             "release-assets/policyengine-bundle-$VERSION.constraints.txt" \
             "release-assets/policyengine-bundle-$VERSION.citation.txt" \
@@ -275,6 +281,7 @@ jobs:
           VERSION: ${{ needs.Publish.outputs.version }}
         run: python scripts/release_consumers.py payload --version "$VERSION" > "$RUNNER_TEMP/release-payload.json"
       - name: Generate GitHub App token
+        if: github.ref_name == 'main'
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -283,6 +290,7 @@ jobs:
           owner: PolicyEngine
           repositories: policyengine-api,policyengine-sim-api
       - name: Dispatch policyengine-release to consumer repos
+        if: github.ref_name == 'main'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION: ${{ needs.Publish.outputs.version }}
@@ -309,6 +317,7 @@ jobs:
           CONSUMER_REPOS: uk-autumn-budget-dashboard-2026
         run: bash .github/dispatch-policyengine-release.sh
       - name: Install the released bundle for the replay request
+        if: github.ref_name == 'main'
         continue-on-error: true
         id: released
         env:
