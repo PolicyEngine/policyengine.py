@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import logging
@@ -13,7 +14,7 @@ from .dynamic import Dynamic
 from .policy import Policy
 from .scoping_strategy import ScopingStrategy
 from .spm import SPMProvenance, SPMSelection
-from .tax_benefit_model_version import TaxBenefitModelVersion
+from .tax_benefit_model_version import StaleOutputError, TaxBenefitModelVersion
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,12 @@ class Simulation(BaseModel):
     )
     dynamic: Optional[Union[Dynamic, dict[str, Any]]] = Field(
         default=None,
-        description=("Behavioural-response overlay. Same dict shape as ``policy``."),
+        description=(
+            "Behavioural-response overlay. Same dict shape as ``policy``. "
+            "``None`` keeps the country model's defaults, which need not be "
+            "static: policyengine-uk realises capital gains at a "
+            "retention-rate elasticity of 1 by default."
+        ),
     )
     dataset: Dataset = None
 
@@ -124,12 +130,22 @@ class Simulation(BaseModel):
 
     @property
     def storage_id(self) -> str:
-        """Include resolved SPM settings in cache and saved-result identity."""
+        """Include resolved SPM settings, and a UK run's explicit capital
+        gains response settings, in cache and saved-result identity."""
+        storage_id = self.id
         config = self.spm_config
-        if config is None:
-            return self.id
-        encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
-        return f"{self.id}-spm-{hashlib.sha256(encoded).hexdigest()}"
+        if config is not None:
+            encoded = json.dumps(config, sort_keys=True, separators=(",", ":"))
+            storage_id += f"-spm-{hashlib.sha256(encoded.encode()).hexdigest()}"
+        if getattr(self.tax_benefit_model_version, "country_code", None) == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                simulation_request,
+            )
+
+            digest = simulation_request(self)["digest"]
+            if digest is not None:
+                storage_id += f"-cgr-{digest}"
+        return storage_id
 
     @model_validator(mode="after")
     def _compile_dict_reforms(self) -> "Simulation":
@@ -187,17 +203,28 @@ class Simulation(BaseModel):
                 else None
             )
             return
+        # Run after leaving the except blocks. An error raised inside one
+        # would carry the handled load error as its context, and Python
+        # would print the load error's traceback before its own.
         try:
             self.tax_benefit_model_version.load(self)
         except FileNotFoundError:
-            self.run()
-            self.save()
+            needs_run = True
+        except StaleOutputError as error:
+            # An expected rerun, such as the first after an upgrade that
+            # changes what saved outputs record.
+            logger.info("Running simulation %s again: %s", self.id, error)
+            needs_run = True
         except Exception:
             logger.warning(
                 "Unexpected error loading simulation %s; falling back to run()",
                 self.id,
                 exc_info=True,
             )
+            needs_run = True
+        else:
+            needs_run = False
+        if needs_run:
             self.run()
             self.save()
 
@@ -258,4 +285,19 @@ class Simulation(BaseModel):
         )
         if renames is not None:
             result["legacy_input_renames"] = dict(renames)
+        # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+        # US run applied, which change its SPM results. See
+        # ``policyengine.tax_benefit_models.us.legacy_spm``.
+        legacy_spm_declarations = (
+            getattr(self.output_dataset, "metadata", None) or {}
+        ).get("legacy_spm_declarations")
+        if legacy_spm_declarations is not None:
+            result["legacy_spm_declarations"] = dict(legacy_spm_declarations)
+        # The capital gains realisation response a UK run applied. See
+        # ``policyengine.tax_benefit_models.uk.capital_gains_responses``.
+        capital_gains_responses = (
+            getattr(self.output_dataset, "metadata", None) or {}
+        ).get("capital_gains_responses")
+        if capital_gains_responses is not None:
+            result["capital_gains_responses"] = copy.deepcopy(capital_gains_responses)
         return result

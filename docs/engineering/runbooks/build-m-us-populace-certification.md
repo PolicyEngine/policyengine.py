@@ -2,8 +2,10 @@
 
 Use this runbook to certify a new national US Populace release together with
 the shared ACS-local release used for state and congressional-district
-simulations. Read the [data certification](../skills/data-certification.md)
-skill first for validation semantics.
+simulations. For now, state and district simulations use the national release
+instead; see the interim exception in Step 2. Read the
+[data certification](../skills/data-certification.md) skill first for
+validation semantics.
 
 This historical filename is retained so existing links remain valid; the
 procedure itself is release-independent.
@@ -13,7 +15,8 @@ procedure itself is release-independent.
 Both release manifests have been published to `policyengine/populace-us`, and
 the model version used by the national release is known. The national release
 will remain the default dataset; the local-area release will remain
-non-default and be selected only for supported regional runs.
+non-default and be selected only for supported regional runs (none while the
+interim exception in Step 2 holds).
 
 ## Prerequisites
 

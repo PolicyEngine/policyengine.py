@@ -32,6 +32,11 @@ from policyengine.tax_benefit_models.us import (
 )
 
 
+def _format_rate(rate: float | None) -> str:
+    """Format a poverty rate; ``None`` means nobody in the group is measured."""
+    return "n/a" if rate is None else f"{rate:.4f}"
+
+
 def main():
     year = 2026
 
@@ -147,11 +152,15 @@ def main():
         analysis.reform_poverty.outputs,
         strict=True,
     ):
+        # A rate is None when nobody in the group is measured.
+        change = (
+            "n/a" if bp.rate is None or rp.rate is None else f"{rp.rate - bp.rate:+.4f}"
+        )
         print(
             f"  {bp.metric:30s}  "
-            f"baseline={bp.rate:.4f}  "
-            f"reform={rp.rate:.4f}  "
-            f"change={rp.rate - bp.rate:+.4f}"
+            f"baseline={_format_rate(bp.rate)}  "
+            f"reform={_format_rate(rp.rate)}  "
+            f"change={change}"
         )
 
     print("\n=== Inequality ===")

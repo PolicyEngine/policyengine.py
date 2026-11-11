@@ -24,6 +24,46 @@ def _is_normalized_version(value: Any) -> bool:
     )
 
 
+def shadowed_dataset_overlays(
+    release: Mapping[str, Any], overlays: Mapping[str, Any]
+) -> list[str]:
+    """The overlay names a country's certified release itself certifies.
+
+    Overlays are strictly additive: one may never shadow the certified default
+    or any certified dataset, so it can never alter resolution. The runtime
+    refuses a shadowing overlay, maintenance checks refuse it first, and
+    certification removes the overlays a new release supersedes.
+    """
+    certified = set(release.get("datasets") or {})
+    if release.get("default_dataset"):
+        certified.add(release["default_dataset"])
+    return sorted(set(overlays or {}) & certified)
+
+
+def shadowing_overlays_message(country: str, shadowed: list[str]) -> str:
+    """The one refusal for overlays that shadow certified datasets."""
+
+    return (
+        f"dataset_overlays.{country} shadows certified datasets: "
+        f"{', '.join(shadowed)}. Overlays must be additive and never change "
+        "resolution: remove those overlays."
+    )
+
+
+def validate_dataset_overlays(bundle: Mapping[str, Any]) -> None:
+    """Refuse an overlay that shadows a certified dataset name.
+
+    The runtime refuses such a bundle on every release-manifest read, so
+    ``import policyengine`` would fail; maintenance checks refuse it first.
+    """
+    overlays = bundle.get("dataset_overlays") or {}
+    for country, entries in overlays.items():
+        release = (bundle.get("data_releases") or {}).get(country) or {}
+        shadowed = shadowed_dataset_overlays(release, entries)
+        if shadowed:
+            raise ValueError(shadowing_overlays_message(country, shadowed))
+
+
 def validate_spm_configuration(configuration: Any) -> None:
     """Validate JSON defaults using only the standard library.
 

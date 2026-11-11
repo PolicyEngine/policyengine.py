@@ -1,0 +1,502 @@
+# Frozen d1344-replay-regressions-v1 evaluator at 3a278490102f.
+# Loaded only as a differential test oracle; production never imports this.
+from __future__ import annotations
+
+def _is_the_gap(row: FlaggedRow, gap: Mapping[str, Any]) -> bool:
+    """Whether a coverage row is scorecard's own record of a mixed known gap.
+
+    Where one side is inert and the other missing, scorecard compares an
+    inert artifact (identical worlds, a total of exactly £0) with none, and
+    writes a coverage row with £0 on the inert side and nothing on the
+    other. Any other shape at a known gap is judged as usual.
+    """
+
+    if gap["candidate"] == "inert" and gap["why"] == "missing in the base":
+        return row.base_gbp is None and row.head_gbp == 0
+    if gap["candidate"] == "missing" and gap["why"] == "inert in the base":
+        return row.head_gbp is None and row.base_gbp == 0
+    return False
+
+def evaluate_replay_receipt(
+    request: ReplayQualificationRequest,
+    status: ReplayStatus,
+    receipt: ReplayReceipt,
+) -> GateResult:
+    """The ``replay`` gate for a terminal replay status and its receipt.
+
+    The receipt must answer this exact request, be the bytes the status
+    names, and report an execution of exactly the requested artifacts. Its
+    contents are then judged by policy ``d1344-replay-regressions-v1``
+    (``data/qualification/replay_policy.md``):
+
+    - fail on rejected or failed replays, mapping flags, lost results
+      (a coverage row with a base value and no candidate value), lost
+      responses (a measure-year total of exactly £0 against a base at least
+      the diff's bound away, which a known gap never excuses, or a
+      measure-year the candidate lists as inert, unless it is a known gap)
+      and incomplete grids (unless every gap in them is known). A gap is
+      known when the base's own record (``diff.base_events``) lists the same
+      measure-year as inert, or missing and supported. A known gap does not
+      block, and neither do the rows by which scorecard records a mixed one
+      (``_is_the_gap``, and the base-only inertness on a valueless row where
+      the candidate is missing and the base inert); any candidate value
+      other than £0 at a known gap fails as a contradiction, and any other
+      coverage row with a base value and no candidate value, even £0, is a
+      lost result;
+    - send every other flagged move to review.
+
+    Unsupported years are reported, never failed on their own. The gate's
+    details record the policy id, the policy text's SHA-256, the known gaps
+    and the rows that record them, the regressions and the review items.
+
+    The receipt is read as a whole: a receipt that contradicts itself fails
+    (failures listed under a complete integrity, ``flag_counts`` that differ
+    from its rows' flags, supported years with no artifacts, nothing
+    replayed at all) or contradicts the request (a comparison base other
+    than the ``compare_to`` asked for).
+    """
+
+    request_id = request.request_id
+    problems: list[str] = []
+    if status.request_id != request_id or receipt.request_id != request_id:
+        problems.append("status or receipt answers a different request")
+    if not status.terminal:
+        problems.append(f"replay is still {status.status}")
+    if status.status != receipt.status and status.terminal:
+        problems.append("status and receipt disagree on the outcome")
+    if receipt.computed_receipt_sha256 != receipt.receipt_sha256:
+        problems.append("receipt_sha256 does not match the receipt bytes")
+    if status.receipt_sha256 != receipt.receipt_sha256:
+        problems.append("status names different receipt bytes")
+
+    details: dict[str, Any] = {
+        "request_id": request_id,
+        "receipt_sha256": receipt.receipt_sha256,
+        "receipt_commit": status.receipt_commit,
+        "status": receipt.status,
+        "integrity": receipt.integrity.status,
+        "policy": REPLAY_POLICY_ID,
+        "policy_sha256": replay_policy_sha256(),
+        "known_gaps": [],
+        "regressions": [],
+        "review_items": [],
+    }
+
+    def fail_early(kind: str, summary: str, **extra: Any) -> GateResult:
+        """A failure decided before the receipt's contents are judged; the
+        policy record lists it as the regression."""
+
+        return GateResult(
+            gate_id="replay",
+            status="fail",
+            summary=summary,
+            details={
+                **details,
+                **extra,
+                "regressions": [{"kind": kind, "why": summary}],
+            },
+        )
+
+    if problems:
+        return fail_early(
+            "unbound",
+            "Replay receipt is not bound to this request: " + "; ".join(problems),
+            binding_problems=problems,
+        )
+    if receipt.status == "rejected":
+        assert receipt.rejection is not None
+        return fail_early(
+            "rejected",
+            f"Replay rejected the candidate ({receipt.rejection.code}): "
+            f"{receipt.rejection.detail}",
+            rejection=receipt.rejection.document(),
+        )
+
+    execution = receipt.execution
+    if execution is None:
+        codes = sorted({failure.code for failure in receipt.integrity.failures})
+        return fail_early(
+            "failed",
+            "Replay failed before the candidate was identified: "
+            + (", ".join(codes) or "no failure codes"),
+            integrity_failures=[
+                failure.document() for failure in receipt.integrity.failures
+            ],
+        )
+    candidate = request.candidate
+    mismatches: list[str] = []
+    packages = {
+        "policyengine": (
+            execution.packages.policyengine,
+            candidate.policyengine.version,
+            (
+                candidate.policyengine.source.pypi.wheel_sha256
+                if candidate.policyengine.source.pypi is not None
+                else None
+            ),
+        ),
+        "policyengine-uk": (
+            execution.packages.policyengine_uk,
+            candidate.policyengine_uk.version,
+            candidate.policyengine_uk.wheel_sha256,
+        ),
+        "policyengine-core": (
+            execution.packages.policyengine_core,
+            candidate.policyengine_core.version,
+            candidate.policyengine_core.wheel_sha256,
+        ),
+    }
+    for name, (installed, version, wheel) in packages.items():
+        if installed.version != version:
+            mismatches.append(f"{name} {installed.version} ran, not {version}")
+        if wheel is not None and installed.wheel_sha256 != wheel:
+            mismatches.append(
+                f"{name} wheel hash is missing from the receipt"
+                if installed.wheel_sha256 is None
+                else f"{name} wheel hash differs from the request"
+            )
+    if (
+        execution.packaged_bundle_manifest_sha256
+        != candidate.policyengine.packaged_bundle_manifest_sha256
+    ):
+        mismatches.append("packaged bundle manifest differs from the request")
+    if execution.dataset_sha256 != candidate.data.sha256:
+        mismatches.append("dataset bytes differ from the request")
+    if execution.release_bundle != candidate.expected_release_bundle:
+        mismatches.append("release bundle differs from the expected release bundle")
+    if mismatches:
+        return fail_early(
+            "unbound",
+            "Replay ran something other than the candidate: " + "; ".join(mismatches),
+            execution_mismatches=mismatches,
+        )
+
+    if receipt.status == "failed" or receipt.integrity.status == "failed":
+        codes = sorted({failure.code for failure in receipt.integrity.failures})
+        return fail_early(
+            "failed",
+            "Replay integrity failed: " + (", ".join(codes) or "no failure codes"),
+            integrity_failures=[f.document() for f in receipt.integrity.failures],
+        )
+    corpus = receipt.corpus
+    assert corpus is not None
+    incomplete_events = sorted(
+        name
+        for name, event in corpus.events.items()
+        if not event.full_supported_grid_complete
+    )
+    unsupported = sorted(
+        (name, item.year, item.reason)
+        for name, event in corpus.events.items()
+        for item in event.unsupported_years
+    )
+    inert = sorted(
+        (name, item.measure_key, item.year)
+        for name, event in corpus.events.items()
+        for item in event.inert_measure_years
+    )
+    details.update(
+        {
+            "corpus_version": corpus.corpus_version,
+            "events": sorted(corpus.events),
+            "unsupported_years": [list(item) for item in unsupported],
+            "inert_measure_years": [list(item) for item in inert],
+        }
+    )
+    # A receipt whose parts disagree is not evidence of anything.
+    contradictions: list[str] = []
+    if receipt.integrity.failures:
+        codes = sorted({failure.code for failure in receipt.integrity.failures})
+        contradictions.append(
+            f"integrity is complete but lists failures ({', '.join(codes)})"
+        )
+    replayed = 0
+    for name, event in sorted(corpus.events.items()):
+        replayed += event.artifacts
+        listed_missing = {
+            (item.measure_key, item.year) for item in event.missing_measure_years or ()
+        } - {
+            (item.measure_key, item.year)
+            for item in event.unsupported_measure_years or ()
+        }
+        if event.full_supported_grid_complete and (
+            event.inert_measure_years or listed_missing
+        ):
+            contradictions.append(
+                f"{name} is complete but lists inert or missing measure-years"
+            )
+        if event.supported_years and event.artifacts == 0:
+            contradictions.append(f"{name} has supported years but no artifacts")
+        if not event.supported_years and not event.unsupported_years:
+            contradictions.append(f"{name} names no years at all")
+    if replayed == 0:
+        contradictions.append("no measure-year was replayed")
+    counts = receipt.diff.flag_counts.document() if receipt.diff is not None else {}
+    rows = receipt.diff.flagged_rows if receipt.diff is not None else []
+    row_counts: dict[str, int] = {}
+    for row in rows:
+        for kind in row.flags:
+            row_counts[kind] = row_counts.get(kind, 0) + 1
+    # Scorecard's counters are tallies of its rows' flags, so any difference,
+    # either way, is a receipt that contradicts itself.
+    for kind in sorted(set(row_counts) | {kind for kind, n in counts.items() if n}):
+        seen, counted = row_counts.get(kind, 0), counts.get(kind, 0)
+        if seen != counted:
+            contradictions.append(
+                f"{seen} flagged row(s) carry {kind} but flag_counts says {counted}"
+            )
+    details["flag_counts"] = counts
+    details["flagged_row_counts"] = row_counts
+    if receipt.diff is not None:
+        details["base_variant_id"] = receipt.diff.base_variant_id
+        details["diff_sha256"] = receipt.diff.diff_sha256
+    if request.compare_to != "latest_certified":
+        base = receipt.diff.base_variant_id if receipt.diff is not None else None
+        if base != request.compare_to:
+            contradictions.append(
+                f"the request asked for a comparison with {request.compare_to}, "
+                f"but the receipt compares with {base}"
+            )
+    if contradictions:
+        return fail_early(
+            "contradiction",
+            "Replay receipt contradicts itself or the request: "
+            + "; ".join(contradictions),
+            contradictions=contradictions,
+        )
+    # A gap is known only where the base's own grid record (scorecard#183)
+    # lists the same measure-year as inert, or missing and supported, for the
+    # same event. A legacy-layout base, or an event the base did not replay,
+    # has no record, so none of its gaps are known.
+    base_events = (receipt.diff.base_events or {}) if receipt.diff is not None else {}
+
+    def pairs(items: Optional[Sequence[MeasureYear]]) -> set[tuple[str, int]]:
+        return {(item.measure_key, item.year) for item in items or ()}
+
+    def missing_supported(record: Any) -> Optional[set[tuple[str, int]]]:
+        if record.missing_measure_years is None:
+            return None
+        return pairs(record.missing_measure_years) - pairs(
+            record.unsupported_measure_years
+        )
+
+    known_gaps: list[dict[str, Any]] = []
+    for name, event in sorted(corpus.events.items()):
+        base = base_events.get(name)
+        if base is None:
+            continue
+        base_inert = pairs(base.inert_measure_years)
+        base_missing = missing_supported(base) or set()
+        event_inert = pairs(event.inert_measure_years)
+        for measure_key, year in sorted(
+            event_inert | (missing_supported(event) or set())
+        ):
+            if (measure_key, year) in base_inert:
+                why = "inert in the base"
+            elif (measure_key, year) in base_missing:
+                why = "missing in the base"
+            else:
+                continue
+            known_gaps.append(
+                {
+                    "event": name,
+                    "measure_key": measure_key,
+                    "year": year,
+                    "candidate": "inert"
+                    if (measure_key, year) in event_inert
+                    else "missing",
+                    "why": why,
+                    "base_staging_manifest_sha256": base.staging_manifest_sha256,
+                }
+            )
+    gaps_at = {
+        (gap["event"], gap["measure_key"], gap["year"]): gap for gap in known_gaps
+    }
+    known = set(gaps_at)
+    listed_inert = set(inert)
+    candidate_inert = {where for where in listed_inert if where not in known}
+    regressions: list[dict[str, Any]] = []
+    review_items: list[dict[str, Any]] = []
+
+    def item(kind: str, row: Any = None, **fields: Any) -> dict[str, Any]:
+        record: dict[str, Any] = {"kind": kind}
+        if row is not None:
+            record.update(
+                event=row.event,
+                measure_key=row.measure_key,
+                year=row.year,
+                level=row.level,
+                key=row.key,
+                flags=sorted(row.flags),
+                base_gbp=row.base_gbp,
+                head_gbp=row.head_gbp,
+            )
+        record.update(fields)
+        return record
+
+    for event, measure_key, year in sorted(candidate_inert):
+        regressions.append(
+            item(
+                "lost_response",
+                event=event,
+                measure_key=measure_key,
+                year=year,
+                why="inert in the candidate",
+            )
+        )
+    for name in incomplete_events:
+        event = corpus.events[name]
+        missing = missing_supported(event)
+        if missing is None:
+            regressions.append(
+                item(
+                    "incomplete",
+                    event=name,
+                    why="the supported grid is incomplete and the receipt does "
+                    "not list its missing measure-years",
+                )
+            )
+            continue
+        gaps = pairs(event.inert_measure_years) | missing
+        unknown = sorted(gap for gap in gaps if (name, *gap) not in known)
+        if not gaps or unknown:
+            regressions.append(
+                item(
+                    "incomplete",
+                    event=name,
+                    why="the supported grid is incomplete and not every inert "
+                    "or missing measure-year in it is a known gap",
+                    measure_years=[list(gap) for gap in unknown],
+                )
+            )
+    if receipt.integrity.status == "incomplete" and not incomplete_events:
+        regressions.append(
+            item("incomplete", why="integrity is incomplete with no incomplete event")
+        )
+    gap_rows: list[dict[str, Any]] = []
+    for row in rows:
+        flags = set(row.flags)
+        where = (row.event, row.measure_key, row.year)
+        gap = gaps_at.get(where)
+        lost = False
+        if gap is not None and "coverage" in flags and _is_the_gap(row, gap):
+            # Scorecard's own expression of a mixed known gap: one side has no
+            # artifact and the other an inert one (identical worlds, £0).
+            flags.discard("coverage")
+        if flags & BLOCKING_REPLAY_FLAGS:
+            regressions.append(item("mapping", row))
+            lost = True
+        if "coverage" in flags and row.base_gbp is not None and row.head_gbp is None:
+            regressions.append(item("lost_result", row))
+            lost = True
+        if gap is not None and row.head_gbp not in (None, 0):
+            # The candidate's record lists the measure-year as inert or
+            # missing, so no row can hold a candidate value for it (an inert
+            # artifact's effects are exactly £0; a missing one has none).
+            regressions.append(
+                item(
+                    "contradiction",
+                    row,
+                    why="a candidate value for a measure-year its record lists "
+                    "as a gap",
+                )
+            )
+            lost = True
+        zero_total = (
+            row.level == "measure_year"
+            and row.head_gbp == 0
+            and row.base_gbp is not None
+            and abs(row.base_gbp)
+            >= max(REPLAY_ABSOLUTE_BOUND_GBP, REPLAY_RELATIVE_BOUND * abs(row.base_gbp))
+        )
+        if zero_total and where in known:
+            # A base whose own record lists the measure-year as a gap cannot
+            # also hold a material value for it: the receipt contradicts
+            # itself, so the gap does not excuse the loss.
+            regressions.append(
+                item(
+                    "lost_response",
+                    row,
+                    why="£0 against a material base value, though the base's "
+                    "record lists the measure-year as a gap",
+                )
+            )
+            lost = True
+        elif where in listed_inert and zero_total:
+            # The candidate's own inert list decides: a lost response above.
+            lost = True
+        elif zero_total:
+            regressions.append(item("lost_response", row, why="£0 against the base"))
+            lost = True
+        if where in listed_inert or (
+            gap is not None
+            and gap["candidate"] == "missing"
+            and gap["why"] == "inert in the base"
+            and row.base_gbp is None
+            and row.head_gbp is None
+        ):
+            # The candidate's inert list decides its inertness (a lost response
+            # above, or a known gap). Where the candidate is missing and the
+            # base inert, a base-only inertness flag on a row with no value on
+            # either side (as scorecard writes it) is the known gap itself.
+            # The row's other flags are judged as usual.
+            flags = flags - {"inertness"}
+        if gap is not None and flags != set(row.flags):
+            # A row the known gap accounts for, in whole or in part.
+            gap_rows.append(item("known_gap_row", row))
+        if not lost and flags & REVIEW_REPLAY_FLAGS:
+            if "coverage" in flags and row.base_gbp is None:
+                kind = (
+                    "coverage_gain"
+                    if row.head_gbp is not None
+                    else "coverage_without_values"
+                )
+            elif flags == {"inertness"}:
+                kind = "base_only_inertness"
+            else:
+                kind = "flagged_move"
+            review_items.append(item(kind, row))
+    details.update(
+        {
+            "policy": REPLAY_POLICY_ID,
+            "policy_sha256": replay_policy_sha256(),
+            "known_gaps": known_gaps,
+            "known_gap_rows": gap_rows,
+            "regressions": regressions,
+            "review_items": review_items,
+        }
+    )
+
+    def tally(records: Sequence[dict[str, Any]]) -> str:
+        kinds: dict[str, int] = {}
+        for record in records:
+            kinds[record["kind"]] = kinds.get(record["kind"], 0) + 1
+        return ", ".join(f"{kind} {n}" for kind, n in sorted(kinds.items()))
+
+    if regressions:
+        return GateResult(
+            gate_id="replay",
+            status="fail",
+            summary="Replay regressions: " + tally(regressions),
+            details=details,
+        )
+    if review_items:
+        return GateResult(
+            gate_id="replay",
+            status="needs_review",
+            summary="Replay moves need review: " + tally(review_items),
+            details=details,
+        )
+    if receipt.diff is None:
+        return GateResult(
+            gate_id="replay",
+            status="needs_review",
+            summary="Replay completed but reported no diff against a certified variant.",
+            details=details,
+        )
+    return GateResult(
+        gate_id="replay",
+        status="pass",
+        summary=f"Replayed {len(corpus.events)} event(s) with no flags against {receipt.diff.base_variant_id}.",
+        details=details,
+    )

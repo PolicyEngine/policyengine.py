@@ -6,10 +6,28 @@ import pandas as pd
 import pytest
 from microdf import MicroDataFrame
 
+from policyengine.data.uk_geography_assets import packaged_uk_area_list_path
 from policyengine.outputs.constituency_impact import (
+    ConstituencyImpact,
     compute_uk_constituency_impacts,
 )
 from policyengine.outputs.uk_geography_assets import CONSTITUENCY_ASSET_SPEC
+
+# These outputs are deprecated: they are not disclosure-controlled. The tests
+# below still pin their behaviour until they are removed.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*not disclosure-controlled.*:DeprecationWarning"
+)
+
+# Every key of a constituency result row. Rows carry no hex-map position:
+# the app places areas from its own layout files.
+CONSTITUENCY_RESULT_KEYS = {
+    "constituency_code",
+    "constituency_name",
+    "average_household_income_change",
+    "relative_household_income_change",
+    "population",
+}
 
 
 def _make_sim(household_data: dict) -> MagicMock:
@@ -31,7 +49,10 @@ def _write_lookup_csv(tmp_path, rows) -> str:
 
 
 def test_basic_constituency_longwise_grouping(tmp_path):
-    """Two constituencies with household geography codes produce metrics."""
+    """Two constituencies with household geography codes produce metrics.
+
+    The lookup's ``x`` and ``y`` columns are ignored.
+    """
     baseline = _make_sim(
         {
             "constituency_code_oa": ["C001", "C001", b"C002", ""],
@@ -69,14 +90,14 @@ def test_basic_constituency_longwise_grouping(tmp_path):
     c1 = by_code["C001"]
     assert abs(c1["average_household_income_change"] - 2000.0) < 1e-6
     assert c1["constituency_name"] == "Constituency A"
-    assert c1["x"] == 10
-    assert c1["y"] == 20
     assert c1["population"] == 3.0
 
     c2 = by_code["C002"]
     assert abs(c2["average_household_income_change"] - 3000.0) < 1e-6
     assert c2["constituency_name"] == "Constituency B"
     assert c2["population"] == 3.0
+    for row in (c1, c2):
+        assert set(row) == CONSTITUENCY_RESULT_KEYS
 
 
 def test_zero_weight_constituency_skipped(tmp_path):
@@ -98,8 +119,8 @@ def test_zero_weight_constituency_skipped(tmp_path):
     csv_path = _write_lookup_csv(
         tmp_path,
         [
-            {"code": "C001", "name": "A", "x": 0, "y": 0},
-            {"code": "C002", "name": "B", "x": 0, "y": 0},
+            {"code": "C001", "name": "A"},
+            {"code": "C002", "name": "B"},
         ],
     )
 
@@ -132,7 +153,7 @@ def test_relative_change(tmp_path):
     )
     csv_path = _write_lookup_csv(
         tmp_path,
-        [{"code": "C001", "name": "A", "x": 0, "y": 0}],
+        [{"code": "C001", "name": "A"}],
     )
 
     impact = compute_uk_constituency_impacts(
@@ -148,31 +169,29 @@ def test_relative_change(tmp_path):
     )
 
 
-def test_compute_uses_local_lookup_csv_without_matrix_or_gcs(
+def test_compute_labels_with_packaged_area_list_by_default(
     tmp_path,
 ):
-    """The helper can enrich labels from local CSV without matrix assets."""
+    """Labels come from the packaged list, not local or downloaded files."""
     baseline = _make_sim(
         {
-            "constituency_code_oa": ["C001", "C002"],
+            "constituency_code_oa": ["E14001063", "UNLISTED"],
             "household_net_income": [100.0, 200.0],
             "household_weight": [1.0, 1.0],
         }
     )
     reform = _make_sim(
         {
-            "constituency_code_oa": ["C001", "C002"],
+            "constituency_code_oa": ["E14001063", "UNLISTED"],
             "household_net_income": [110.0, 220.0],
             "household_weight": [1.0, 1.0],
         }
     )
-    csv_path = tmp_path / CONSTITUENCY_ASSET_SPEC.lookup_csv_filename
-    pd.DataFrame(
-        [
-            {"code": "C001", "name": "A", "x": 0, "y": 0},
-            {"code": "C002", "name": "B", "x": 1, "y": 1},
-        ]
-    ).to_csv(csv_path, index=False)
+    # A stale lookup in a local search dir (the old GCS download cache) is
+    # ignored.
+    pd.DataFrame([{"code": "E14001063", "name": "Stale"}]).to_csv(
+        tmp_path / CONSTITUENCY_ASSET_SPEC.lookup_csv_filename, index=False
+    )
 
     with patch(
         "policyengine.outputs.uk_geography_impact.default_local_search_dirs",
@@ -184,9 +203,13 @@ def test_compute_uses_local_lookup_csv_without_matrix_or_gcs(
             download_missing_assets=True,
         )
 
-    assert impact.constituency_csv_path == str(csv_path)
-    assert len(impact.constituency_results) == 2
-    assert impact.constituency_results[0]["constituency_name"] == "A"
+    assert impact.constituency_csv_path == packaged_uk_area_list_path("constituency")
+    assert impact.constituency_csv_path.endswith("constituencies_2024.csv")
+    by_code = {row["constituency_code"]: row for row in impact.constituency_results}
+    assert by_code["E14001063"]["constituency_name"] == "Aldershot"
+    assert by_code["UNLISTED"]["constituency_name"] == "UNLISTED"
+    for row in by_code.values():
+        assert set(row) == CONSTITUENCY_RESULT_KEYS
 
 
 def test_compute_constituency_impacts_does_not_require_lookup_csv_or_matrix(
@@ -224,8 +247,7 @@ def test_compute_constituency_impacts_does_not_require_lookup_csv_or_matrix(
     result = impact.constituency_results[0]
     assert result["constituency_code"] == "C001"
     assert result["constituency_name"] == "C001"
-    assert result["x"] is None
-    assert result["y"] is None
+    assert set(result) == CONSTITUENCY_RESULT_KEYS
 
 
 def test_compute_constituency_impacts_requires_longwise_geography_column():
@@ -242,9 +264,35 @@ def test_compute_constituency_impacts_requires_longwise_geography_column():
         }
     )
 
-    with pytest.raises(ValueError, match="constituency_code_oa"):
+    with pytest.raises(ValueError, match="constituency_code_oa") as error:
         compute_uk_constituency_impacts(
             baseline,
             reform,
             download_missing_assets=False,
         )
+    # The error names the dataset whose households carry the codes.
+    from policyengine.provenance.manifest import uk_area_dataset_hint
+
+    assert uk_area_dataset_hint("constituency") in str(error.value)
+
+
+def test_constituency_impacts_warn_that_they_are_not_disclosure_controlled(caplog):
+    household = {
+        "household_net_income": [100.0],
+        "household_weight": [1.0],
+        "constituency_code_oa": ["A001"],
+    }
+    baseline, reform = _make_sim(household), _make_sim(household)
+    message = "not disclosure-controlled.*compute_uk_geography_disclosure"
+
+    with pytest.warns(DeprecationWarning, match=message):
+        compute_uk_constituency_impacts(baseline, reform, download_missing_assets=False)
+    impact = ConstituencyImpact.model_construct(
+        baseline_simulation=baseline, reform_simulation=reform
+    )
+    with pytest.warns(DeprecationWarning, match=message):
+        impact.run()
+    # policyengine-core silences Python warnings once a country model loads,
+    # so the message must also reach the log.
+    logged = [record.getMessage() for record in caplog.records]
+    assert sum("not disclosure-controlled" in line for line in logged) == 2

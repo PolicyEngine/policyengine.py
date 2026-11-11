@@ -13,6 +13,7 @@ from policyengine.provenance.manifest import (
 )
 from policyengine.provenance.trace import build_trace_tro_from_release_bundle
 
+from .entity import Entity
 from .tax_benefit_model import TaxBenefitModel
 
 if TYPE_CHECKING:
@@ -22,6 +23,16 @@ if TYPE_CHECKING:
     from .region import Region, RegionRegistry
     from .simulation import Simulation
     from .variable import Variable
+
+
+class StaleOutputError(ValueError):
+    """A saved output that ``load()`` refuses to reuse, and why.
+
+    The output was calculated under something that has since changed (a
+    model release, settings, or how outputs are recorded).
+    ``Simulation.ensure()`` runs the simulation again and logs the reason at
+    INFO, as an expected rerun rather than an error.
+    """
 
 
 class TaxBenefitModelVersion(BaseModel):
@@ -36,6 +47,17 @@ class TaxBenefitModelVersion(BaseModel):
     variables: list["Variable"] = Field(default_factory=list)
     parameters: list["Parameter"] = Field(default_factory=list)
     parameter_nodes: list["ParameterNode"] = Field(default_factory=list)
+    entities: list[Entity] = Field(
+        default_factory=list,
+        description="The country model's entities, in the country package's order",
+    )
+    basic_inputs: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Variables a household builder shows by default, as the country "
+            "package declares them"
+        ),
+    )
 
     # Region registry for geographic simulations
     region_registry: "Optional[RegionRegistry]" = Field(
@@ -77,6 +99,8 @@ class TaxBenefitModelVersion(BaseModel):
         )
 
     def load(self, simulation: "Simulation"):
+        """Load a saved output: ``FileNotFoundError`` when there is none,
+        ``StaleOutputError`` when it must not be reused."""
         raise NotImplementedError(
             "The TaxBenefitModel class must define a method to load simulations."
         )

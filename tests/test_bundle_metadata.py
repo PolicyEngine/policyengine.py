@@ -66,12 +66,12 @@ def test_bundle_manifest_carries_uk_data_release():
     release = bundle.get_current_bundle()["data_releases"]["uk"]
 
     assert release["data_producer"] == "populace"
-    assert release["data_package"]["name"] == "policyengine-uk-data"
-    assert release["data_package"]["repo_type"] == "model"
-    assert release["default_dataset"] == "enhanced_frs_2024_25"
-    assert release["version"].startswith("policyengine-uk-data-")
+    assert release["data_package"]["name"] == "microcosm-data"
+    assert release["data_package"]["repo_type"] == "dataset"
+    assert release["default_dataset"] == "microcosm_uk_2024_25"
+    assert release["version"].startswith("microcosm-uk-2024-25-national-")
     assert release["default_dataset_uri"].startswith(
-        "hf://policyengine/policyengine-uk-data-private/"
+        "hf://policyengine/populace-uk-private/"
     )
 
 
@@ -143,3 +143,21 @@ def test_export_release_assets_writes_bundle_assets(monkeypatch, tmp_path):
         "PolicyEngine bundle"
         in (tmp_path / f"policyengine-bundle-{version}.citation.txt").read_text()
     )
+
+
+def test_dataset_overlays_may_not_shadow_certified_names():
+    import copy
+
+    import pytest
+
+    from policyengine.provenance.bundle_validation import validate_dataset_overlays
+
+    current = bundle.get_current_bundle()
+    validate_dataset_overlays(current)
+
+    release = current["data_releases"]["uk"]
+    for name in (release["default_dataset"], next(iter(release["datasets"]))):
+        shadowing = copy.deepcopy(current)
+        shadowing["dataset_overlays"]["uk"][name] = {"path": f"{name}.h5"}
+        with pytest.raises(ValueError, match=f"shadows certified datasets: {name}"):
+            validate_dataset_overlays(shadowing)

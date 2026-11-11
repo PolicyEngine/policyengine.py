@@ -237,9 +237,10 @@ sibling `dataset_overlays.{country}` map:
 `resolve_dataset_reference` and `managed_microsimulation` load them by name at
 their own pinned, sha-verified revision. Overlays are strictly additive: an
 overlay may not shadow the certified default or any certified dataset, so
-default resolution is untouched. Because certification only rewrites
-`data_releases`, overlays survive re-certification without any manual re-add
-step.
+default resolution is untouched. Certification keeps every overlay except one
+whose name the new release certifies itself: it removes that overlay and says
+so. If a later release stops certifying the name, re-add the overlay;
+certification warns about every name that stops resolving.
 
 Datasets used automatically for a region type are not overlays. They are
 certified into `data_releases.{country}.datasets`, and
@@ -247,6 +248,15 @@ certified into `data_releases.{country}.datasets`, and
 path. The national `default_dataset` remains unchanged. Ordinary bundle
 installation downloads only that national default; a regional runtime is
 responsible for materializing the additional certified dataset.
+
+`data_releases.{country}.regional_release_kind` records how certification
+routed those region types: `local_area` for a non-default local-area release,
+and `area_coded_national` (UK only) for another release's national dataset
+whose households carry area codes, certified together with that release's
+area weight matrices at their own repo and revision. It is absent when nothing
+is routed, for a legacy US per-state release, and in an entry certified before
+the field existed (as the US ACS-local routing is until its next
+certification).
 
 Cross-package overlays must declare `data_package_name` and `repo_type`
 explicitly. Ordinary artifacts inherit these values from the country release's

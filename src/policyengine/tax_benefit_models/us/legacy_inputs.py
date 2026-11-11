@@ -40,6 +40,12 @@ import pandas as pd
 #: US default ``populace-us-2024-spm-20260915`` stores the take-up draw as
 #: ``would_claim_wic`` only, so without this mapping every WIC-eligible person
 #: takes WIC up (PolicyEngine/microcosm#1026).
+#:
+#: Each ``create_datasets`` year file is stamped with this register (see
+#: :data:`YEAR_FILE_STAMP_H5_DATASET`), so any change to it (an entry added,
+#: removed or pointed at another live input) makes every year file stale, and
+#: ``ensure_datasets`` cuts them all again. An entry that no longer applies
+#: turns itself off, so leave it in place rather than remove it.
 LEGACY_INPUT_RENAMES: dict[str, str] = {
     "would_claim_wic": "takes_up_wic_if_eligible",
 }
@@ -59,9 +65,36 @@ RENAMES_RECORD_KEY = "legacy_input_renames"
 #: year file). Files written before this mapping existed have none, so its
 #: absence marks them as calculated or cut without it: ``Simulation.load()``
 #: refuses such an output, ``load_datasets`` refuses such a year file and
-#: ``ensure_datasets`` regenerates it. A new register entry would need those
-#: checks to tell files written before it apart as well.
+#: ``ensure_datasets`` regenerates it.
+#:
+#: The record shows that a file was written with the mapping, not under which
+#: register. Year files also carry :data:`YEAR_FILE_STAMP_H5_DATASET`, which
+#: ties them to the register they were cut under. Saved outputs carry only
+#: this record, so an output saved before a register entry was added is still
+#: reused.
 RENAMES_H5_DATASET = "policyengine_legacy_input_renames"
+
+#: H5 dataset stamping a ``create_datasets`` year file, as UTF-8 JSON
+#: ``{"register": {legacy: live, ...}, "revision": int}``: the whole register
+#: the file was cut under and its year-file format revision (see
+#: :func:`year_file_stamp`). ``create_datasets`` writes it after the tables and
+#: the renames record, so a year file whose write stopped part-way has none.
+#: ``ensure_datasets`` cuts a year file again, and ``load_datasets`` refuses
+#: it, unless its stamp equals this release's (see
+#: :func:`year_file_stamp_problem`). ``PolicyEngineUSDataset.save()`` neither
+#: writes nor keeps it, so saving a year file again drops the stamp.
+YEAR_FILE_STAMP_H5_DATASET = "policyengine_year_file_stamp"
+
+#: Format revision of ``create_datasets`` year files, stored in their stamp.
+#: Raise it when a change to year-file extraction means that files cut before
+#: it must be cut again, for a reason the register does not capture (for
+#: example, policyengine.py 6.1.1 and earlier exported only the engine's input
+#: variables, so a stored column the engine had renamed was dropped).
+#:
+#: Removing the temporary ACS WIC assumption (:func:`_temporary_acs_wic_values`)
+#: is such a change: year files cut while it applies store assumed claiming
+#: as ``takes_up_wic_if_eligible`` for ACS people with no stored decision.
+YEAR_FILE_STAMP_REVISION = 1
 
 #: ``{year: {entity key: stored table}}``, one table per entity per dataset
 #: year, in the dataset's own row order.
@@ -84,37 +117,222 @@ def pending_legacy_input_renames(variables: Any) -> dict[str, str]:
     }
 
 
+#: What :func:`_read_json_dataset` returns for a node a file does not have, and
+#: for one that is not a scalar dataset holding UTF-8 JSON.
+_ABSENT = object()
+_UNREADABLE = object()
+
+
 def read_renames_record(path: str | Path) -> dict[str, str] | None:
     """Return the renames record stored in an H5 file, or ``None``.
 
-    ``None`` means the file stores no record (see :data:`RENAMES_H5_DATASET`)
-    or is not an H5 file.
+    ``None`` means the file stores no record (see :data:`RENAMES_H5_DATASET`),
+    stores one that is not a JSON object of strings, or is not an H5 file.
     """
     import h5py
 
     try:
         with h5py.File(path, "r") as file:
-            if RENAMES_H5_DATASET not in file:
-                return None
-            raw = file[RENAMES_H5_DATASET].asstr()[()]
+            record = _read_json_dataset(file, RENAMES_H5_DATASET)
     except OSError:
         return None
-    return dict(json.loads(raw))
+    return dict(record) if _is_str_map(record) else None
 
 
 def write_renames_record(path: str | Path, record: Mapping[str, str]) -> None:
     """Store a renames record in an H5 file, replacing any it has."""
+    _write_json_dataset(path, RENAMES_H5_DATASET, dict(record))
+
+
+def year_file_stamp() -> dict[str, Any]:
+    """Return the stamp for a year file cut now.
+
+    It holds the whole register, not only the entries an engine needs mapped,
+    so checking a stamp never imports policyengine-us. The register is read
+    when this is called.
+    """
+    return {
+        "register": dict(sorted(LEGACY_INPUT_RENAMES.items())),
+        "revision": YEAR_FILE_STAMP_REVISION,
+    }
+
+
+def read_year_file_stamp(path: str | Path) -> Any | None:
+    """Return the JSON value of a year file's stamp, well formed or not.
+
+    ``None`` means the file stores no readable stamp (see
+    :data:`YEAR_FILE_STAMP_H5_DATASET`) or is not an H5 file.
+    """
+    import h5py
+
+    try:
+        with h5py.File(path, "r") as file:
+            stamp = _read_json_dataset(file, YEAR_FILE_STAMP_H5_DATASET)
+    except OSError:
+        return None
+    return None if stamp is _ABSENT or stamp is _UNREADABLE else stamp
+
+
+def write_year_file_stamp(path: str | Path, stamp: Mapping[str, Any]) -> None:
+    """Stamp a year file (see :func:`year_file_stamp`), replacing any stamp."""
+    _write_json_dataset(path, YEAR_FILE_STAMP_H5_DATASET, dict(stamp))
+
+
+def year_file_stamp_problem(path: str | Path) -> str | None:
+    """Return why a ``create_datasets`` year file is out of date, or ``None``.
+
+    A year file is current only when both of these hold:
+
+    - its stamp equals :func:`year_file_stamp`: the same format revision and
+      the same register;
+    - it stores the renames record, listing only renames in that register.
+
+    The register must match exactly. A file cut under a register that lacks
+    an entry may have lost that entry's input, as year files that
+    policyengine.py 6.1.1 and earlier cut from the certified default lost the
+    WIC take-up draw. A file cut under an entry this release does not
+    register, or registers with another live input, may store a live name
+    this release's engine does not define, and a run skips any column the
+    engine does not define.
+
+    Only the stamp and the record are read, never the tables or the source
+    dataset. A file that cannot be read as HDF5 is out of date. An error that
+    says nothing about the file's contents (no permission, a directory, a file
+    another process has locked) is raised instead, since the file could not
+    be written again either.
+
+    Returns:
+        ``None`` for a current year file; otherwise a clause, starting "it"
+        or "its", that says why the file is out of date and names the
+        renames it may have lost.
+    """
+    import h5py
+
+    current = year_file_stamp()
+    register = current["register"]
+    try:
+        with h5py.File(path, "r") as file:
+            stamp = _read_json_dataset(file, YEAR_FILE_STAMP_H5_DATASET)
+            record = _read_json_dataset(file, RENAMES_H5_DATASET)
+    except (PermissionError, IsADirectoryError, BlockingIOError):
+        raise
+    except OSError:
+        return "it cannot be read as an HDF5 file (it may be half-written or corrupt)"
+
+    # The revision comes first: a later revision may shape its stamp and
+    # record differently.
+    revision = stamp.get("revision") if isinstance(stamp, dict) else None
+    if type(revision) is int and revision != YEAR_FILE_STAMP_REVISION:
+        return (
+            f"it was cut with year-file format revision {revision}, and this "
+            f"version of policyengine.py reads only revision "
+            f"{YEAR_FILE_STAMP_REVISION}"
+        )
+    if stamp is _ABSENT:
+        if record is _ABSENT:
+            return (
+                "it has no record of the renamed stored inputs mapped when it "
+                "was cut, so it was cut by an older policyengine.py or not "
+                "written completely"
+                + (
+                    f", and may have lost any of: {_describe(register)}"
+                    if register
+                    else ""
+                )
+            )
+        return "it has no stamp of the register of renamed inputs it was cut under" + (
+            f", so it may have lost any of: {_describe(register)}" if register else ""
+        )
+    # ``type(...) is int`` rather than ``isinstance``: JSON ``true`` loads as
+    # ``True``, which equals 1.
+    if not (
+        isinstance(stamp, dict)
+        and set(stamp) == {"register", "revision"}
+        and type(revision) is int
+        and _is_str_map(stamp["register"])
+    ):
+        return (
+            "its stamp of the register of renamed inputs it was cut under is malformed"
+        )
+    if record is _ABSENT:
+        return "it has no record of the renamed stored inputs mapped when it was cut"
+    if not _is_str_map(record):
+        return (
+            "its record of the renamed stored inputs mapped when it was cut is "
+            "malformed"
+        )
+    stamped = stamp["register"]
+    outside = dict(record.items() - stamped.items())
+    if outside:
+        return (
+            "its record lists renames outside the register it was stamped "
+            f"with: {_describe(outside)}"
+        )
+    if stamp == current:
+        return None
+    missing = {
+        legacy: live for legacy, live in register.items() if stamped.get(legacy) != live
+    }
+    unknown = {
+        legacy: live for legacy, live in stamped.items() if register.get(legacy) != live
+    }
+    reasons = []
+    if missing:
+        reasons.append(
+            "it was cut before these renames were registered, so it may have "
+            f"lost them: {_describe(missing)}"
+        )
+    if unknown:
+        reasons.append(
+            "it was cut under renames this version of policyengine.py does not "
+            f"register: {_describe(unknown)}"
+        )
+    return "; ".join(reasons)
+
+
+def _read_json_dataset(file: Any, name: str) -> Any:
+    """Return the JSON value stored in an open H5 file's ``name`` dataset."""
+    import h5py
+
+    try:
+        node = file.get(name)
+        if node is None:
+            return _ABSENT
+        if not isinstance(node, h5py.Dataset) or node.shape != ():
+            return _UNREADABLE
+        # A numeric dataset raises TypeError; bytes that are not UTF-8, or
+        # not JSON, raise ValueError; JSON nested too deeply raises
+        # RecursionError.
+        return json.loads(node.asstr()[()])
+    except (PermissionError, IsADirectoryError, BlockingIOError):
+        raise
+    except (KeyError, OSError, RecursionError, TypeError, ValueError):
+        return _UNREADABLE
+
+
+def _write_json_dataset(path: str | Path, name: str, value: Any) -> None:
+    """Store ``value`` as UTF-8 JSON in an H5 file's ``name`` dataset."""
     import h5py
 
     with h5py.File(path, "a") as file:
-        if RENAMES_H5_DATASET in file:
-            del file[RENAMES_H5_DATASET]
+        if name in file:
+            del file[name]
         # UTF-8 JSON in a dataset, as for the SPM receipt of a saved output.
         file.create_dataset(
-            RENAMES_H5_DATASET,
-            data=json.dumps(dict(record), sort_keys=True),
+            name,
+            data=json.dumps(value, sort_keys=True),
             dtype=h5py.string_dtype("utf-8"),
         )
+
+
+def _is_str_map(value: Any) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(key, str) and isinstance(item, str) for key, item in value.items()
+    )
+
+
+def _describe(renames: Mapping[str, str]) -> str:
+    return ", ".join(f"{legacy} -> {live}" for legacy, live in sorted(renames.items()))
 
 
 def check_yearly_periods(column: str, periods: Iterable[Any], source: Any) -> None:
@@ -146,8 +364,9 @@ def apply_legacy_input_renames(
     Every mapped table is checked before anything is set. Its ``{entity}_id``
     column must list the simulation's entity IDs in the simulation's order,
     and its stored values must be complete and, for a boolean live input,
-    boolean. Otherwise this raises ``ValueError`` rather than set misaligned
-    or invented values.
+    boolean. A temporary WIC-only exception assumes claiming for missing
+    decisions on explicitly identified ACS people. Missing donor decisions
+    and malformed stored values still raise ``ValueError``.
 
     Applying the mapping again sets the same values, so it is idempotent.
 
@@ -165,7 +384,15 @@ def apply_legacy_input_renames(
                 continue
             context = f"Cannot map stored {legacy!r} onto {live!r} for {year}"
             _check_order(simulation, table, entity, context)
-            values = _live_values(table[legacy], variable, context)
+            stored = table[legacy]
+            if (
+                legacy == "would_claim_wic"
+                and live == "takes_up_wic_if_eligible"
+                and entity == "person"
+                and variable.value_type is bool
+            ):
+                stored = _temporary_acs_wic_values(table, context)
+            values = _live_values(stored, variable, context)
             periods = _periods_of_year(int(year), variable.definition_period, context)
             planned.append((legacy, live, periods, values))
 
@@ -347,6 +574,34 @@ def _check_order(simulation, table: pd.DataFrame, entity: str, context: str) -> 
         )
 
 
+def _temporary_acs_wic_values(table: pd.DataFrame, context: str) -> pd.Series:
+    """Preserve stored decisions; assume claiming only for missing ACS cells."""
+    stored = table["would_claim_wic"]
+    missing = stored.isna()
+    if not missing.any():
+        return stored
+    channel = "person_support_channel"
+    if channel not in table or not (
+        table.loc[missing, channel].eq("acs_2024_1yr").fillna(False).all()
+    ):
+        raise ValueError(
+            f"{context}: the stored column has missing values outside "
+            "explicitly identified ACS people."
+        )
+    # TEMPORARY ACS WIC COMPATIBILITY — REMOVE AS SOON AS POSSIBLE.
+    # Replacement dataset: https://github.com/PolicyEngine/microcosm/issues/1154
+    # Prepared removal: https://github.com/PolicyEngine/policyengine.py/pull/563
+    # The currently certified ACS-local dataset did not generate WIC
+    # participation decisions for ACS people. For missing ACS decisions only,
+    # assume that every eligible person claims WIC.
+    # This is an explicit modelling assumption, not observed participation.
+    # Replace the dataset with a corrected Microcosm release and DELETE
+    # this exception immediately after that replacement is certified.
+    # Nullable numeric columns reject boolean replacement values. Preserve the
+    # original decisions as objects; _live_values still validates before casting.
+    return stored.astype(object).mask(missing, True)
+
+
 def _live_values(stored: pd.Series, variable: Any, context: str) -> np.ndarray:
     if stored.isna().any():
         raise ValueError(f"{context}: the stored column has missing values.")
@@ -355,6 +610,15 @@ def _live_values(stored: pd.Series, variable: Any, context: str) -> np.ndarray:
     if pd.api.types.is_bool_dtype(stored.dtype):
         return np.asarray(stored.to_numpy(dtype=bool))
     if pd.api.types.is_numeric_dtype(stored.dtype) and stored.isin((0, 1)).all():
+        return np.asarray(stored.to_numpy(), dtype=bool)
+    # Nullable legacy H5 columns may contain genuine booleans and numeric 0/1
+    # as objects. Validate each value before casting: bool("False") is True.
+    if stored.map(
+        lambda value: (
+            isinstance(value, bool | np.bool_ | int | np.integer | float | np.floating)
+            and value in (0, 1)
+        )
+    ).all():
         return np.asarray(stored.to_numpy(), dtype=bool)
     raise ValueError(f"{context}: the stored values are not boolean.")
 

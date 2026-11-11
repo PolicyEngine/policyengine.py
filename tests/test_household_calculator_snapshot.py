@@ -213,7 +213,11 @@ def test_uk_household_snapshot(case_name: str) -> None:
     kwargs = UK_CASES[case_name]
     result = pe.uk.calculate_household(**kwargs)
     out: dict[str, float] = {}
-    _flatten("", result.to_dict(), out)
+    # Provenance (the capital gains response record) is tested in
+    # test_uk_cgt_responses.py; keep this snapshot to the numeric output.
+    values = result.to_dict()
+    values.pop("provenance", None)
+    _flatten("", values, out)
     _check_snapshot(case_name, out)
 
 

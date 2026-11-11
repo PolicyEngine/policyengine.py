@@ -1,0 +1,339 @@
+{
+  "bundle_version": "6.9.0",
+  "citation": {
+    "publisher": "PolicyEngine",
+    "title": "PolicyEngine bundle 6.9.0",
+    "type": "software-bundle",
+    "version": "6.9.0"
+  },
+  "countries": {
+    "uk": {
+      "model_package": "policyengine-uk"
+    },
+    "us": {
+      "model_package": "policyengine-us"
+    }
+  },
+  "data_releases": {
+    "uk": {
+      "build_id": "policyengine-uk-data-1.58.1",
+      "bundle_id": "uk-6.9.0",
+      "certification": {
+        "built_with_model_git_sha": "daad71cd26c107f1b784ff600d1464ba59c70e4a",
+        "built_with_model_version": "2.122.2",
+        "certified_by": "policyengine.py bundle certification",
+        "certified_for_model_version": "2.130.1",
+        "compatibility_basis": "legacy_compatible_model_package",
+        "data_build_fingerprint": "sha256:c094d7006fdd81df220090284212f16bbffb15624643bc442c4bb3e1b1e5dac8",
+        "data_build_id": "policyengine-uk-data-1.58.1"
+      },
+      "certified_data_artifact": {
+        "build_id": "policyengine-uk-data-1.58.1",
+        "data_package": {
+          "name": "policyengine-uk-data",
+          "version": "1.58.1"
+        },
+        "dataset": "enhanced_frs_2024_25",
+        "sha256": "056e80fd8e9151d78f432a25cde863340baee81304c6216a37fb575ce8563784",
+        "uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.1"
+      },
+      "country_id": "uk",
+      "data_package": {
+        "name": "policyengine-uk-data",
+        "release_manifest_path": "releases/1.58.1/release_manifest.json",
+        "release_manifest_revision": "89be6b73fc1e6eeba6dae2f9400676d8510bcd51",
+        "repo_id": "policyengine/policyengine-uk-data-private",
+        "repo_type": "model",
+        "version": "1.58.1"
+      },
+      "data_producer": "populace",
+      "datasets": {
+        "enhanced_frs_2024_25": {
+          "path": "enhanced_frs_2024_25.h5",
+          "repo_id": "policyengine/policyengine-uk-data-private",
+          "revision": "1.58.1",
+          "sha256": "056e80fd8e9151d78f432a25cde863340baee81304c6216a37fb575ce8563784"
+        },
+        "enhanced_frs_2024_25_tiny": {
+          "path": "enhanced_frs_2024_25_tiny.h5",
+          "repo_id": "policyengine/policyengine-uk-data-private",
+          "revision": "1.58.1",
+          "sha256": "d5d2bde80f1f028fec98391ea31bb5a0cf8449e3867fc3c1bfe23693b9faecf8"
+        },
+        "frs_2024_25": {
+          "path": "frs_2024_25.h5",
+          "repo_id": "policyengine/policyengine-uk-data-private",
+          "revision": "1.58.1",
+          "sha256": "97af00b2cd2739957f40dcc4de8e0383a6a91d47952c90d4b4921a6007bd2021"
+        },
+        "frs_2024_25_tiny": {
+          "path": "frs_2024_25_tiny.h5",
+          "repo_id": "policyengine/policyengine-uk-data-private",
+          "revision": "1.58.1",
+          "sha256": "e4d7662cd3f053620224b7ceff17266783f09407002a72633b043b844cec3f5a"
+        },
+        "local_authority_weights": {
+          "path": "local_authority_weights.h5",
+          "repo_id": "policyengine/policyengine-uk-data-private",
+          "revision": "1.58.1",
+          "sha256": "2b7a2f7f9e7081a394b37cb84e909fd3c01d22e421808141684e7c3be59f2089"
+        },
+        "local_geography_weights": {
+          "path": "local_geography_weights.csv.gz",
+          "repo_id": "policyengine/policyengine-uk-data-private",
+          "revision": "1.58.1",
+          "sha256": "97c6e3542543baf737a713bb918ebc3d3dbc3f3765be9bf3414375c322d0e3d1"
+        },
+        "parliamentary_constituency_weights": {
+          "path": "parliamentary_constituency_weights.h5",
+          "repo_id": "policyengine/policyengine-uk-data-private",
+          "revision": "1.58.1",
+          "sha256": "8c696e4d65a22033deb4c4f69a767fdb46e0a4f5580f36b7fb47ee4722629b11"
+        }
+      },
+      "default_dataset": "enhanced_frs_2024_25",
+      "default_dataset_uri": "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2024_25.h5@1.58.1",
+      "model_package": {
+        "name": "policyengine-uk",
+        "sha256": "f8b1b8b917c9297ff66937811dbebd9a62d3b1796ce894c326e98051cac4c873",
+        "version": "2.130.1",
+        "wheel_url": "https://files.pythonhosted.org/packages/1a/21/88e8addba0eabd9a7d3a29fa5293e141feb405baf0432209387f9a1f467a/policyengine_uk-2.130.1-py3-none-any.whl"
+      },
+      "policyengine_version": "6.9.0",
+      "region_datasets": {
+        "national": {
+          "path_template": "enhanced_frs_2024_25.h5"
+        }
+      },
+      "release_manifest_uri": "https://huggingface.co/policyengine/policyengine-uk-data-private/resolve/89be6b73fc1e6eeba6dae2f9400676d8510bcd51/releases/1.58.1/release_manifest.json",
+      "schema_version": 1,
+      "source_manifest_uri": "hf://model/policyengine/policyengine-uk-data-private@89be6b73fc1e6eeba6dae2f9400676d8510bcd51/releases/1.58.1/release_manifest.json",
+      "version": "policyengine-uk-data-1.58.1"
+    },
+    "us": {
+      "build_id": "populace-us-2024-spm-20260915",
+      "bundle_id": "us-6.9.0",
+      "certification": {
+        "built_with_model_version": "2.2.1",
+        "certified_by": "policyengine.py bundle certification",
+        "certified_for_model_version": "2.2.1",
+        "compatibility_basis": "built_with_model_package",
+        "data_build_id": "populace-us-2024-spm-20260915"
+      },
+      "certified_data_artifact": {
+        "build_id": "populace-us-2024-spm-20260915",
+        "data_package": {
+          "name": "microcosm-data",
+          "version": "0.1.0"
+        },
+        "dataset": "populace_us_2024",
+        "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84",
+        "uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915"
+      },
+      "country_id": "us",
+      "data_package": {
+        "name": "microcosm-data",
+        "release_manifest_path": "releases/populace-us-2024-spm-20260915/release_manifest.json",
+        "release_manifest_revision": "populace-us-2024-spm-20260915",
+        "repo_id": "policyengine/populace-us",
+        "repo_type": "dataset",
+        "version": "0.1.0"
+      },
+      "data_producer": "populace",
+      "datasets": {
+        "build_manifest": {
+          "path": "releases/populace-us-2024-spm-20260915/build_manifest.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "f3fd734867324bca7619f5f083a8115e32104bea3948d48723b345cfd39fa03b"
+        },
+        "calibration_diagnostics": {
+          "path": "releases/populace-us-2024-spm-20260915/calibration_diagnostics.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "870449b44e86b13b25bcea1a57f0e7af37f4d4db18be815eea3acdf9fe6eb40e"
+        },
+        "parent_build_manifest": {
+          "path": "releases/populace-us-2024-spm-20260915/parent_build_manifest.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "1990e8fd37ce66f499b8e6600c5896701bb07015be132a12de64e321a2edc67e"
+        },
+        "parent_release_manifest": {
+          "path": "releases/populace-us-2024-spm-20260915/parent_release_manifest.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "dd949ba3c4c7a56aff8442c6db5a031d2c84c3da59f5d14832f468c358604506"
+        },
+        "populace_us_2024": {
+          "path": "populace_us_2024.h5",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84"
+        },
+        "populace_us_2024_acs_local": {
+          "path": "populace_us_2024_acs_local.h5",
+          "repo_id": "policyengine/populace-us",
+          "repo_type": "dataset",
+          "revision": "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z",
+          "sha256": "3ce781c440a7f933b1d952ff4e9d9f65f4698c64b94d2fad165af0c662838d6c"
+        },
+        "source_enrichment": {
+          "path": "releases/populace-us-2024-spm-20260915/source_enrichment.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "85329907b2b9c4299855b0970b1f24ede5819d3b16c312eb7400b4203bd71203"
+        },
+        "source_enrichment_compatibility": {
+          "path": "releases/populace-us-2024-spm-20260915/source_enrichment_compatibility.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "63109acffd486453c99c476dece6b0154cc5388e5a430830a30744a2249444d1"
+        },
+        "source_spm_independence_provenance": {
+          "path": "releases/populace-us-2024-spm-20260915/source_spm_independence_provenance.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "265e844178ed3856d68c1638820f3089e0e1e1363aa4677e33bebb37cbd5bff3"
+        },
+        "source_spm_person_independence": {
+          "path": "releases/populace-us-2024-spm-20260915/source_spm_person_independence.csv",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "22b5968d90fecfeef7614583e493fe10cc16bda8b5be82e6f49a5bc2102d3ce5"
+        },
+        "us_source_coverage": {
+          "path": "releases/populace-us-2024-spm-20260915/us_source_coverage.json",
+          "repo_id": "policyengine/populace-us",
+          "revision": "populace-us-2024-spm-20260915",
+          "sha256": "6406c8686c292015a5bc7265a42402f89935f9395a8b63510efdd4d9562e7ff5"
+        }
+      },
+      "default_dataset": "populace_us_2024",
+      "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915",
+      "model_package": {
+        "name": "policyengine-us",
+        "sha256": "0993a6c73fcdfbe171a796aca9d302741bd8e00ab83388ad81c15a08740318c6",
+        "version": "2.2.1",
+        "wheel_url": "https://files.pythonhosted.org/packages/5e/09/86ac3968d2a18e28fce3ba1186fc21728e9f299b96a806d6f204f1e0aaed/policyengine_us-2.2.1-py3-none-any.whl"
+      },
+      "policyengine_version": "6.9.0",
+      "region_datasets": {
+        "congressional_district": {
+          "path_template": "populace_us_2024_acs_local.h5"
+        },
+        "national": {
+          "path_template": "populace_us_2024.h5"
+        },
+        "state": {
+          "path_template": "populace_us_2024_acs_local.h5"
+        }
+      },
+      "regional_release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z/releases/populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z/release_manifest.json",
+      "regional_source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z/releases/populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z/release_manifest.json",
+      "release_manifest_uri": "https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-spm-20260915/releases/populace-us-2024-spm-20260915/release_manifest.json",
+      "schema_version": 1,
+      "source_manifest_uri": "hf://dataset/policyengine/populace-us@populace-us-2024-spm-20260915/releases/populace-us-2024-spm-20260915/release_manifest.json",
+      "version": "populace-us-2024-spm-20260915"
+    }
+  },
+  "dataset_overlays": {
+    "uk": {
+      "enhanced_frs_2023_24": {
+        "data_package_name": "policyengine-uk-data",
+        "path": "enhanced_frs_2023_24.h5",
+        "repo_id": "policyengine/policyengine-uk-data-private",
+        "repo_type": "model",
+        "revision": "655dd07e4bb9c777b00dac044949611f1feb824f",
+        "sha256": "584ae33d80ca0431254610a3f8254d132da73477d31966d6446282861ecae50d"
+      },
+      "frs_2023_24": {
+        "data_package_name": "policyengine-uk-data",
+        "path": "frs_2023_24.h5",
+        "repo_id": "policyengine/policyengine-uk-data-private",
+        "repo_type": "model",
+        "revision": "655dd07e4bb9c777b00dac044949611f1feb824f",
+        "sha256": "df26d4d7af9d164aa2d064181b39290292d2f62bb26fee6126fc095fc06da292"
+      },
+      "populace_uk_2023": {
+        "data_package_name": "populace-data",
+        "path": "populace_uk_2023.h5",
+        "repo_id": "policyengine/populace-uk-private",
+        "repo_type": "dataset",
+        "revision": "populace-uk-2023-dd68c73-4aa4b14-20260619T023711Z",
+        "sha256": "f17306ccb2aad7ff0130be3589b560afb2e2a12a943570911cd0c77f07934833"
+      }
+    }
+  },
+  "extras": {
+    "models": [
+      "policyengine-core",
+      "policyengine-us",
+      "policyengine-uk",
+      "spm-calculator"
+    ],
+    "uk": [
+      "policyengine-core",
+      "policyengine-uk"
+    ],
+    "us": [
+      "policyengine-core",
+      "policyengine-us",
+      "spm-calculator"
+    ]
+  },
+  "measurements": {
+    "spm": {
+      "as_of": null,
+      "county_vintage": "2020",
+      "forecast_content_sha256": "3d86d5c4c0423480e6b69b75d222ffa4a7a2639e4094df5ba2504af01be17173",
+      "geography_id": null,
+      "geography_kind": "county",
+      "scenario": "ce_trend"
+    }
+  },
+  "packages": {
+    "policyengine": {
+      "import_name": "policyengine",
+      "install_requirement": "policyengine==6.9.0",
+      "name": "policyengine",
+      "role": "bundle_carrier",
+      "version": "6.9.0"
+    },
+    "policyengine-core": {
+      "import_name": "policyengine_core",
+      "install_requirement": "policyengine-core==3.33.0",
+      "name": "policyengine-core",
+      "role": "runtime_dependency",
+      "version": "3.33.0"
+    },
+    "policyengine-uk": {
+      "country": "uk",
+      "import_name": "policyengine_uk",
+      "install_requirement": "policyengine-uk==2.130.1",
+      "name": "policyengine-uk",
+      "role": "country_model",
+      "version": "2.130.1"
+    },
+    "policyengine-us": {
+      "country": "us",
+      "import_name": "policyengine_us",
+      "install_requirement": "policyengine-us==2.2.1",
+      "name": "policyengine-us",
+      "role": "country_model",
+      "version": "2.2.1"
+    },
+    "spm-calculator": {
+      "country": "us",
+      "import_name": "spm_calculator",
+      "install_requirement": "spm-calculator==1.0.0",
+      "name": "spm-calculator",
+      "role": "runtime_dependency",
+      "sha256": "e354937a5e1a4045d4966ed594a528d8b02866fabaac9bb5672017004b627305",
+      "version": "1.0.0",
+      "wheel_url": "https://files.pythonhosted.org/packages/19/a0/c484f69a0ebf88a9b9fd0ac28176f8df66550f46714f1b0c5ec0b360824e/spm_calculator-1.0.0-py3-none-any.whl"
+    }
+  },
+  "policyengine_version": "6.9.0",
+  "schema_version": 2
+}

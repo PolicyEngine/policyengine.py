@@ -37,6 +37,7 @@ assert _VALIDATION_SPEC is not None and _VALIDATION_SPEC.loader is not None
 _VALIDATION_MODULE = importlib.util.module_from_spec(_VALIDATION_SPEC)
 _VALIDATION_SPEC.loader.exec_module(_VALIDATION_MODULE)
 validate_bundle_measurements = _VALIDATION_MODULE.validate_bundle_measurements
+validate_dataset_overlays = _VALIDATION_MODULE.validate_dataset_overlays
 
 OPTIONAL_DEPENDENCIES_HEADER = "[project.optional-dependencies]"
 NEXT_SECTION_PATTERN = re.compile(r"\n\[tool\.setuptools\]", re.MULTILINE)

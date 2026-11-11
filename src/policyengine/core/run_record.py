@@ -20,6 +20,7 @@ emitting a false certificate.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -192,6 +193,38 @@ def build_simulation_run_record_payloads(
     )
     if renames is not None:
         results_payload["legacy_input_renames"] = dict(renames)
+
+    # BACKWARD COMPATIBILITY (#597, #598): the legacy SPM declarations a
+    # US run applied, which change its SPM results. See
+    # ``policyengine.tax_benefit_models.us.legacy_spm``.
+    legacy_spm_declarations = (
+        getattr(simulation.output_dataset, "metadata", None) or {}
+    ).get("legacy_spm_declarations")
+    if legacy_spm_declarations is not None:
+        results_payload["legacy_spm_declarations"] = dict(legacy_spm_declarations)
+
+    # The capital gains realisation response a UK run applied: the model
+    # resolves its default, so the record binds the assumption itself. See
+    # ``policyengine.tax_benefit_models.uk.capital_gains_responses``.
+    capital_gains_responses = (
+        getattr(simulation.output_dataset, "metadata", None) or {}
+    ).get("capital_gains_responses")
+    if capital_gains_responses is not None:
+        from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+            simulation_request,
+        )
+
+        if (
+            capital_gains_responses["request"]["digest"]
+            != simulation_request(simulation)["digest"]
+        ):
+            raise ValueError(
+                "Capital gains response settings changed since this output was "
+                "calculated; run again before writing a run record"
+            )
+        results_payload["capital_gains_responses"] = copy.deepcopy(
+            capital_gains_responses
+        )
 
     return {"reform": reform, "input": input_payload, "results": results_payload}
 

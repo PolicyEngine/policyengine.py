@@ -1,21 +1,80 @@
 import hashlib
 import json
 import os
+import re
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, NoReturn, Optional
 from urllib.parse import quote
 
 import requests
-from pydantic import BaseModel, Field
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
+
+from policyengine.provenance.bundle_validation import (
+    shadowed_dataset_overlays,
+    shadowing_overlays_message,
+)
 
 HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
+# Producer paths for these artifacts are relative to the release directory.
+RELEASE_SCOPED_ARTIFACT_KINDS = frozenset({"diagnostics", "evidence"})
+
+#: Microcosm publishes each build once, in its own folder
+#: ``releases/<release>/<build>/``, and never changes it afterwards; a root
+#: ``releases.json`` records which build of each release is current
+#: (microcosm-emitter's ``microcosm_emitter_interface.releases``).
+RELEASES_FOLDER = "releases"
+RELEASE_MANIFEST_NAME = "release_manifest.json"
+#: The record of every published build and of which ones are withdrawn, at
+#: the repository's root. Only the release writer changes it, always on
+#: ``main``, so ``main`` holds the current record.
+RELEASES_RECORD_NAME = "releases.json"
+RELEASES_RECORD_REVISION = "main"
+RELEASES_RECORD_SCHEMA_VERSION = 1
+#: The largest ``releases.json`` the release writer reads
+#: (``microcosm_emitter_interface.releases.MAX_RECORD_BYTES``).
+RELEASES_RECORD_MAX_BYTES = 4 * 1024 * 1024
+#: The publisher refuses any other release or build name
+#: (``microcosm_emitter_interface.identifiers.SAFE_IDENTIFIER``), and both
+#: are interpolated into repository paths.
+RELEASE_FOLDER_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+#: The publisher refuses any other release role
+#: (``microcosm_emitter_interface.identifiers.ROLE_IDENTIFIER``).
+RELEASE_ROLE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+#: A build-folder manifest's build details, at its top level (microcosm#1505,
+#: decided 2026-10-29); older manifests keep them inside the ``build`` object.
+BUILD_DETAIL_FIELDS = (
+    "built_at",
+    "built_with_model_package",
+    "built_with_core_package",
+)
+_RELEASES_RECORD_KEYS = frozenset({"schema_version", "default", "releases"})
+_RELEASE_ENTRY_KEYS = frozenset({"role", "current", "builds"})
+_BUILD_ENTRY_KEYS = frozenset({"published_at", "withdrawn"})
 
 
 class DataReleaseManifestUnavailableError(ValueError):
     """Raised when a data release manifest cannot be fetched or is absent."""
+
+
+class ReleaseBuildFolderError(ValueError):
+    """A build in its own release folder that cannot be certified or loaded.
+
+    Its manifest names another release or build than the folder it was read
+    from, or one of its own files lies outside the folder; or, at
+    certification, the repository's ``releases.json`` is a record the release
+    writer refuses, does not list the build, or marks it withdrawn. Unlike an
+    unavailable manifest, this is never covered by a bundled certificate.
+    """
 
 
 class PackageVersion(BaseModel):
@@ -47,9 +106,28 @@ class BuiltWithModelPackage(PackageVersion):
 
 class DataBuildInfo(BaseModel):
     build_id: Optional[str] = None
+    """The build's name. For a build published in its own release folder
+    (``DataReleaseManifest.release`` set), this is the manifest's ``build``
+    string, the attempt ID that names the folder."""
+    cut_tag: Optional[str] = None
+    """The immutable tag of one cut of a release line. Microcosm keeps
+    ``build_id`` equal to the line name for every cut, so the cut tag is what
+    tells two cuts apart (see ``release_build_id``). Builds published in their
+    own release folders have no tag."""
     built_at: Optional[str] = None
     built_with_core_package: Optional[PackageVersion] = None
     built_with_model_package: Optional[BuiltWithModelPackage] = None
+
+
+def release_build_id(build: Optional[DataBuildInfo]) -> Optional[str]:
+    """Identify one data build: its cut tag when it has one, else its build id.
+
+    A build published in its own release folder has no cut tag, and its build
+    id is the folder's build name, so two builds of one release differ.
+    """
+    if build is None:
+        return None
+    return build.cut_tag or build.build_id
 
 
 class ArtifactPathReference(BaseModel):
@@ -105,7 +183,10 @@ class DataReleaseArtifact(BaseModel):
     kind: str
     path: str
     repo_id: str
-    revision: str
+    revision: Optional[str] = None
+    """Required unless the manifest is a build in its own release folder,
+    whose own files are pinned at the revision its manifest is certified at
+    (``read_build_folder``)."""
     repo_type: Optional[Literal["model", "dataset"]] = None
     sha256: Optional[str] = None
     size_bytes: Optional[int] = None
@@ -116,6 +197,8 @@ class DataReleaseArtifact(BaseModel):
 
     @property
     def uri(self) -> str:
+        if self.revision is None:
+            raise ValueError(f"Artifact {self.path!r} has no revision pin.")
         return build_hf_uri(
             repo_id=self.repo_id,
             path_in_repo=self.path,
@@ -124,6 +207,7 @@ class DataReleaseArtifact(BaseModel):
 
 
 class DataReleaseManifest(BaseModel):
+    _source_is_local: bool = PrivateAttr(default=False)
     schema_version: int
     data_package: PackageVersion
     dataset_role: Optional[str] = None
@@ -133,6 +217,15 @@ class DataReleaseManifest(BaseModel):
     compatible_model_packages: list[CompatiblePackage] = Field(default_factory=list)
     compatible_core_packages: list[CompatiblePackage] = Field(default_factory=list)
     default_datasets: dict[str, str] = Field(default_factory=dict)
+    release: Optional[str] = None
+    """The release of a build published in its own folder,
+    ``releases/<release>/<build>/``. Such a manifest names its ``release``
+    and ``build`` as strings, and records the build's details
+    (``built_at``, ``built_with_model_package``, ``built_with_core_package``)
+    at its top level. ``build`` is read as ``DataBuildInfo`` with the build
+    name as ``build_id`` and those details, and written back as the string
+    with the details at the top level again. ``None`` for a manifest
+    published before that layout, whose ``build`` is an object."""
     build: Optional[DataBuildInfo] = None
     artifacts: dict[str, DataReleaseArtifact] = Field(default_factory=dict)
     preservation_dois: list[str] = Field(default_factory=list)
@@ -146,6 +239,77 @@ class DataReleaseManifest(BaseModel):
     source_sha256: Optional[str] = Field(default=None, exclude=True)
     """Byte sha256 of the fetched manifest before runtime URI rewrites."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _read_build_folder_identity(cls, data: Any) -> Any:
+        """Read a string ``build`` with its ``release`` as the build folder."""
+
+        if not isinstance(data, dict):
+            return data
+        release = data.get("release")
+        build = data.get("build")
+        if release is None and not isinstance(build, str):
+            return data
+        if release is None:
+            raise ValueError(
+                "A release manifest that names its build as a string must "
+                "name its release."
+            )
+        if not isinstance(build, str):
+            raise ValueError(
+                "A release manifest that names its release must name its "
+                "build as a string."
+            )
+        for label, name in (("release", release), ("build", build)):
+            if not isinstance(name, str) or not RELEASE_FOLDER_NAME.fullmatch(name):
+                raise ValueError(f"{label} must match {RELEASE_FOLDER_NAME.pattern}.")
+        # microcosm#1505 records the build's details at the top level.
+        details = {name: data[name] for name in BUILD_DETAIL_FIELDS if name in data}
+        rest = {key: value for key, value in data.items() if key not in details}
+        return {**rest, "build": {"build_id": build, **details}}
+
+    @model_validator(mode="after")
+    def _require_revision_pins_outside_build_folders(self) -> "DataReleaseManifest":
+        if self.release is None:
+            unpinned = sorted(
+                name
+                for name, artifact in self.artifacts.items()
+                if artifact.revision is None
+            )
+            if unpinned:
+                raise ValueError(
+                    f"Artifacts {unpinned} have no revision; only a build in "
+                    "its own release folder may leave it to certification."
+                )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _write_build_folder_identity(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> Any:
+        data = handler(self)
+        if (
+            self.release is not None
+            and self.build is not None
+            and isinstance(data, dict)
+            and "build" in data
+        ):
+            build = data["build"]
+            data["build"] = self.build.build_id
+            if isinstance(build, dict):
+                for name in BUILD_DETAIL_FIELDS:
+                    if name in build:
+                        data[name] = build[name]
+        return data
+
+    @property
+    def build_folder(self) -> Optional[str]:
+        """``releases/<release>/<build>`` for a build in its own folder."""
+
+        if self.release is None or self.build is None or self.build.build_id is None:
+            return None
+        return f"{RELEASES_FOLDER}/{self.release}/{self.build.build_id}"
+
 
 class DataCertification(BaseModel):
     compatibility_basis: str
@@ -155,6 +319,29 @@ class DataCertification(BaseModel):
     built_with_model_git_sha: Optional[str] = None
     data_build_fingerprint: Optional[str] = None
     certified_by: Optional[str] = None
+    certified_for_core_version: Optional[str] = None
+    #: How the certificate covers policyengine-core. ``certified``: it names
+    #: the core it was certified for (``certified_for_core_version``), and the
+    #: bundle's core pin must equal it. ``bundle_pin``: it certifies whatever
+    #: core the bundle pins, without holding the pin to the data release's
+    #: core claims; certification and the strict check warn when the pin is
+    #: outside them. Absent in certificates from before October 2026, which
+    #: follow the pin the same way.
+    core_binding: Optional[Literal["certified", "bundle_pin"]] = None
+    qualification_pair_id: Optional[str] = None
+    qualification_ledger_url: Optional[str] = None
+
+
+#: Bases whose runtime model legitimately differs from the data's build-time
+#: model, so the build fingerprint is not expected to match.
+CLAIM_BASED_COMPATIBILITY = frozenset(
+    {
+        "legacy_compatible_model_package",
+        "qualified_exact_pair",
+        "legacy_compatible_model_package_local_manifest",
+        "qualified_exact_pair_local_manifest",
+    }
+)
 
 
 class CertifiedDataArtifact(BaseModel):
@@ -163,6 +350,88 @@ class CertifiedDataArtifact(BaseModel):
     uri: str
     sha256: Optional[str] = None
     build_id: Optional[str] = None
+
+
+RegionalReleaseKind = Literal["local_area", "area_coded_national"]
+
+
+class RegionalInputArtifactEvidence(BaseModel):
+    """Measured columns of one byte-verified regional H5 artifact."""
+
+    model_config = {"extra": "forbid"}
+
+    repo_id: str = Field(min_length=1)
+    path: str = Field(min_length=1)
+    revision: str = Field(min_length=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    repo_type: Optional[Literal["model", "dataset"]] = None
+    columns: list[str] = Field(min_length=1)
+    columns_by_period: dict[str, list[str]] = Field(min_length=1)
+
+
+class RegionalInputSurfaceEvidence(BaseModel):
+    """An operator's audit of actual regional columns against two exact models.
+
+    The baseline is the regional release's build model and core, as its
+    manifest records them; the target is the model the bundle certifies. Both
+    surfaces are retained in full so certification recomputes the comparison
+    rather than trusting a declared zero-loss result. The artifact hashes
+    identify the bytes inspected by the auditor, not merely a model's possible
+    inputs. Schema version 2 made the comparison relative to the build model;
+    version 1 evidence, which counted columns no model defines as dropped, is
+    refused.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    schema_version: Literal[2]
+    regional_manifest_uri: str = Field(min_length=1)
+    regional_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_package: str = Field(min_length=1)
+    model_version: str = Field(min_length=1)
+    build_model_version: str = Field(min_length=1)
+    build_core_version: str = Field(min_length=1)
+    artifacts: dict[str, RegionalInputArtifactEvidence] = Field(min_length=1)
+    model_variables: list[str] = Field(min_length=1)
+    model_inputs: list[str] = Field(min_length=1)
+    build_model_variables: list[str] = Field(min_length=1)
+    build_model_inputs: list[str] = Field(min_length=1)
+    input_aliases: Optional[dict[str, str]] = None
+    dropped_columns: list[str]
+    """Stored columns the build model defines and the target model does not."""
+    never_modelled_columns: list[str]
+    """Stored columns neither model defines; no model loads them."""
+    defaulted_inputs: list[str]
+    """Target inputs the file does not store, after the target's input
+    aliases, that were not inputs of the build model."""
+    audited_by: str = Field(min_length=1, pattern=r"\S")
+    limitations: list[str] = Field(min_length=1)
+
+
+class RegionalCertification(BaseModel):
+    """A reviewer's acceptance of a regional release on another model version.
+
+    Written only by ``certify-data --accept-regional-model-mismatch``: the
+    regional release neither was built with nor claims the certified model,
+    and area runs on it are uncertified.
+    """
+
+    compatibility_basis: Literal["accepted_model_mismatch"]
+    certified_for_model_version: str
+    built_with_model_version: Optional[str] = None
+    accepted_reason: str = Field(min_length=1, pattern=r"\S")
+    area_receipts: Literal["uncertified"] = "uncertified"
+    regional_manifest_uri: str
+    regional_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    defaulted_inputs: list[str]
+    dropped_columns: list[str]
+    never_modelled_columns: list[str]
+    stored_columns: Literal["auditor_attested"]
+    """How the evidence's stored-column lists are known. ``auditor_attested``:
+    certification re-read both models but not the H5s, so the lists are the
+    auditor's, bound to each H5's SHA-256 for anyone with the file to check."""
+    limitations: list[str]
+    evidence: RegionalInputSurfaceEvidence
 
 
 class CountryReleaseManifest(BaseModel):
@@ -176,6 +445,16 @@ class CountryReleaseManifest(BaseModel):
     default_dataset: str
     datasets: dict[str, ArtifactPathReference] = Field(default_factory=dict)
     region_datasets: dict[str, ArtifactPathTemplate] = Field(default_factory=dict)
+    regional_release_kind: Optional[RegionalReleaseKind] = None
+    """How certification routed the local region types, when it did:
+    ``local_area`` for a non-default local-area release, and
+    ``area_coded_national`` for another release's national dataset that
+    carries area codes (and its area weight matrices)."""
+    regional_certification: Optional[RegionalCertification] = None
+    """Present only when the regional release was routed on an accepted
+    model mismatch rather than its own build or claims."""
+    regional_source_manifest_sha256: Optional[str] = None
+    """SHA-256 of the original regional release manifest bytes."""
     certified_data_artifact: Optional[CertifiedDataArtifact] = None
     certification: Optional[DataCertification] = None
     source_sha256: Optional[str] = Field(default=None, exclude=True)
@@ -189,6 +468,208 @@ class CountryReleaseManifest(BaseModel):
         ):
             return self.certified_data_artifact.uri
         return resolve_dataset_reference(self.country_id, self.default_dataset)
+
+
+def read_build_folder(
+    manifest: DataReleaseManifest,
+    *,
+    repo_id: str,
+    manifest_path: str,
+    revision: str,
+) -> DataReleaseManifest:
+    """Pin a build published in its own release folder to that folder.
+
+    ``manifest_path`` and ``revision`` say where the manifest was read from in
+    ``repo_id``. The manifest must be the one in its own build folder,
+    ``releases/<release>/<build>/release_manifest.json``. Its own files (the
+    artifacts in ``repo_id``) are then pinned at
+    ``releases/<release>/<build>/<file>`` and at ``revision``: the publisher
+    writes a build's files and its manifest in one commit and never changes
+    them afterwards, so any revision holding the manifest holds the same
+    files, while an artifact's own ``revision`` field cannot name that commit.
+    Artifacts in other repositories keep their own paths and pins.
+
+    The publisher writes only bare file names, directly inside the folder, so
+    an own file's ``path`` must be such a name, alone or after the folder.
+
+    A manifest published before that layout is returned unchanged.
+
+    Raises:
+        ReleaseBuildFolderError: If the manifest was read from another folder,
+            or one of its own files is not directly inside the folder.
+    """
+
+    folder = manifest.build_folder
+    if folder is None:
+        return manifest
+    expected_path = f"{folder}/{RELEASE_MANIFEST_NAME}"
+    if manifest_path != expected_path:
+        raise ReleaseBuildFolderError(
+            f"The release manifest at {manifest_path} names release "
+            f"{manifest.release} and build {release_build_id(manifest.build)}, "
+            f"whose manifest is {expected_path}."
+        )
+    pinned = manifest.model_copy(deep=True)
+    for name, artifact in pinned.artifacts.items():
+        if artifact.repo_id != repo_id:
+            continue
+        if "/" not in artifact.path:
+            file_name = artifact.path
+        elif artifact.path.startswith(f"{folder}/"):
+            file_name = artifact.path.removeprefix(f"{folder}/")
+        else:
+            raise ReleaseBuildFolderError(
+                f"Artifact {name!r} ({artifact.path}) is outside its build "
+                f"folder {folder}/."
+            )
+        if not _is_bare_file_name(file_name):
+            # HTTP clients remove dot segments, so "<folder>/../<other>/<file>"
+            # would fetch another build's file.
+            raise ReleaseBuildFolderError(
+                f"Artifact {name!r} ({artifact.path}) is not a file directly "
+                f"inside its build folder {folder}/."
+            )
+        artifact.path = f"{folder}/{file_name}"
+        artifact.revision = revision
+    return pinned
+
+
+def _is_bare_file_name(name: str) -> bool:
+    """One path segment that names a file: what the publisher accepts
+    (``microcosm_emitter_interface.identifiers.bare_file_name``)."""
+
+    return bool(name) and name not in {".", ".."} and not set(name) & {"/", "\\"}
+
+
+def check_build_listed(record_bytes: bytes, *, release: str, build: str) -> None:
+    """Refuse a build that ``releases.json`` does not list, or has withdrawn.
+
+    ``record_bytes`` is the repository's ``releases.json`` in the release
+    writer's format (``microcosm_emitter_interface.releases``)::
+
+        {"schema_version": 1, "default": ..., "releases": {<release>: {
+            "role": ..., "current": ..., "builds": {<build>: {
+                "published_at": ..., "withdrawn": <bool>}}}}}
+
+    Which build is current does not matter here: a certificate pins one
+    build, current or not. The whole record must still be one the release
+    writer accepts (``_read_releases_record``).
+
+    Raises:
+        ReleaseBuildFolderError: If the release writer would refuse the
+            record, or the record does not list the build, or marks it
+            withdrawn.
+    """
+
+    record = _read_releases_record(record_bytes)
+    release_entry = record["releases"].get(release)
+    if release_entry is None or build not in release_entry["builds"]:
+        raise ReleaseBuildFolderError(
+            f"{RELEASES_RECORD_NAME} does not list build {build} of release {release}."
+        )
+    if release_entry["builds"][build]["withdrawn"]:
+        raise ReleaseBuildFolderError(
+            f"Build {build} of release {release} is withdrawn in "
+            f"{RELEASES_RECORD_NAME}."
+        )
+
+
+def _read_releases_record(record_bytes: bytes) -> dict[str, Any]:
+    """Parse ``releases.json``, refusing any record the release writer refuses.
+
+    These rules repeat those of the release writer's parser, microcosm-emitter's
+    ``microcosm_emitter_interface.releases.ReleasesRecord.parse`` and its
+    ``check_record``, so that .py certifies only from a record the writer and
+    its other readers accept. .py does not depend on that package; when the
+    writer's rules change, change these with them.
+
+    Raises:
+        ReleaseBuildFolderError: If the record is larger than
+            ``RELEASES_RECORD_MAX_BYTES`` or not a JSON document, has other
+            keys or another schema version, has a malformed release or build
+            entry or an unsafe release or build name, or names as ``default``
+            a release it does not list or as ``current`` a build it does not
+            list or has withdrawn.
+    """
+
+    def refuse(problem: str) -> ReleaseBuildFolderError:
+        return ReleaseBuildFolderError(f"{RELEASES_RECORD_NAME} {problem}")
+
+    if len(record_bytes) > RELEASES_RECORD_MAX_BYTES:
+        raise refuse(f"is larger than {RELEASES_RECORD_MAX_BYTES} bytes.")
+    try:
+        record = json.loads(record_bytes)
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        raise refuse("is not a readable JSON document.") from None
+    if not isinstance(record, dict) or set(record) != _RELEASES_RECORD_KEYS:
+        raise refuse(f"must have exactly the keys {sorted(_RELEASES_RECORD_KEYS)}.")
+    schema_version = record["schema_version"]
+    # ``True`` and ``1.0`` equal 1 in Python; only the integer is the version.
+    if (
+        type(schema_version) is not int
+        or schema_version != RELEASES_RECORD_SCHEMA_VERSION
+    ):
+        raise refuse(f"must have schema_version {RELEASES_RECORD_SCHEMA_VERSION}.")
+    releases = record["releases"]
+    if not isinstance(releases, dict):
+        raise refuse("must have an object as releases.")
+    for release_name, release_entry in releases.items():
+        if not RELEASE_FOLDER_NAME.fullmatch(release_name):
+            raise refuse("names a release that is not a safe identifier.")
+        if (
+            not isinstance(release_entry, dict)
+            or set(release_entry) != _RELEASE_ENTRY_KEYS
+        ):
+            raise refuse(
+                f"must give release {release_name} exactly the keys "
+                f"{sorted(_RELEASE_ENTRY_KEYS)}."
+            )
+        role = release_entry["role"]
+        if not isinstance(role, str) or not RELEASE_ROLE_NAME.fullmatch(role):
+            raise refuse(f"gives release {release_name} an invalid role.")
+        current = release_entry["current"]
+        if current is not None and not isinstance(current, str):
+            raise refuse(
+                f"must give release {release_name} a build or null as current."
+            )
+        builds = release_entry["builds"]
+        if not isinstance(builds, dict):
+            raise refuse(f"must give release {release_name} an object as builds.")
+        for build_name, build_entry in builds.items():
+            if not RELEASE_FOLDER_NAME.fullmatch(build_name):
+                raise refuse(
+                    f"names a build of release {release_name} that is not a "
+                    "safe identifier."
+                )
+            if (
+                not isinstance(build_entry, dict)
+                or set(build_entry) != _BUILD_ENTRY_KEYS
+                or not isinstance(build_entry["published_at"], str)
+                or not build_entry["published_at"]
+                or not isinstance(build_entry["withdrawn"], bool)
+            ):
+                raise refuse(
+                    f"must give build {build_name} of release {release_name} "
+                    "a non-empty published_at string and a boolean withdrawn, "
+                    "and nothing else."
+                )
+        if current is not None:
+            if current not in builds:
+                raise refuse(
+                    f"names unlisted build {current} as the current build of "
+                    f"release {release_name}."
+                )
+            if builds[current]["withdrawn"]:
+                raise refuse(
+                    f"names withdrawn build {current} as the current build of "
+                    f"release {release_name}."
+                )
+    default = record["default"]
+    if default is not None and not isinstance(default, str):
+        raise refuse("must have a release name or null as default.")
+    if default is not None and default not in releases:
+        raise refuse(f"names unlisted release {default} as default.")
+    return record
 
 
 def build_hf_uri(repo_id: str, path_in_repo: str, revision: str) -> str:
@@ -286,33 +767,23 @@ def _apply_dataset_overlays(
     registry of *additional* named datasets that resolution should expose
     without ever certifying them as the default — for example a staged
     artifact published in its own immutable release (see
-    ``docs/release-bundles.md``). Because certification only rewrites
-    ``data_releases``, overlays survive re-certification untouched.
+    ``docs/release-bundles.md``). Certification keeps every overlay except
+    one whose name the new release certifies itself, which it removes and
+    reports; re-add such an overlay if a later release stops certifying it.
 
-    Overlays are strictly additive: an overlay may not shadow the certified
-    default dataset or any certified dataset entry, so it can never alter
-    default resolution.
+    Overlays are strictly additive (``shadowed_dataset_overlays``): an overlay
+    may not shadow the certified default dataset or any certified dataset
+    entry, so it can never alter default resolution.
     """
     overlays = (bundle.get(DATASET_OVERLAYS_KEY) or {}).get(country_id) or {}
     if not overlays:
         return release_payload
 
+    shadowed = shadowed_dataset_overlays(release_payload, overlays)
+    if shadowed:
+        raise ValueError(shadowing_overlays_message(country_id, shadowed))
     certified_datasets = dict(release_payload.get("datasets") or {})
-    default_dataset = release_payload.get("default_dataset")
-    for overlay_name, overlay_reference in overlays.items():
-        if overlay_name == default_dataset:
-            raise ValueError(
-                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
-                "shadows the certified default dataset. Overlays must never "
-                "change default resolution."
-            )
-        if overlay_name in certified_datasets:
-            raise ValueError(
-                f"Dataset overlay '{overlay_name}' for country '{country_id}' "
-                "collides with a certified dataset entry. Overlays must be "
-                "additive, not overrides."
-            )
-        certified_datasets[overlay_name] = overlay_reference
+    certified_datasets.update(overlays)
 
     return {**release_payload, "datasets": certified_datasets}
 
@@ -335,8 +806,113 @@ def get_release_manifest(country_id: str) -> CountryReleaseManifest:
     return manifest
 
 
+def _tro_nodes_with_id(value: object, node_id: str) -> list[dict]:
+    """Collect node definitions and references wherever JSON-LD nests them."""
+    nodes: list[dict] = []
+    if isinstance(value, dict):
+        if value.get("@id") == node_id:
+            nodes.append(value)
+        for child in value.values():
+            nodes.extend(_tro_nodes_with_id(child, node_id))
+    elif isinstance(value, list):
+        for child in value:
+            nodes.extend(_tro_nodes_with_id(child, node_id))
+    return nodes
+
+
+def bundled_data_release_manifest_sha256(country_id: str) -> str:
+    """Read the manifest's byte digest from the installed country bundle TRO.
+
+    The artifact and its arrangement must describe the release this bundle
+    serves. All assertions for the artifact's JSON-LD identifier must agree,
+    including definitions outside the inline composition. A missing or stale
+    sidecar cannot authorise a local manifest.
+    """
+    country_manifest = get_release_manifest(country_id)
+    tro_path = files("policyengine").joinpath(
+        "data", "bundle", f"{country_id}.trace.tro.jsonld"
+    )
+    artifact_id = "composition/1/artifact/data_release_manifest"
+    try:
+        tro = json.loads(tro_path.read_bytes())
+        artifacts = [
+            artifact
+            for node in tro["@graph"]
+            for artifact in node.get("trov:hasComposition", {}).get(
+                "trov:hasArtifact", []
+            )
+            if artifact.get("@id") == artifact_id
+        ]
+        locations = [
+            location.get("trov:hasLocation")
+            for node in tro["@graph"]
+            for arrangement in node.get("trov:hasArrangement", [])
+            for location in arrangement.get("trov:hasArtifactLocation", [])
+            if location.get("trov:hasArtifact", {}).get("@id") == artifact_id
+        ]
+        digest = artifacts[0].get("trov:sha256") if len(artifacts) == 1 else None
+        if (
+            not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-fA-F]{64}", digest) is None
+            or locations != [https_release_manifest_uri(country_manifest.data_package)]
+        ):
+            raise ValueError("missing, ambiguous, malformed, or stale manifest pin")
+        asserted_digests = set()
+        for node in _tro_nodes_with_id(tro, artifact_id):
+            if "trov:sha256" not in node:
+                continue
+            assertion = node["trov:sha256"]
+            if (
+                not isinstance(assertion, str)
+                or re.fullmatch(r"[0-9a-fA-F]{64}", assertion) is None
+            ):
+                raise ValueError("malformed manifest pin assertion")
+            asserted_digests.add(assertion.lower())
+        if asserted_digests != {digest.lower()}:
+            raise ValueError("conflicting manifest pin assertions")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(
+            f"Cannot use a local data release manifest for country '{country_id}': "
+            f"no valid SHA-256 pin in the installed bundle TRO {tro_path}. "
+            "Expected SHA-256: unavailable; actual SHA-256: unavailable."
+        ) from exc
+    return digest.lower()
+
+
+def _load_data_release_manifest(country_id: str) -> DataReleaseManifest:
+    """Load an explicitly configured, bundle-pinned file or the cached fetch.
+
+    Local files are read and verified on every call, including after a remote
+    manifest was cached. Configure the setting before importing country models.
+    """
+    env_name = f"POLICYENGINE_{country_id.upper()}_DATA_MANIFEST_FILE"
+    local_file = os.environ.get(env_name)
+    if local_file is None:
+        return _fetch_data_release_manifest(country_id)
+
+    expected = bundled_data_release_manifest_sha256(country_id)
+    try:
+        source_bytes = Path(local_file).expanduser().read_bytes()
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise ValueError(
+            f"Cannot read {env_name}={local_file!r}: {exc}. "
+            f"Expected SHA-256: {expected}; actual SHA-256: unavailable."
+        ) from exc
+    actual = hashlib.sha256(source_bytes).hexdigest()
+    if actual != expected:
+        raise ValueError(
+            f"Local data release manifest {env_name}={local_file!r} "
+            f"does not match the installed bundle. Expected SHA-256: {expected}; "
+            f"actual SHA-256: {actual}."
+        )
+    manifest = DataReleaseManifest.model_validate_json(source_bytes)
+    manifest.source_sha256 = actual
+    manifest._source_is_local = True
+    return _bind_to_bundle(manifest, get_release_manifest(country_id))
+
+
 @lru_cache
-def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
+def _fetch_data_release_manifest(country_id: str) -> DataReleaseManifest:
     country_manifest = get_release_manifest(country_id)
 
     try:
@@ -370,6 +946,37 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
     if not isinstance(source_bytes, bytes):
         source_bytes = response.text.encode("utf-8")
     data_release_manifest.source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    return _bind_to_bundle(data_release_manifest, country_manifest)
+
+
+def _bind_to_bundle(
+    data_release_manifest: DataReleaseManifest,
+    country_manifest: CountryReleaseManifest,
+) -> DataReleaseManifest:
+    """Pin a loaded manifest's files as the bundle does, then check them.
+
+    A build in its own release folder must be the build the bundle pinned,
+    and its own files are pinned inside that folder; ReleaseBuildFolderError
+    is not an unavailable manifest, so no bundled certificate covers it.
+    Older manifests take the bundle's release manifest revision.
+    """
+    if data_release_manifest.build_folder is not None:
+        data_release_manifest = read_build_folder(
+            data_release_manifest,
+            repo_id=country_manifest.data_package.repo_id,
+            manifest_path=country_manifest.data_package.release_manifest_path,
+            revision=_artifact_revision(country_manifest.data_package),
+        )
+    else:
+        _apply_release_revision(data_release_manifest, country_manifest)
+    _validate_bundle_artifacts(data_release_manifest, country_manifest)
+    return data_release_manifest
+
+
+def _apply_release_revision(
+    data_release_manifest: DataReleaseManifest,
+    country_manifest: CountryReleaseManifest,
+) -> DataReleaseManifest:
     release_revision = country_manifest.data_package.release_manifest_revision
     if release_revision is not None:
         for artifact in data_release_manifest.artifacts.values():
@@ -379,6 +986,113 @@ def get_data_release_manifest(country_id: str) -> DataReleaseManifest:
             ):
                 artifact.revision = release_revision
     return data_release_manifest
+
+
+def artifact_path_for_country_manifest(
+    artifact: DataReleaseArtifact, uri_parts: dict
+) -> str:
+    """Resolve producer-relative evidence paths as bundle certification does."""
+    path = artifact.path
+    release_dir = uri_parts["path"].rsplit("/", 1)[0]
+    if (
+        artifact.kind in RELEASE_SCOPED_ARTIFACT_KINDS
+        and artifact.repo_id == uri_parts["repo_id"]
+        and artifact.revision == uri_parts["revision"]
+        and not path.startswith(f"{release_dir}/")
+    ):
+        return f"{release_dir}/{path}"
+    return path
+
+
+def _validate_bundle_artifacts(
+    manifest: DataReleaseManifest, country: CountryReleaseManifest
+) -> None:
+    """Bind a loaded manifest to the artifacts this installed bundle serves.
+
+    Run after revision rewriting. Regional releases and additive overlays may
+    supply records absent from the primary manifest; every overlapping record
+    must agree, and the certified/default artifact must always be present.
+    """
+
+    def refuse(dataset: str, detail: str) -> NoReturn:
+        raise ValueError(
+            f"Data release manifest artifact {dataset!r} does not match the "
+            f"installed bundle for country {country.country_id!r}: {detail}."
+        )
+
+    default = country.default_dataset
+    declared_default = manifest.default_datasets.get("national")
+    if declared_default is not None and declared_default != default:
+        refuse(default, f"manifest declares default {declared_default!r}")
+    if default not in manifest.artifacts:
+        refuse(default, "missing default dataset artifact")
+    certified = country.certified_data_artifact
+    if certified is not None:
+        artifact = manifest.artifacts.get(certified.dataset)
+        if artifact is None:
+            refuse(certified.dataset, "missing certified dataset artifact")
+        try:
+            location, revision = certified.uri.removeprefix("hf://").rsplit("@", 1)
+            owner, repo, path = location.split("/", 2)
+        except ValueError:
+            refuse(certified.dataset, "invalid bundled certified artifact URI")
+        expected_identity = (f"{owner}/{repo}", path, revision)
+        actual_identity = (artifact.repo_id, artifact.path, artifact.revision)
+        if (
+            not certified.uri.startswith("hf://")
+            or actual_identity != expected_identity
+        ):
+            refuse(
+                certified.dataset,
+                f"expected {expected_identity!r}, got {actual_identity!r}",
+            )
+        if certified.sha256 is not None and artifact.sha256 != certified.sha256:
+            refuse(certified.dataset, "certified SHA-256 pin differs")
+    if default not in country.datasets and (
+        certified is None or certified.dataset != default
+    ):
+        refuse(default, "missing bundled default artifact record")
+
+    uri_parts = {
+        "repo_id": country.data_package.repo_id,
+        "revision": _artifact_revision(country.data_package),
+        "path": country.data_package.release_manifest_path,
+    }
+    for name, artifact in manifest.artifacts.items():
+        reference = country.datasets.get(name)
+        if reference is None:
+            continue
+        expected_identity = (
+            reference.repo_id or country.data_package.repo_id,
+            reference.path,
+            reference.revision or _artifact_revision(country.data_package),
+        )
+        actual_identity = (
+            artifact.repo_id,
+            artifact_path_for_country_manifest(artifact, uri_parts),
+            artifact.revision,
+        )
+        if actual_identity != expected_identity:
+            refuse(name, f"expected {expected_identity!r}, got {actual_identity!r}")
+        if (artifact.repo_type or country.data_package.repo_type) != (
+            reference.repo_type or country.data_package.repo_type
+        ):
+            refuse(name, "repository type differs")
+        if reference.sha256 is not None and artifact.sha256 != reference.sha256:
+            refuse(name, "managed SHA-256 pin differs")
+
+
+class _DataReleaseManifestLoader:
+    """Callable loader retaining the fetched manifest's typed cache controls."""
+
+    def __call__(self, country_id: str) -> DataReleaseManifest:
+        return _load_data_release_manifest(country_id)
+
+    cache_clear = staticmethod(_fetch_data_release_manifest.cache_clear)
+    cache_info = staticmethod(_fetch_data_release_manifest.cache_info)
+
+
+get_data_release_manifest = _DataReleaseManifestLoader()
 
 
 def _specifier_matches(version: str, specifier: str) -> bool:
@@ -392,10 +1106,35 @@ def _specifier_matches(version: str, specifier: str) -> bool:
         return False
 
 
+def _runtime_core_is_certified(
+    certification: DataCertification, runtime_core_version: Optional[str]
+) -> bool:
+    """Whether the running core is the one an exact-pair certificate tested.
+
+    Other bases make no claim about the core at run time. An exact pair was
+    tested with one core, so it holds only for that core.
+    """
+
+    if certification.compatibility_basis not in {
+        "qualified_exact_pair",
+        "qualified_exact_pair_local_manifest",
+    }:
+        return True
+    if runtime_core_version is None:
+        from importlib import metadata
+
+        try:
+            runtime_core_version = metadata.version("policyengine-core")
+        except metadata.PackageNotFoundError:
+            return False
+    return certification.certified_for_core_version == runtime_core_version
+
+
 def certify_data_release_compatibility(
     country_id: str,
     runtime_model_version: str,
     runtime_data_build_fingerprint: Optional[str] = None,
+    runtime_core_version: Optional[str] = None,
 ) -> DataCertification:
     country_manifest = get_release_manifest(country_id)
     try:
@@ -407,7 +1146,7 @@ def certify_data_release_compatibility(
                 runtime_data_build_fingerprint is not None
                 and bundled_certification.data_build_fingerprint is not None
                 and bundled_certification.compatibility_basis
-                != "legacy_compatible_model_package"
+                not in CLAIM_BASED_COMPATIBILITY
                 and runtime_data_build_fingerprint
                 != bundled_certification.data_build_fingerprint
             ):
@@ -418,6 +1157,9 @@ def certify_data_release_compatibility(
             if (
                 bundled_certification.certified_for_model_version
                 == runtime_model_version
+                and _runtime_core_is_certified(
+                    bundled_certification, runtime_core_version
+                )
             ):
                 return bundled_certification
             return DataCertification(
@@ -434,6 +1176,67 @@ def certify_data_release_compatibility(
                 certified_by=bundled_certification.certified_by,
             )
         raise exc
+
+    certification = _certify_available_data_release(
+        country_id,
+        country_manifest,
+        data_release_manifest,
+        runtime_model_version,
+        runtime_data_build_fingerprint,
+        runtime_core_version,
+    )
+    if data_release_manifest._source_is_local:
+        return certification.model_copy(
+            update={
+                "compatibility_basis": (
+                    f"{certification.compatibility_basis}_local_manifest"
+                )
+            }
+        )
+    return certification
+
+
+def _certify_available_data_release(
+    country_id: str,
+    country_manifest: CountryReleaseManifest,
+    data_release_manifest: DataReleaseManifest,
+    runtime_model_version: str,
+    runtime_data_build_fingerprint: Optional[str],
+    runtime_core_version: Optional[str],
+) -> DataCertification:
+    # A remote build-model, fingerprint or publisher claim cannot broaden an
+    # exact-pair certificate beyond the model, core and recorded data build
+    # that qualification tested. Check them before any acceptance path returns.
+    bundled_certification = country_manifest.certification
+    # Named as certification names it: the cut tag when the release has one.
+    remote_build_id = release_build_id(data_release_manifest.build)
+    if (
+        bundled_certification is not None
+        and bundled_certification.compatibility_basis == "qualified_exact_pair"
+    ):
+        if bundled_certification.certified_for_model_version != runtime_model_version:
+            raise ValueError(
+                "Data release manifest is not certified for the runtime model "
+                f"version {runtime_model_version} in country '{country_id}'; "
+                "the exact pair requires "
+                f"{bundled_certification.certified_for_model_version}."
+            )
+        if not _runtime_core_is_certified(bundled_certification, runtime_core_version):
+            raise ValueError(
+                "Data release manifest is not certified for the runtime core "
+                f"version {runtime_core_version} in country '{country_id}'; "
+                "the exact pair requires "
+                f"{bundled_certification.certified_for_core_version}."
+            )
+        if (
+            bundled_certification.data_build_id is not None
+            and bundled_certification.data_build_id != remote_build_id
+        ):
+            raise ValueError(
+                "Data release manifest is not certified for the remote data "
+                f"build {remote_build_id} in country '{country_id}'; the exact "
+                f"pair requires {bundled_certification.data_build_id}."
+            )
     built_with_model = (
         data_release_manifest.build.built_with_model_package
         if data_release_manifest.build is not None
@@ -457,11 +1260,7 @@ def certify_data_release_compatibility(
         return DataCertification(
             compatibility_basis="exact_build_model_version",
             certified_for_model_version=runtime_model_version,
-            data_build_id=(
-                data_release_manifest.build.build_id
-                if data_release_manifest.build is not None
-                else None
-            ),
+            data_build_id=release_build_id(data_release_manifest.build),
             built_with_model_version=built_with_model.version,
             built_with_model_git_sha=built_with_model.git_sha,
             data_build_fingerprint=built_with_model.data_build_fingerprint,
@@ -476,11 +1275,7 @@ def certify_data_release_compatibility(
         return DataCertification(
             compatibility_basis="matching_data_build_fingerprint",
             certified_for_model_version=runtime_model_version,
-            data_build_id=(
-                data_release_manifest.build.build_id
-                if data_release_manifest.build is not None
-                else None
-            ),
+            data_build_id=release_build_id(data_release_manifest.build),
             built_with_model_version=built_with_model.version,
             built_with_model_git_sha=built_with_model.git_sha,
             data_build_fingerprint=built_with_model.data_build_fingerprint,
@@ -496,11 +1291,7 @@ def certify_data_release_compatibility(
             return DataCertification(
                 compatibility_basis="legacy_compatible_model_package",
                 certified_for_model_version=runtime_model_version,
-                data_build_id=(
-                    data_release_manifest.build.build_id
-                    if data_release_manifest.build is not None
-                    else None
-                ),
+                data_build_id=release_build_id(data_release_manifest.build),
                 built_with_model_version=(
                     built_with_model.version if built_with_model is not None else None
                 ),
@@ -513,6 +1304,20 @@ def certify_data_release_compatibility(
                     else None
                 ),
             )
+
+    # An automated qualification of exactly this model and data build: the
+    # bundled certificate names the pair, and the ledger evidence for it is
+    # enforced when the bundle is built (tests/test_certification_evidence.py).
+    bundled_certification = country_manifest.certification
+    if (
+        bundled_certification is not None
+        and bundled_certification.compatibility_basis == "qualified_exact_pair"
+        and bundled_certification.certified_for_model_version == runtime_model_version
+        and bundled_certification.qualification_pair_id is not None
+        and bundled_certification.data_build_id == remote_build_id
+        and _runtime_core_is_certified(bundled_certification, runtime_core_version)
+    ):
+        return bundled_certification
 
     raise ValueError(
         "Data release manifest is not certified for the runtime model version "
@@ -614,6 +1419,43 @@ def dataset_logical_name(dataset: str) -> str:
 def resolve_default_datasets(country_id: str) -> list[str]:
     manifest = get_release_manifest(country_id)
     return list(manifest.datasets.keys())
+
+
+def region_dataset_name(country_id: str, region_type: str) -> Optional[str]:
+    """The certified dataset that ``region_type`` regions are routed to, if any."""
+
+    manifest = get_release_manifest(country_id)
+    template = manifest.region_datasets.get(region_type)
+    if template is None:
+        return None
+    return next(
+        (
+            name
+            for name, reference in manifest.datasets.items()
+            if reference.path == template.path_template
+        ),
+        None,
+    )
+
+
+def uk_area_dataset_hint(region_type: str) -> str:
+    """A sentence naming the dataset whose households carry an area's codes.
+
+    The Microcosm national default has no constituency or local-authority
+    codes; the local-area release the bundle routes those regions to does.
+    """
+
+    try:
+        name = region_dataset_name("uk", region_type)
+    except ValueError:
+        return ""
+    if name is None:
+        return ""
+    return (
+        f"The certified bundle routes {region_type} regions to the dataset "
+        f"{name!r}, whose households carry these codes: run the simulations "
+        "on that dataset."
+    )
 
 
 def resolve_region_dataset_path(

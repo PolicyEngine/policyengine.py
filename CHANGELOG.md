@@ -1,3 +1,344 @@
+## [6.17.1] - 2026-11-10
+
+### Fixed
+
+- `Simulation.ensure()` now runs and saves the simulation after leaving the handler for its saved-output lookup, so an exception raised by `run()` or `save()` no longer carries the handled `FileNotFoundError`, `StaleOutputError` or unexpected load error as its implicit context, and its traceback no longer begins with the lookup's. What `ensure()` loads, runs, saves, caches and logs is unchanged.
+
+
+## [6.17.0] - 2026-11-09
+
+### Added
+
+- `pe.us.calculate_household` accepts a list of groups for `marital_unit`, `family`, `spm_unit` and `tax_unit`. Each group is a mapping with `members`, a list of indexes into `people`, plus its own inputs, and each person belongs to exactly one group of the entity. An entity passed as a list comes back as a list of results in the same order, with one axis series per group under axes. A mapping still puts every person in one group, so existing calls return the same results. Callers can now give children and other adults their own marital units. With one marital unit for everyone, Medicaid's optional pathway for seniors and people with disabilities gave a single parent with one child the couple's income limit, and SSI added a child's earnings to the income of aged parents.
+
+### Changed
+
+- `calculate_household` now reads a list passed as `marital_unit`, `family`, `spm_unit` or `tax_unit` as a list of groups, so an empty list or a list of key-value pairs, which it used to turn into a mapping of inputs, now raises.
+
+
+## [6.16.1] - 2026-11-09
+
+### Changed
+
+- Certify Microcosm UK for policyengine-uk 2.174.1: the national `microcosm-uk-2024-25-national-20261107T020434Z-eeb6093e` (`microcosm_uk_2024_25`), built with 2.174.1 from PolicyEngine/microcosm#1535 at `dc00d158f`, and the local-area cut `microcosm-uk-2024-25-dense-20261107T173210Z-38605444` (`microcosm_uk_2024_25_dense`), which constituency and local-authority regions route to. The national adds the FRS full-time education flag, which Universal Credit's education condition reads, and binds ONS's single years of age 16 to 24 by sex. The local-area cut is built from the same spine at `03c31df56`, which adds two commits to `dc00d158f`: one local council tax cell deferred (`edd051ecc`) and its gate-only sign-off (`03c31df56`). It is also on 2.174.1, so both certify on their own build. The UK model pin moves from policyengine-uk 2.151.0 to 2.174.1 (policyengine-core stays 3.33.3), so UK results change with both the model and the data. From policyengine-uk 2.170.0 (PolicyEngine/policyengine-uk#2719), UK current law includes the Autumn Budget 2026 measures: the Household Energy Payment, the Pension Tax Allowance, the Carer's Allowance taper, the higher savings and property income rates, the £3,000 trading allowance, and the fuel duty and domestic electricity VAT extensions.
+
+
+## [6.16.0] - 2026-11-06
+
+### Removed
+
+- Removed `policyengine.provenance.supported_years`, `UnsupportedDatasetYearError` and the `allow_unsupported_years` argument of the UK and US `create_datasets` and `ensure_datasets`, which no longer check requested years; the Public API defines the supported years instead. The US functions again create year files for any requested year, including years before the dataset's data year such as 2022 and 2023 for `populace_us_2024`, which holds almost no data for them, and a UK year outside policyengine-uk's projection again fails with `No dataset found for year ...`.
+
+
+## [6.15.0] - 2026-11-05
+
+### Added
+
+- Certify Microcosm builds published side by side in their own release folders (`releases/<release>/<build>/`, with no Hugging Face tag): a release manifest that names its `release` and `build` as strings is certified from that folder, its own files are pinned inside it at the certified revision, and its `build` names the certificate, so two builds of one release never match. Certification refuses such a build unless the repository's `releases.json` at `main` lists it, has not withdrawn it, and is a record the release writer's parser accepts, and refuses any of its own files that is not a bare file name directly inside its folder. Such a manifest's build details (`built_at`, `built_with_model_package`, `built_with_core_package`) are read from its top level. At import, a remote or local manifest that names another release or build than the bundle's pinned folder is refused. Manifests published before this layout are read as before, and certified only from a repository with no `releases.json` at `main`.
+
+
+## [6.14.0] - 2026-11-05
+
+### Added
+
+- CI now fails a pull request whose head commit holds agent or job notes: a `.job/`, `.job-git/` or `.diag/` folder at any depth, or `HANDOFF.md`, `handoffs.jsonl`, `PR_BODY.md`, `PR-BODY.md`, `REPORT.md` or `PROGRESS.md` at the repository root. The new Agent notes workflow runs the default branch's `.github/check-agent-notes.sh` on every pull request, which the code workflow's path filter would skip, including when one is retargeted. It also checks main on every push and once a day, since a skip instruction in a commit message can skip the pull request and push runs but not the daily one. `.gitignore` now ignores the three folders.
+
+
+## [6.13.0] - 2026-11-03
+
+### Added
+
+- Added `policyengine.provenance.supported_years(country_id, dataset_path)`, which returns the years the installed country model supports a single-year dataset for: the years its `extend_single_year_dataset` projects the file to, built as the model's own `Simulation` builds them and without running any formula, from the data year onwards. The UK runs to policyengine-uk's default projection end (2024–2032 for a 2024–25 dataset on policyengine-uk 2.151.0). The US runs from the data year to the earlier of policyengine-us's default projection end and the last year of spm-calculator's SPM forecast (2024–2035 for `populace_us_2024` on policyengine-us 2.2.1 and spm-calculator 1.0.0), so society-wide runs no longer accept US years before the data year, such as 2022 and 2023. The UK qualification check and execution receipts now use this function rather than their own copies of the rule. Added `UnsupportedDatasetYearError`, a `ValueError` whose message and `country_id`, `dataset`, `years` and `supported_years` attributes name the refused years, the country and the supported years.
+
+### Changed
+
+- `create_datasets` and `ensure_datasets` (UK and US) now raise `UnsupportedDatasetYearError` for a requested year the source dataset is not supported for, after making the source available and before creating any year file; `allow_unsupported_years=True` turns the check off. The US used to create year files for any year, from inputs policyengine-core carried forward or uprated, and the UK failed with `No dataset found for year ...`. Year files that already exist are loaded without the check, so a US year file that an earlier release created for an unsupported year is still reused until it is deleted.
+
+### Removed
+
+- Constituency and local-authority result rows (`compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts`, `ConstituencyImpact` and `LocalAuthorityImpact`) no longer have `x` and `y` keys, the hex-map positions copied from the area lists. A lookup CSV passed as `constituency_csv_path` or `local_authority_csv_path` may still have `x` and `y` columns; they are ignored.
+
+  The packaged UK area lists no longer have `x` and `y` columns: `data/uk_geography/constituencies_2024.csv` now has `code,name,region,country` and `local_authorities_2023.csv` has `code,name`, with every row, code, name and the row order unchanged.
+
+
+## [6.12.1] - 2026-11-03
+
+### Changed
+
+- The pull-request and push-to-main Test jobs may run for 105 minutes instead of 90. On Python 3.11 to 3.13 they now take 65 to 90 minutes, and one of them was often cancelled at the 90-minute limit with no failing test.
+
+
+## [6.12.0] - 2026-11-02
+
+### Added
+
+- `certify-data --accept-regional-model-mismatch REASON --regional-input-surface-evidence AUDIT.json` (UK only) keeps a local-area release routed when it was built on another policyengine-uk version, and records the reviewed mismatch as `regional_certification` in the bundle instead of refusing; area receipts are uncertified. `scripts/audit_regional_input_surface.py` writes the audit, reading the release's build model in a throwaway `uv run` environment, and `verify_regional_certification` checks an area receipt's record of the exception.
+- Model versions publish the metadata the Public API could only read through the private `_load_system()` method: each model version's `entities` (key, plural and person flag) and `basic_inputs`; each variable's `is_input_variable`, `hidden_input`, `module_name`, `enum_values` (each value with its label, as declared) and, where its `adds` or `subtracts` names a parameter, `adds_parameter_path` or `subtracts_parameter_path`; each parameter's `economy` and `household` flags; and each bracket schedule as a parameter node with its stored label. Existing fields are unchanged: `adds` and `subtracts` still hold the list as of 2025-01-01.
+
+### Fixed
+
+- Require a byte-bound input-surface audit when accepting a UK regional model mismatch. The audit compares the regional H5's stored columns with the regional release's build model as well as the target model: it refuses columns the build model defines and the target does not, records columns neither model defines as never modelled, and reports as defaulted only target inputs the file does not store that were not build-model inputs. Certification reads both models again rather than trusting the evidence's lists, records that the stored columns are the auditor's (`stored_columns: auditor_attested`), and adds a limitation naming the defaulted inputs. The bundle and TRACE record the result and limitations and preserve the regional manifest digest and area build model; an area run's execution receipt carries a summary bound to the record's digest and stays uncertified. Dropping the regional release removes its exception record.
+
+  Refuse regional releases that explicitly name a different model package, and forward empty CLI reasons so certification rejects them, as it rejects reasons with no visible character. Document that the UK loader silently skips unknown columns.
+
+
+## [6.11.1] - 2026-10-27
+
+### Changed
+
+- Certify the Microcosm UK pair built on policyengine-uk 2.151.0 (microcosm `67ee2ddf3`): the national cut `microcosm-uk-2024-25-national-20261025T091414Z-a6299504` (`microcosm_uk_2024_25`) and, for constituency and local-authority regions, the local-area cut `microcosm-uk-2024-25-dense-20261026T105309Z-c9df4b86` (`microcosm_uk_2024_25_dense`), both built from one spine. The UK model pin moves from policyengine-uk 2.132.6 to 2.151.0 (policyengine-core stays 3.33.3), so UK results change with both the model and the data. From policyengine-uk 2.134.0 a capital gains tax reform scales realised gains by a retention-rate elasticity of 1 by default (`gov.simulation.capital_gains_responses.elasticity`); set it to 0 for a static costing. With a Hugging Face token set, importing policyengine with any policyengine-uk other than 2.151.0 raises.
+
+
+## [6.11.0] - 2026-10-25
+
+### Added
+
+- Support opt-in local data release manifests pinned by the installed bundle TRO, with fail-closed verification and a distinct runtime certification basis for offline Budget-day runners. Reject conflicting TRO hash assertions and require local and fetched manifest artifacts to agree with the installed bundle.
+
+### Fixed
+
+- UK runs now recalculate after each step that changes the built simulation: the policy's simulation modifier, the dynamic's parameter values written after it, and the dynamic's simulation modifier. Each step ends by dropping every value the simulation has calculated, keeping its inputs, including values a modifier stores with `set_input`, so the next step and the output read values calculated from the simulation as that step left it. Before, a value calculated before one of these steps kept its old value. A dynamic's parameter values written after a policy modifier missed every value the modifier had calculated, so a dynamic adding £1,000 a year to Child Benefit left a policy-warmed Child Benefit unchanged. Values a policy modifier calculated before storing an input with `set_input` did not include that input. A failed step still drops what it calculated, then ends the run. Runs without a simulation modifier are unchanged; with one, values the modifier calculated are calculated again afterwards. Labour supply responses to dynamic elasticities written after a policy modifier also need a policyengine-uk release with PolicyEngine/policyengine-uk#2673; on policyengine-uk 2.132.6 the response stays zero even without a modifier.
+
+
+## [6.10.2] - 2026-10-24
+
+### Changed
+
+- - CI test and check jobs can run on another runner pool named by the repository variables `CI_RUNNER_X64`, `CERTIFY_RUNNER_X64` and `CI_RUNNER_EVENTS`, and the jobs `CI_RUNNER_X64` can move now hold a read-only token. With no variable set, every job runs where it does today.
+
+
+## [6.10.1] - 2026-10-22
+
+### Fixed
+
+- Stop trusting the compromised eMudhra (emSign) intermediate CA certificates in CI and in environments installed from `uv.lock`. The lock now pins certifi 2026.10.19 (was 2025.8.3), which removes the root "emSign ECC Root CA - G3", and hf-xet 1.7.0 (was 1.1.9), which checks certificates against the operating-system CA store instead of a compiled-in CA list that included that root. Every workflow now pins uv 0.13.4 (was 0.12.14), whose compiled-in CA list also removes it, and `uv.lock` is regenerated with that uv. The package's dependency ranges are unchanged.
+
+
+## [6.10.0] - 2026-10-21
+
+### Changed
+
+- Switch the UK default dataset from the Enhanced FRS 2024-25 (policyengine-uk-data 1.58.1) to Microcosm UK 2024-25 (`microcosm_uk_2024_25`, cut `microcosm-uk-2024-25-national-20261019T083323Z-6cba5d71`), certified with policyengine-uk 2.132.6 and policyengine-core 3.33.3, the versions it was built with. Constituency and local-authority regions now load the Microcosm local-area release (`microcosm_uk_2024_25_dense`, cut `microcosm-uk-2024-25-dense-20261019T000432Z-ee5c2dbe`) and are in the default UK region registry. UK results change with the data. The national file has no constituency or local-authority codes, so constituency and local-authority outputs (`compute_uk_geography_disclosure` at those levels, `compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts`) need simulations on `microcosm_uk_2024_25_dense`, and receipts for those runs are uncertified: the certificate covers the national dataset only. The Enhanced FRS 2024-25 datasets stay loadable by name. Data certificates now say how they cover policyengine-core: by default one follows the bundle's core pin (`core_binding: bundle_pin`, as the UK certificate does; the Microcosm releases claim core 3.33.3), and certification and `bundle.py check --include-tros --strict-tros` warn when the pin is outside a release's core claims, as it is for the US release today; `--core-version` binds the core instead (`core_binding: certified`). With a Hugging Face token set, importing policyengine with any policyengine-uk other than 2.132.6 raises, as it did before for versions the Enhanced FRS release did not claim. The certified default is below the Universal Credit caseload floor (0.897 of the floor's 6.7m benchmark, policyengine-uk-data's derivation; Microcosm calibrates to DWP Stat-Xplore's 6.2m), an exception accepted and recorded in the data certification skill. UK candidate promotion now closes the pull requests of pairs from another data line than main's certificate, at the commit their receipt qualified, and recovery no longer re-dispatches attempts for such pairs.
+
+### Removed
+
+- The Enhanced FRS weight matrices (`parliamentary_constituency_weights`, `local_authority_weights`, `local_geography_weights`) no longer resolve by name, now that the UK default is Microcosm UK and its area regions use the Microcosm local-area release.
+
+
+## [6.9.0] - 2026-10-20
+
+### Added
+
+- Ship the UK constituency (2024, 650 including Northern Ireland) and local-authority (April 2023, 361 including Ards and North Down) lists with the package, so area regions and geography output labels no longer depend on GCS. Certify a UK regional release with `certify-data --regional-manifest-uri`: a Microcosm local-area release, or, for a national-first switch, the enhanced FRS with its area weight matrices (`--regional-release-kind area_coded_national`). Constituency and local-authority regions load the routed dataset and join the default registry when it is a local-area release. Add the Universal Credit coverage floor check (`scripts/check_uk_uc_floor.py`) for UK default switches.
+
+### Fixed
+
+- Constituency and local-authority regions were empty when requested, because their GCS download helper no longer exists in policyengine-core. Certification now names a build by its cut tag when the release has one, refuses a regional release that does not serve the pinned model version (and core, with `--core-version`) by its own claims, and refuses a re-certification that would silently drop a bundle's regional routing (`--drop-regional-release` removes it on purpose, and cannot be combined with `--regional-manifest-uri`). Automated UK qualification no longer orders a candidate from another data line against main's certificate: with a Microcosm certificate on main, every uk-data pair compared as newer and would have been promoted back. Such a pair is now skipped (`other_line`) unless forced, and promotion never readies or closes it.
+
+
+## [6.8.0] - 2026-10-19
+
+### Added
+
+- Documented and tested policyengine-uk's capital gains realisation response, whose default from policyengine-uk 2.134.0 is a retention-rate elasticity of 1.0 (policyengine-uk#2396). Results don't change until policyengine.py pins 2.134.0 or later. From then on, a UK CGT reform with no elasticity set realises gains at that elasticity on every entry point, where it was costed statically, and gains qualifying for Business Asset Disposal Relief take the same 1.0. The default leaves results without a reform unchanged. Reforms that move marginal rates on gains, including some income tax reforms, include the response. The Budget reform contract (2.1.0) adds a case for gains partly qualifying for the relief, which waits on that pin like `cgt_default_response`. See the Reforms guide for the static settings, the sensitivities and the marginal tax rate convention.
+
+
+## [6.7.6] - 2026-10-19
+
+### Fixed
+
+- The UK qualification job may now run for up to 330 minutes, so candidates whose gates take over two hours, now that the household contract route runs, finish instead of being cancelled and re-staged.
+
+
+## [6.7.5] - 2026-10-18
+
+### Changed
+
+- US state and congressional-district regions use the ACS-local Populace dataset again: the rebuilt release `populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z` (PolicyEngine/microcosm#1263), in which every SPM unit has a classified adult. This ends the temporary national-file filter of #604. The rebuild is registered as a legacy SPM source with the ACS household-population scope rule, so its group-quarters units stay outside SPM measurement, as for the previous release.
+
+
+## [6.7.4] - 2026-10-18
+
+### Changed
+
+- The UK replay qualification gate records narrowly scoped data-limited exceptions under policy d1344-replay-regressions-v2. A matching regression requires coherent zero candidate effects, approved input lineage, and digest-bound Budget-input and positive-input probe evidence from the same candidate-pair attempt. Named acceptance must restate the publication designation; unmatched failures still fail.
+
+### Fixed
+
+- Replay exceptions reject nonzero candidate effects at every reported fiscal level and retain cumulative usable-input history across certified pairs. Budget-input evidence is bound to the exact pair and attempt, status maps must agree with missing-input claims, and probe evidence must match the installed model and recorded baseline/reform arithmetic.
+
+
+## [6.7.3] - 2026-10-17
+
+### Changed
+
+- Contract 2.0.0 of the UK Budget reform contract resolves cos d1344: after a freeze ends, the personal allowance, basic rate limit and aligned NICs thresholds are checked against indexation from the frozen amount (ITA 2007 ss21 and 57), and the six pending checks become gating ones; the sampled property uses the same statutory oracle for the allowance.
+
+
+## [6.7.2] - 2026-10-17
+
+### Fixed
+
+- The UK Budget reform contract's household route imports the UK model module directly, so it runs in the qualification gate, whose scripts skip the country imports that set `policyengine.uk`; every household-route row there had errored.
+
+
+## [6.7.1] - 2026-10-17
+
+### Fixed
+
+- The UK Budget reform contract's population rows no longer report a count of survey records from 1 to 9 (it reads "fewer than 10"), or a total over fewer than 10 changed records, and they state each condition they test as a flat true/false finding in `detail`.
+
+
+## [6.7.0] - 2026-10-16
+
+### Added
+
+- Qualification reads policyengine-scorecard#183's receipts. The vendored replay receipt schema and its mirrors now carry the base's own grid record (`diff.base_events`) and the candidate's missing and unsupported measure-years. A gap counts as known only when the base's record lists the same measure-year as inert, or missing and supported.
+
+
+## [6.6.0] - 2026-10-16
+
+### Added
+
+- Qualify each new policyengine-uk wheel or uk-data release automatically before promotion. The new `certify-uk-release` workflow and `scripts/check_uk_candidate.py` resolve and deduplicate the candidate pair. They build a candidate commit with the manifest, pins, lock, TRO and test constants regenerated together, and run mandatory gates on it, none of which can be skipped: installed versions, wheel hashes, core compatibility, data access, dataset bytes, supported years, Budget inputs, the reform contract and metric review bounds. The metric review reads the aggregate-impact tool's small-cell format: a figure from fewer than 10 records is never compared, a change that would come from one goes to review, totals rebuilt without different suppressed figures are lined up from published figures where they are sums, a skipped check counts as not run, and only reports in that format are written to the ledger. From the reform contract's population checks, which run on the survey data, the ledger publishes each row's fixed fields (check, route, status and the like) and only the top-level true/false findings of its detail; `docs/engineering/runbooks/uk-qualification.md` explains how to see a failed check's figures locally. They also send policyengine-scorecard an immutable replay request, record a qualification receipt in the `uk-qualification-ledger` branch, and promote in order. Certification gains an exact `qualified_exact_pair` basis backed by the ledger receipt, together with a core compatibility check. The release dispatch now carries the certified UK bundle identity and goes to the Budget dashboard and the scorecard as well.
+- Added `UK_REGION_GSS_CODES` in `policyengine.outputs.uk_geography_disclosure`: the ONS GSS code of each UK region, under every spelling a household output may carry (GSS codes, the engine's region enum names and Microcosm's pseudo codes for the nations).
+
+### Changed
+
+- `compute_uk_geography_disclosure` now keys regions on ONS GSS codes (`E12000001` to `E12000009` for England's regions, `W92000004`, `S92000003` and `N92000002` for Wales, Scotland and Northern Ireland), whether the household output carries `region_code_oa` or only the stored `region`, so releases from national and local datasets publish the same codes. Microcosm's pseudo codes for the nations map to the country codes, `UNKNOWN` is unassigned, and any other region value raises. Region codes in `parent_of`, in `prior_public` and in region weights passed with `area_weights=` must be GSS codes. Region rows from national datasets used to carry the engine's enum names, and enum names in `parent_of` or `prior_public` were accepted; they now raise.
+- The UK qualification replay gate applies policy d1344-replay-regressions-v1. It fails lost results, lost responses (a measure-year the candidate lists as inert, or a measure-year total of £0 against a base at least the diff's bound away), mapping flags and incomplete grids. It sends every other flagged move to a named reviewer. Each receipt records the policy id and its text's SHA-256. Automatic UK promotion is on (d1344): a qualified candidate still built on current main is moved onto main, by a push leased on its parent, once every check of its own runs on its own tree has passed. Runs of pull requests from other branches or forks at the same commit are not counted; a candidate whose runs may not all be its own pull request's against main (its branch has another pull request that is open or ran at its commit, whatever that one's base, or its own pull request's base was ever changed) is refused with an error, since GitHub does not record which pull request or base a run is for, and a base renamed into main records no event. Candidate pull requests are found through GitHub's listing of this repository's own branches, which forks' pull requests cannot crowd out, and every write to one goes by its number. Refresh re-runs a candidate's failed, timed-out or cancelled runs up to four attempts within GitHub's 30-day window, and a candidate left waiting on a run it will not re-run fails the promote run with an error naming it.
+
+### Fixed
+
+- Receipts no longer refuse a measure helper whose quoted `Annotated` metadata contains `|` (for example `List['Annotated[float, "weekly | monthly"]']`), still refuse a union hidden under a name a helper rebinds (`from typing import Tuple as Annotated`), and inspect deeply quoted annotations without a recursion error. A parameter path such as `'gov.hmrc.income_tax.rates.uk[0].threshold'` no longer counts toward the inspection limit, and a lazy loader whose module `__getattr__` raises no longer crashes the receipt. Receipts now refuse a typing generic over a local import of a module not yet loaded (for example `Optional[statistics.NormalDist]`), an attribute of something other than a module inside a typing generic or subscripted with a union (`List[pd.DataFrame.dtypes]`, `HTTPStatus.OK.phrase[0 | 0]`), a function holding a string too deeply nested to parse, and a function whose forward references exceed 100,000 inspected nodes. The `Literal` and `Annotated` exemption is withheld from a function when code anywhere in the module could rebind typing names by a route the receipt can see (`sys.modules`, `setattr` through an alias, a forward reference that calls code or stores to an attribute or subscript). The docs now say which uses of `id` and the other refused names are refused, and which routes the exemption does not follow.
+- The disclosure release check no longer passes in silence when area codes do not match. `Release.check()` now raises `DisclosureError` for a `parent_of` value that is not an area of the parent level, and for a `prior_public` cell at a level the release holds whose area code is not an area of that level: of the estimates for the cell's reform and year when the release holds them, and of any of the level's estimates otherwise. A prior table on older boundaries therefore raises even for a year the release does not hold, so filter those cells out first. `Release()` refuses a prior cell with an unknown outcome. Such codes used to leave the nesting and earlier-publication checks with nothing to check, so they returned no finding. Prior cells at levels the release does not hold are still accepted, but `compute_uk_geography_disclosure` raises for one at a level that is not a UK level, since that is a misspelling. The adapter also reads the stored `region` when `region_code_oa` gives no household a region, and raises a clear error when a requested level's column gives no household an area, instead of a `KeyError` from the check. The messages give counts, never codes or values.
+- The push-to-main Test job now times out at 90 minutes, as the pull-request one does, so a slow but passing suite no longer cancels the run before versioning and leaves the release unpublished.
+
+
+## [6.5.0] - 2026-10-15
+
+### Added
+
+- Updated the UK Budget reform contract to version 1.1.0. Its rate-blending case, `mid_year_blended_rate`, now holds capital gains realisations fixed (both elasticity conventions zero and no separate Business Asset Disposal Relief elasticity), so its static expected values hold whatever realisation response policyengine-uk applies by default. Added `cgt_retention_response`, which checks the response itself: with a retention-rate elasticity of 1, a 20% basic rate from 6 April 2027 scales realised gains by (1 - 20%) / (1 - 18%) on every route. Added `cgt_default_response`, the same reform with no response settings, so the report shows the default response policyengine-uk applies; its checks expect the retention-rate elasticity of 1 that policyengine-uk#2396 makes the default, and report as pending (without gating) until policyengine.py pins that release. Each case also checks that all three response settings reached the model. `capital_gains_response()` builds a case's elasticity changes.
+- Added a record of the capital gains realisation response to UK runs (`policyengine.tax_benefit_models.uk.capital_gains_responses`). Each population run records the policyengine-uk release and where it was installed from when that is not a package index, the caller's explicit `gov.simulation.capital_gains_responses` settings in the order they apply and, where the installed policyengine-uk reports it, the response it resolved after every reform and modifier. The record is kept with the output dataset (`metadata`), in the release bundle, the run record and the saved output file; household results carry it under `provenance`, and managed microsimulations under `policyengine_bundle["capital_gains_responses"]` for each year. UK cache and saved-output identity now includes a digest of the explicit settings, and a saved UK output is reused only under the same settings and the same policyengine-uk release from the same source (never from a local directory install). Each saved UK output is therefore calculated once more after upgrading, so a job that relies on a warm UK cache takes as long as a cold run the first time. Added `StaleOutputError`, a `ValueError` that `load()` raises for a saved output it refuses (UK and US alike); `Simulation.ensure()` logs the reason at INFO and runs the simulation again, instead of logging a warning with a traceback.
+- Add execution receipt schema v1 (`policyengine.provenance.receipt`), which records exactly what produced a UK result. It records the installed wrapper, model and core versions, with wheel hashes only when the builder verified them against the wheel RECORD, plus the data release and the SHA-256 of the simulated dataset bytes. The certificate digest is attached only when the certificate covers that model, core, dataset and wrapper. The receipt also carries reform and baseline digests, which refuse modifiers they cannot bind, and the fiscal-year convention. Digests use RFC 8785 canonical JSON over strict JSON values (`policyengine.provenance.canonical`), and the JSON Schema ships at `policyengine/data/schemas/execution_receipt.v1.schema.json`.
+- Added `composed_reform_identity` and the `policyengine-uk.scenario_composition/v1` representation, so an execution receipt can bind several reforms applied in one run, in order.
+- Execution receipt reform digests accept infinite parameter values (an uncapped threshold is `.inf`), encoding `inf` and `-inf` as `{"$nonfinite": "Infinity"}` and `{"$nonfinite": "-Infinity"}`. A payload that uses the key `$nonfinite` itself is refused, and finite payloads digest as before.
+- Budget reform contract case rows now carry `reform_identity`, the reform as a receipt binds it (`ReformIdentity`, named by the case id), for the representation each route consumes, or `null` with `reform_identity_unavailable` where receipt schema v1 cannot bind it; property, population and run-level rows carry `null` with the reason.
+
+### Changed
+
+- The pull-request Test job may run for 90 minutes instead of 60. It now takes 30 to 54 minutes per Python version, and runs on 3.12 and 3.13 were cancelled at the 60-minute limit.
+
+### Fixed
+
+- Receipts no longer refuse a process started within a second of an install: on Linux, psutil's process start time can read about a second early, so install metadata written just before the start looked newer than the process. Metadata written more than two seconds after the reported start is still refused. An install within two seconds after the reported start is therefore not detected.
+- Re-locked `uv.lock` with the pinned uv 0.12.14. Two dependency markers written by another uv version made the release's version bump rewrite the lock, which the reviewed-lock check rejects, so no release has published since #571.
+- The UK Budget reform contract's shared-parameter check now catches list-valued parameters changed in place and changes to node or scale metadata or a scale's band count.
+
+
+## [6.4.3] - 2026-10-15
+
+### Changed
+
+- The UK Budget reform contract's Universal Credit allowance check is tested on both runs: each must hold finite values and keep every payment at or above the payable floor, to within a penny. Beyond the payable floor, the check does not bound how far deductions rise: policyengine-uk scales every deduction type with the standard allowance, while the law holds some, such as advance recovery, fixed (policyengine-uk#2410).
+
+
+## [6.4.2] - 2026-10-15
+
+### Fixed
+
+- The UK Budget reform contract's Universal Credit allowance check now asserts on the award before deductions, and bounds how far deductions can lower the amount paid.
+
+
+## [6.4.1] - 2026-10-15
+
+### Changed
+
+- The UK Budget reform contract report gives each assertion a unique id, and the population checks declare the rows a full run emits.
+- Certify policyengine-uk 2.130.1 with policyengine-uk-data 1.58.1 (enhanced_frs_2024_25) as the UK default pair, on the publisher's compatibility claim.
+
+
+## [6.4.0] - 2026-10-14
+
+### Added
+
+- Added `policyengine.disclosure`, a self-contained layer for statistical disclosure control and uncertainty on area-level outputs, and `compute_uk_geography_disclosure` for UK regions, constituencies and local authorities. Each published number rests on at least 10 distinct survey households (clones counted once through `source_household_id`), carries a 90% bootstrap interval and is rounded to the order of its standard error. Rows are `reported`, `approximate` or `withheld`. A release check reports numbers a reader could recover by subtraction across geography levels, a package and its components, and earlier publications. Keyed noise per survey household is available behind `DisclosureSettings(noise=True)`. `validate_public` and `python -m policyengine.disclosure validate` check the format of published files. UK runs now keep `source_household_id` and `region` on the household output when the dataset provides them.
+
+### Changed
+
+- Deprecated `compute_uk_constituency_impacts`, `compute_uk_local_authority_impacts` and their `ConstituencyImpact` and `LocalAuthorityImpact` classes. Their output is not disclosure-controlled; use `compute_uk_geography_disclosure` instead. They now log a warning through the `policyengine` logger and emit a `DeprecationWarning`, and otherwise behave as before.
+
+
+## [6.3.4] - 2026-10-13
+
+### Changed
+
+- `Poverty.rate` is now `None`, not `0.0`, when nobody in the group is measured (its weighted population with a poverty status is zero), for every source. `headcount` and `total_population` are unchanged, and the poverty DataFrame helpers report the rate as missing. Callers that format or subtract rates must handle `None`.
+- US state and congressional-district regions temporarily filter the certified national dataset again, as in 6.2.1, because the ACS-local release lacks source-backed SPM independence and canonical SPM refused every state-region run (PolicyEngine/microcosm#1263).
+
+### Fixed
+
+- Measure SPM poverty on legacy certified US sources that predate SPM measurement-scope declarations, such as the ACS-local Build O release. Following Census's ACS household-population method, ACS group-quarters units are outside the SPM measurement: their SPM results are missing instead of stopping the run with `SPM_COMPOSITION_REQUIRED`, and poverty rates count measured people only. Ordinary tax and benefit results are unchanged.
+- Supply the certified SPM independence role from the national release for the ASEC and PUF records of legacy certified US sources, so independent-teen SPM units are measured instead of stopping SPM calculations.
+
+
+## [6.3.3] - 2026-10-13
+
+### Changed
+
+- `create_datasets` stamps each US year file with the register of renamed stored inputs it was cut under and a year-file format revision. `ensure_datasets` creates a year file again, and `load_datasets` refuses it, unless its stamp matches this release exactly. A year file cut before a rename was registered, which may have lost that input, is therefore not reused. `load_datasets` says why it refuses a file, naming the renames the file may lack when its register is the reason. Year files written before the stamp existed are created again once.
+
+
+## [6.3.2] - 2026-10-12
+
+### Changed
+
+- - Publish to PyPI with trusted publishing instead of the organisation-wide PyPI token.
+
+
+## [6.3.1] - 2026-10-12
+
+### Changed
+
+- Certify policyengine-uk 2.126.12 with policyengine-uk-data 1.58.0 (`enhanced_frs_2024_25`), on the publisher's compatibility claim in the 1.58.0 release manifest; policyengine-core stays at 3.33.0. Reforms keyed from 6 April, such as `2026-04-06.2100-12-31`, now apply in that fiscal year. Baseline UK results change with policyengine-uk 2.125.2 to 2.126.12, chiefly fuel duty (+2.04%, from litre divisors on DESNZ pump prices), income tax (+0.29% to +0.45%, from banding savings and dividend income above property income), Carer's Allowance (-2.2% to -3.5%, from applying the earnings limit) and Pension Credit in 2025.
+
+
+## [6.3.0] - 2026-10-12
+
+### Added
+
+- Added the UK Budget reform contract (`policyengine.tax_benefit_models.uk.budget_reform_contract`), version 1.0.0. `run_budget_reform_contract()` checks that dated reforms (an April rate change, a finite change, an extended freeze, an April uprating schedule, a mid-year blended rate, a CPI-driven indexation change, a scenario or policy combining a parameter-setting modifier with dated changes, an unknown path, and each route's documented key readings) give independently derived results through the policyengine-uk and policyengine.py routes, leave the baseline and later unreformed runs unchanged, and survive bounded property sampling. It returns a JSON report for release qualification.
+
+
+## [6.2.7] - 2026-10-12
+
+### Fixed
+
+- Align UK household and population reform routes with policy effective dates and inclusive date intervals, reject ambiguous bare-year keys, and pass parameter reforms at country-model construction so dated changes are reprocessed when supported by policyengine-uk. A UK policy or dynamic carrying both parameter values and a simulation modifier (as a `Policy` or `Dynamic` sum does) now applies its values and then its modifier, where the modifier used to replace the values.
+
+
+## [6.2.6] - 2026-10-10
+
+### Changed
+
+- Certify policyengine-uk-data 1.58.0 (`enhanced_frs_2024_25`) as the UK default, and pin policyengine-uk 2.125.1 and policyengine-core 3.33.0. The data was built with policyengine-uk 2.122.2 and core 3.32.13; the publisher's compatibility claim in the 1.58.0 release manifest covers the newer versions. UK results change with the new data release and with the policyengine-uk updates since 2.102.3, including Housing Benefit's Guarantee Credit passport now keyed on receipt.
+
+
+## [6.2.5] - 2026-10-09
+
+### Fixed
+
+- Add opt-in verified US state/year preparation and temporarily assume WIC claiming only for missing participation decisions on identified ACS people, preserving donor decisions and country-model eligibility.
+
+
+## [6.2.4] - 2026-10-09
+
+### Fixed
+
+- UK population runs now anchor the State Pension on the survey year their data was projected from, as policyengine-uk does, so a run of a UK year file matches policyengine-uk on the certified dataset, with or without a reform. Before, it took the projected year as the survey year: the State Pension was uprated by CPI rather than the triple lock, and State Pension rate reforms had no effect on it under policyengine-uk 2.102.3 and were understated under 2.123. Projected year files now also store the survey year's tables, which doubles their size. `ensure_datasets` regenerates year files from earlier releases and `load_datasets` refuses them; `Simulation.load()` refuses UK outputs saved by earlier releases, and `Simulation.ensure()` runs them again.
+
+
 ## [6.2.3] - 2026-10-09
 
 ### Changed

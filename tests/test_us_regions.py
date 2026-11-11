@@ -13,7 +13,7 @@ from policyengine.provenance.manifest import CountryReleaseManifest
 
 US_LOCAL_AREA_DATASET_URI = (
     "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
-    "@populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z"
+    "@populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
 )
 
 

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "country_id": "uk",
+  "required_years": [2025, 2026, 2027, 2028, 2029, 2030],
+  "budget_horizon_years": [2026, 2027, 2028, 2029, 2030, 2031],
+  "reform_contract": {
+    "entrypoint": "policyengine.tax_benefit_models.uk.budget_reform_contract:run_budget_reform_contract",
+    "seed": 0,
+    "max_examples": 20,
+    "_comment": "W1's runner (policyengine.py#577); its pass also needs policyengine-uk#2305 and policyengine.py#575, so certified 2.125.1 fails the dated cases by design."
+  },
+  "metrics": {
+    "tool": {
+      "repository": "PolicyEngine/policyengine-uk",
+      "commit": "1191ac5a473419f48e0c0643f83d31719da788e1",
+      "path": "policyengine_uk/utils/aggregate_impact",
+      "_comment": "W3's aggregate-impact tool, pinned so both pairs use the same definitions: the approved head of draft policyengine-uk#2335. It suppresses figures from fewer than 10 records and gives each total's excluded figures with their signs (exclude_signs), which the metrics review requires. #2335 merges after cos d1601; move the pin to the merged commit when it lands, and never to a commit without suppression."
+    },
+    "years": [2025, 2026, 2027, 2028, 2029, 2030, 2031],
+    "bounds": "uk_review_bounds.json"
+  },
+  "budget_inputs": {
+    "critical": "uk_budget_critical_inputs.json"
+  },
+  "replay": {
+    "repository": "PolicyEngine/policyengine-scorecard",
+    "event_type": "uk-replay-qualification-request",
+    "state_ref": "replay-state",
+    "compare_to": "latest_certified",
+    "poll_timeout_minutes": 360
+  },
+  "reform_responsiveness": {
+    "_comment": "Plan invariant 'Reform responsiveness' (11 Oct 2026): a reform the model silently ignores must fail qualification. The standard set, each reform's target variable, direction and yearly minimum are the metrics tool's own (standard_reforms.yaml in the pinned tool; at 228a05a3e each minimum is a fifth of the reform's smallest yearly effect on the certified pair, adopted under cos d1344). The tool costs the set by default and emits reform_runs:<id> and responsive:<id> checks. This gate requires both checks to be present and passing for every standard reform in the candidate's report, and recomputes each responsive verdict from the report's reform_targets.<id> values.",
+    "standard_reforms_file": "standard_reforms.yaml"
+  },
+  "promotion": {
+    "automatic": true,
+    "decision": "cos d1344 (15 October 2026): automatic promotion is on once policyengine.py#574 lands on its gates. The promote job fast-forwards main to the newest promotable candidate's qualified commit once every check on it has passed, which succeeds only while main is still the commit the candidate was built on; otherwise the candidate is requalified on current main. A needs-review receipt is promoted only after a named reviewer accepts that exact receipt."
+  }
+}

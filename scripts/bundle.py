@@ -44,12 +44,28 @@ def _certify_data(args: argparse.Namespace) -> int:
         argv.extend(["--regional-artifact-prefix", args.regional_artifact_prefix])
     if args.regional_path_template:
         argv.extend(["--regional-path-template", args.regional_path_template])
+    if args.regional_release_kind:
+        argv.extend(["--regional-release-kind", args.regional_release_kind])
+    if args.drop_regional_release:
+        argv.append("--drop-regional-release")
+    if args.accept_regional_model_mismatch is not None:
+        argv.extend(
+            ["--accept-regional-model-mismatch", args.accept_regional_model_mismatch]
+        )
+    if args.regional_input_surface_evidence:
+        argv.extend(
+            ["--regional-input-surface-evidence", args.regional_input_surface_evidence]
+        )
     if args.no_generate:
         argv.append("--no-generate")
     if args.no_changelog:
         argv.append("--no-changelog")
     if args.skip_artifact_check:
         argv.append("--skip-artifact-check")
+    if args.core_version:
+        argv.extend(["--core-version", args.core_version])
+    if args.qualified_pair_id:
+        argv.extend(["--qualified-pair-id", args.qualified_pair_id])
     return certify_data_release_main(argv)
 
 
@@ -82,11 +98,12 @@ def _check(args: argparse.Namespace) -> int:
         generate,
         load_bundle_manifest,
         validate_bundle_measurements,
+        validate_dataset_overlays,
     )
 
-    validate_bundle_measurements(
-        load_bundle_manifest(), require_published_spm=args.published_spm
-    )
+    bundle = load_bundle_manifest()
+    validate_bundle_measurements(bundle, require_published_spm=args.published_spm)
+    validate_dataset_overlays(bundle)
     result = generate(check=True)
     if not args.include_tros:
         return result
@@ -196,9 +213,39 @@ def _parser() -> argparse.ArgumentParser:
     certify.add_argument(
         "--regional-manifest-uri",
         help=(
-            "Optional regional release_manifest.json URI to merge into US "
-            "Populace certification."
+            "Regional release_manifest.json URI whose dataset serves the local "
+            "region types (US states and districts, UK constituencies and local "
+            "authorities)."
         ),
+    )
+    certify.add_argument(
+        "--regional-release-kind",
+        help=(
+            "How to read the regional release; forwarded to "
+            "scripts/certify_data_release.py, which lists and checks the kinds. "
+            "Defaults to local_area."
+        ),
+    )
+    certify.add_argument(
+        "--drop-regional-release",
+        action="store_true",
+        help=(
+            "Remove the bundle's current regional routing on re-certification. "
+            "Cannot be combined with --regional-manifest-uri."
+        ),
+    )
+    certify.add_argument(
+        "--accept-regional-model-mismatch",
+        metavar="REASON",
+        help=(
+            "UK only: route regions to a regional release on another model "
+            "version, recording this reviewed reason; forwarded to "
+            "scripts/certify_data_release.py."
+        ),
+    )
+    certify.add_argument(
+        "--regional-input-surface-evidence",
+        help="Audited regional input-surface JSON; required for an accepted mismatch.",
     )
     certify.add_argument(
         "--regional-artifact-prefix",
@@ -225,6 +272,14 @@ def _parser() -> argparse.ArgumentParser:
             "Skip reachability checks for the certified dataset and any "
             "vendored/regional artifacts."
         ),
+    )
+    certify.add_argument(
+        "--core-version",
+        help="policyengine-core version to check against core claims and pin.",
+    )
+    certify.add_argument(
+        "--qualified-pair-id",
+        help="Admit the exact pair on automated qualification (needs --core-version).",
     )
     certify.set_defaults(func=_certify_data)
 

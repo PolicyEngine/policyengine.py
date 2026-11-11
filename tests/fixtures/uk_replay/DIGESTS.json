@@ -1,0 +1,8 @@
+{
+ "qualification_request_golden.json": {
+  "request_id": "2e4dd8350bfdc5a39780e002c14ab49c02cbf28b77b222af420e38c68bb945cf"
+ },
+ "replay_receipt_golden.json": {
+  "receipt_sha256": "5cbc44c1b79506a6410c12b437a7451a0e1387ab6a133b9cb8dc0bf71b396650"
+ }
+}

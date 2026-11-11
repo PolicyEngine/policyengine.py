@@ -106,6 +106,6 @@ src/policyengine/
 
 **Country-specific model classes**: `PolicyEngineUSLatest` and `PolicyEngineUKLatest` inherit from a shared `MicrosimulationModelVersion` base (variable/parameter loading, manifest certification, `save`/`load`). Each subclass only implements `run()` and a handful of country hooks (`_load_system`, `_load_region_registry`, `_dataset_class`, `_get_runtime_data_build_metadata`). The US `run` applies reforms as a dict at `Microsimulation(reform=...)` construction time; the UK `run` wraps inputs as `UKSingleYearDataset` and applies reforms via a modifier after construction.
 
-**LRU cache + file caching**: `Simulation.ensure()` checks an in-process LRU cache (max 100 entries), then tries loading from disk, then falls back to `run()` + `save()`.
+**LRU cache + file caching**: `Simulation.ensure()` checks an in-process LRU cache (max 100 entries), then tries loading from disk, then falls back to `run()` + `save()`. When `load()` refuses an out-of-date saved output it raises `StaleOutputError` (a `ValueError`), which `ensure()` logs at INFO as an expected rerun. Any other load error is logged as a warning.
 
 **Output pattern**: All output types inherit from `Output`, implement `.run()`, and populate result fields. Convenience functions (e.g., `calculate_us_poverty_rates()`) create, run, and return collections of output objects.

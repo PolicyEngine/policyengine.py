@@ -30,7 +30,7 @@ total_snap.run()
 total_snap.result
 ```
 
-`Simulation.ensure()` loads a cached result if one exists, or runs and caches on miss. Call `Simulation.run()` explicitly if you want to bypass the cache.
+`Simulation.ensure()` loads a cached result if one exists, or runs and caches on miss. Call `Simulation.run()` explicitly if you want to bypass the cache. A UK simulation's explicit capital gains response settings are part of its cache and saved-output identity; see [The UK capital gains realisation response](#the-uk-capital-gains-realisation-response).
 
 ### Canonical US SPM settings and provenance
 
@@ -87,6 +87,24 @@ before passing them to the country model. Generic adult/child counts remain
 separate. The native source enrichment is not recalibration, and inherited
 schema-5 calibration diagnostics cannot be relabeled as schema 6.
 
+**Legacy SPM sources (backward compatibility).** Some certified US sources
+predate SPM declarations, for example the ACS-local Build O release. For those
+sources, .py derives the declarations from evidence they carry, following
+Census's ACS SPM methodology, which measures the household population only:
+
+- ACS group-quarters SPM units are outside the SPM measurement. Their SPM
+  thresholds, resources and poverty indicators are missing (NaN).
+- Poverty indicators on those sources are floats: 1.0, 0.0, or NaN for "not
+  measured".
+- Poverty rates count measured people only. A group with nobody measured has
+  a rate of `None`, not 0.
+- The sources' ASEC and PUF records take the certified SPM independence role
+  from the national release.
+
+Ordinary tax, benefit and income results are unchanged. Outputs record the
+declarations they used under `legacy_spm_declarations`. See
+[the runbook](engineering/runbooks/us-legacy-spm-sources.md).
+
 The wrapper's native pandas HDF loader accepts files that store only calibrated
 `household_weight`. It maps missing person and group weight columns through
 native membership IDs in memory, retaining supplied weight columns and the
@@ -118,9 +136,11 @@ dataset = datasets["populace_us_2024_2026"]
 
 The default US dataset is **Populace US 2024** — a Populace-built dataset
 calibrated to IRS, CMS, SNAP, Census, and other administrative totals. The
-current UK certified default is **Enhanced FRS 2024–25**, supplied by
-`policyengine-uk-data`. **Populace UK 2023** remains available as a named,
-non-default bundle dataset.
+current UK certified default is **Microcosm UK 2024–25**, a Microcosm build
+calibrated to HMRC, DWP, OBR and other administrative totals; constituency and
+local-authority regions use its local-area release. **Enhanced FRS 2024–25**
+(`enhanced_frs_2024_25`, policyengine-uk-data 1.58.1) and **Populace UK 2023**
+remain available as named, non-default bundle datasets.
 
 PolicyEngine.py obtains the repository type, immutable revision, and SHA-256
 from the installed release bundle. An existing file in the configured data
@@ -181,9 +201,10 @@ ca = Simulation(
 ### UK private data and raw h5 access
 
 UK population data uses licensed Family Resources Survey inputs. The default
-UK release bundle points to the private
-`policyengine/policyengine-uk-data-private` Hugging Face repository. Set
-`HUGGING_FACE_TOKEN` to a token from a Hugging Face account with access:
+UK release bundle points to the private `policyengine/populace-uk-private`
+Hugging Face repository, and the Enhanced FRS datasets to
+`policyengine/policyengine-uk-data-private`. Set `HUGGING_FACE_TOKEN` to a
+token from a Hugging Face account with access:
 
 ```bash
 export HUGGING_FACE_TOKEN=hf_...
@@ -198,11 +219,11 @@ import policyengine as pe
 from policyengine.core import Simulation
 
 datasets = pe.uk.ensure_datasets(
-    datasets=["enhanced_frs_2024_25"],
+    datasets=["microcosm_uk_2024_25"],
     years=[2026],
     data_folder="./data",
 )
-dataset = datasets["enhanced_frs_2024_25_2026"]
+dataset = datasets["microcosm_uk_2024_25_2026"]
 
 simulation = Simulation(
     dataset=dataset,
@@ -219,7 +240,7 @@ from policyengine.provenance import materialize_dataset
 
 result = materialize_dataset(
     "uk",
-    "enhanced_frs_2024_25",
+    "microcosm_uk_2024_25",
 )
 
 print(result.path)
@@ -230,6 +251,90 @@ The bundle API uses the repository type recorded in the bundle, so callers do
 not need repository-specific download logic. Authentication or authorization
 failures are reported directly and do not cause a retry against another
 repository type.
+
+### UK year files and the data year
+
+`ensure_datasets` and `create_datasets` cut one file per requested year from
+the projection policyengine-uk makes of the certified dataset. policyengine-uk
+takes the first year of a dataset as observed data. Its State Pension formulas
+split each person's reported State Pension against that year's legislated
+rates, and scale the share to the simulated year's rates, which follow the
+triple lock. The projection uprates the reported amount by CPI, so handing a
+projected year's tables to policyengine-uk as observed data would make the
+State Pension follow CPI instead.
+
+Each projected year file therefore keeps its data year, `dataset.data_year`
+(2024 for Microcosm UK 2024–25), and that year's tables,
+`dataset.data_year_data`. `Simulation.run()` projects the data year's tables
+forward as policyengine-uk does, and uses the file's own tables for the
+simulated year. A run of a year file then gives the same result, record by
+record, as `policyengine_uk.Microsimulation` on the certified file, with or
+without a reform. Keeping the data year's tables doubles a projected file: the
+Enhanced FRS 2026 file is 226 MB, against 113 MB for its own tables. A dataset
+built in memory without a data year is observed data for its own year, which
+is how policyengine-uk treats a single-year dataset.
+
+Row filtering applies to both sets of tables, matched by entity ID. Weight
+replacement changes the simulated year's weights only; the data year and the
+years between keep national weights. A row-filtered run is a simulation of the
+region's households alone, so
+variables that policyengine-uk calculates over every household in the
+simulation are calculated over the region: income deciles, the relative
+poverty median, and `shareholding`, which spreads corporate taxes across
+households (PolicyEngine/policyengine.py#567). Variables of a person or
+benefit unit that do not depend on those match the national run.
+
+Year files written by earlier releases have no recorded data year.
+`ensure_datasets` writes them again and `load_datasets` refuses them. A year
+file opened directly, as `PolicyEngineUKDataset(filepath=...)`, is not
+checked. A saved UK simulation output records the data year its run anchored
+on; `Simulation.load()` refuses an output saved without one, and
+`Simulation.ensure()` runs it again.
+
+### The UK capital gains realisation response
+
+policyengine-uk scales realised capital gains in response to a reform, at an
+elasticity set under `gov.simulation.capital_gains_responses`. Its default is
+the model's, so it can change between policyengine-uk releases. Each UK run
+records the response it applied, read after every reform and modifier.
+
+- **Where it is kept.** It is in `simulation.release_bundle["capital_gains_responses"]`,
+  the run record's `results.json` and the saved output file.
+- **What it holds.**
+  - `model`: the policyengine-uk release. Its `source` is `null` for a
+    release from a package index; otherwise it says where the install came
+    from: a version control commit, an archive's SHA-256, or a local
+    directory and whether it is editable.
+  - `request`: the caller's explicit settings under that path, in the order
+    they apply (policy, then dynamic), and their digest.
+  - `resolved`: the assumption the release reports. That is the convention,
+    the elasticities for main-rate gains and for gains qualifying for Business
+    Asset Disposal Relief, the MTR elasticity, the separate relief switch, and
+    whether each is the default, an override or set to zero for an MTR
+    elasticity. It is `null` with a release that doesn't report it.
+- **Modifiers.** Changes a simulation modifier makes aren't listed under
+  `request`, as run records don't describe modifiers. `resolved` reflects them.
+  Neither the `storage_id` nor `Simulation.load()` sees them, so two
+  simulations with the same `id` whose modifiers set the response differently
+  share a saved output. Give such simulations different ids.
+- **Identity.** A simulation with explicit settings adds `-cgr-<digest>` to its
+  `storage_id`, so its cache entry and saved output are kept apart from runs
+  with other settings. The digest covers each setting as given, including
+  whether it came from the policy or the dynamic and its dates. So the same
+  value set another way, or with an explicit end date instead of none, is
+  saved separately.
+- **Reuse.** `Simulation.load()` reuses a saved UK output only when its record
+  shows the same policyengine-uk release, installed from the same source, and
+  the same settings. A branch installed from git or a local directory can
+  carry the version number of a published release with another default.
+  With policyengine-uk installed from a local directory, editable or not, no
+  saved UK output is reused, as its code can change without its version
+  changing.
+- **Reruns.** Otherwise `load()` raises `StaleOutputError`, and
+  `Simulation.ensure()` runs the simulation again and logs the reason at INFO.
+  Outputs saved before outputs recorded the response are calculated once
+  more, so a job that relies on a warm UK cache takes as long as a cold run
+  the first time it runs after the upgrade.
 
 ## Simulations
 
@@ -322,6 +427,14 @@ Pass `allow_unmanaged=True` with a custom `dataset=` to opt out of the release
 bundle. Explicit local paths and Hugging Face URIs remain supported in this
 mode. GCS dataset URIs are not supported.
 
+A UK managed microsimulation also records, in
+`sim.policyengine_bundle["capital_gains_responses"]`, the capital gains
+realisation response it applies in each year of its dataset (see
+[The UK capital gains realisation response](#the-uk-capital-gains-realisation-response)).
+Its `reform=` goes to policyengine-uk unchanged, so no request is listed.
+Settings that conflict are recorded as an error for that year, and raise when
+the response is calculated.
+
 For managed simulations, `sim.policyengine_bundle` records the actual source
 package, repository type, revision, verified SHA-256, and local path.
 
@@ -362,15 +475,49 @@ The renames applied are recorded as `{old: new}` (`{}` when none applied):
 carried the draw: data that stores neither name runs with the new input's
 default, which for WIC is full take-up.
 
-Files written before this mapping existed have no record, and are not reused:
+A saved US output written before this mapping existed has no record and may
+have been calculated without the mapped inputs, so `load()` refuses it, and
+`ensure()` runs the simulation again and saves the new output. Saved outputs
+are checked only for the record, not for the register they were calculated
+under.
 
-- A saved US output may have been calculated without the mapped inputs.
-  `load()` refuses it, and `ensure()` runs the simulation again and saves the new
-  output.
-- A year file that `ensure_datasets` or `create_datasets` wrote stores
-  neither name, so the draw is lost from it. `ensure_datasets` creates such
-  year files again, and `load_datasets` refuses them. A year file opened
-  directly, as `PolicyEngineUSDataset(filepath=...)`, is not checked.
+### Year files
+
+`create_datasets` stamps each year file, after writing everything else, with
+the register it was cut under and a year-file format revision
+(`legacy_inputs.YEAR_FILE_STAMP_H5_DATASET`, UTF-8 JSON
+`{"register": {old: new, ...}, "revision": 1}`). `ensure_datasets` reuses a
+year file only when its stamp equals this release's exactly and its renames
+record lists only renames in the stamped register. Otherwise it logs why and
+creates the year files again; `load_datasets` refuses the file with the same
+reason, which names the renames the file may lack when its register is the
+cause. To decide, both read only the stamp and the record, never the tables
+or the source dataset. `legacy_inputs.year_file_stamp_problem(path)` returns
+the reason, or `None` for a current year file.
+
+A year file is out of date when:
+
+- it has no stamp. Year files that policyengine.py 6.1.1 and earlier cut,
+  with policyengine-us 2.x, from a source storing the draw only as
+  `would_claim_wic` (such as the certified default) store neither WIC take-up
+  name, so the draw is lost from them. Year files written with the renames
+  record but before the stamp are cut again once, and so is a year file whose
+  write did not finish;
+- its register lacks an entry this release has. It may have lost that
+  entry's input, as the older files lost the WIC draw;
+- its register has an entry this release lacks, or maps an old name to
+  another new name. It may store a new name this release's engine does not
+  define, and a run skips any column the engine does not define;
+- it has another format revision, or its stamp or record cannot be read.
+
+So any change to `LEGACY_INPUT_RENAMES` makes every year file out of date,
+and two policyengine.py versions with different registers that share a data
+folder cut each other's year files again. `ensure_datasets` raises, rather
+than cutting the files again, when a year file cannot be opened for reasons
+unrelated to its contents: no permission, a directory at its path, or a lock
+held by another process. A year file opened directly, as
+`PolicyEngineUSDataset(filepath=...)`, is not checked, and saving it again with
+`save()` drops its stamp.
 
 ## Pinned model versions
 

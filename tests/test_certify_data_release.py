@@ -14,15 +14,23 @@ from policyengine.provenance.certification import (
     CertificationError,
     build_country_manifest_payload,
     certify_data_release,
+    merge_area_coded_national_release_manifest,
+    merge_local_area_release_manifest,
+    merge_regional_release_manifest,
     merge_us_local_area_release_manifest,
     merge_us_regional_release_manifest,
     merge_us_state_release_manifest,
+    model_compatibility_basis,
     parse_manifest_uri,
     required_supplemental_release_files,
     should_validate_vendored_artifacts,
     validate_release_manifest,
 )
-from policyengine.provenance.manifest import DataReleaseManifest
+from policyengine.provenance.manifest import (
+    CountryReleaseManifest,
+    DataReleaseManifest,
+    _apply_dataset_overlays,
+)
 
 TAG = "populace-us-2024-aaaaaaa-20260101"
 MANIFEST_URI = (
@@ -171,6 +179,13 @@ def _local_area_release_manifest_payload() -> dict:
         "dataset_role": "non_default_local_area",
         "is_default": False,
         "default_datasets": {},
+        "build": {
+            "build_id": US_LOCAL_AREA_TAG,
+            "built_with_model_package": {
+                "name": "policyengine-us",
+                "version": "1.723.0",
+            },
+        },
         "artifacts": {
             "populace_us_2024_acs_local": {
                 "kind": "microdata",
@@ -222,6 +237,12 @@ def _uk_release_manifest_payload() -> dict:
     return payload
 
 
+def _tmp_bundle(tmp_path: Path) -> Path:
+    bundle_path = tmp_path / "manifest.json"
+    bundle_path.write_text(json.dumps(_bundle_source_payload()) + "\n")
+    return bundle_path
+
+
 def _bundle_source_payload() -> dict:
     return {
         "schema_version": 2,
@@ -253,6 +274,40 @@ class TestParseManifestUri:
     def test__given_bare_path__then_raises(self):
         with pytest.raises(CertificationError, match="hf://dataset"):
             parse_manifest_uri("https://example.com/manifest.json")
+
+
+class TestModelBasisAgreement:
+    """The primary and regional checks share one model-basis decision."""
+
+    def test__given_claim_only__then_both_paths_give_the_same_warning(self):
+        manifest = _manifest()
+        manifest.build.built_with_model_package = None
+
+        basis, warnings = validate_release_manifest(
+            manifest, "policyengine-us", "1.723.0"
+        )
+        regional_basis, regional_warnings = model_compatibility_basis(
+            manifest, "policyengine-us", "1.723.0"
+        )
+
+        assert basis == regional_basis == "legacy_compatible_model_package"
+        assert regional_warnings == [
+            warning for warning in warnings if "compatibility claim" in warning
+        ]
+
+    def test__given_no_basis__then_both_refusals_state_the_same_reason(self):
+        manifest = _manifest()
+        manifest.build.built_with_model_package = None
+
+        with pytest.raises(CertificationError) as primary:
+            validate_release_manifest(manifest, "policyengine-us", "9.9.9")
+        with pytest.raises(CertificationError) as regional:
+            model_compatibility_basis(manifest, "policyengine-us", "9.9.9")
+
+        reason = str(regional.value).split(";")[0]
+        assert str(primary.value).startswith(reason + ";")
+        assert "automated qualification" in str(primary.value)
+        assert "automated qualification" not in str(regional.value)
 
 
 class TestValidateReleaseManifest:
@@ -587,7 +642,7 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                return_value=response,
+                side_effect=_without_releases_record(response),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
@@ -650,7 +705,9 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                side_effect=[primary_response, regional_response],
+                side_effect=_without_releases_record(
+                    [primary_response, regional_response]
+                ),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
@@ -697,6 +754,7 @@ class TestCertifyDataRelease:
         assert (
             release["datasets"]["populace_us_2024_acs_local"]["repo_type"] == "dataset"
         )
+        assert release["regional_release_kind"] == "local_area"
         assert result.dataset_count == 5
 
     def test__given_us_without_data_producer__then_legacy_update_is_explicitly_unsupported(
@@ -777,7 +835,7 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                return_value=response,
+                side_effect=_without_releases_record(response),
             ),
             patch(
                 "policyengine.provenance.certification.head_release_file",
@@ -790,6 +848,7 @@ class TestCertifyDataRelease:
                 data_producer="populace",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
+                bundle_path=_tmp_bundle(tmp_path),
             )
 
     def test__given_unreachable_artifact__then_raises(self, tmp_path):
@@ -800,7 +859,7 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                return_value=response,
+                side_effect=_without_releases_record(response),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
@@ -821,6 +880,7 @@ class TestCertifyDataRelease:
                 data_producer="populace",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
+                bundle_path=_tmp_bundle(tmp_path),
             )
 
     def test__given_unreachable_vendored_artifact__then_raises(self, tmp_path):
@@ -831,7 +891,7 @@ class TestCertifyDataRelease:
         with (
             patch(
                 "policyengine.provenance.certification.requests.get",
-                return_value=response,
+                side_effect=_without_releases_record(response),
             ),
             patch(
                 "policyengine.provenance.certification.head_artifact",
@@ -856,6 +916,7 @@ class TestCertifyDataRelease:
                 data_producer="populace",
                 manifest_uri=MANIFEST_URI,
                 model_version="1.723.0",
+                bundle_path=_tmp_bundle(tmp_path),
             )
 
 
@@ -969,3 +1030,900 @@ class TestSourceEnrichmentProducerRelease:
         assert self._payload()["region_datasets"] == {
             "national": {"path_template": "populace_us_2024.h5"}
         }
+
+
+UK_NATIONAL_LINE = "microcosm-uk-2024-25-national"
+UK_NATIONAL_TAG = f"{UK_NATIONAL_LINE}-20261101T000000Z-aaaaaaaa"
+UK_NATIONAL_URI = (
+    "hf://dataset/policyengine/populace-uk-private"
+    f"@{UK_NATIONAL_TAG}/releases/{UK_NATIONAL_LINE}/release_manifest.json"
+)
+UK_DENSE_LINE = "microcosm-uk-2024-25-dense"
+UK_DENSE_TAG = f"{UK_DENSE_LINE}-20261101T000000Z-bbbbbbbb"
+UK_DENSE_URI = (
+    "hf://dataset/policyengine/populace-uk-private"
+    f"@{UK_DENSE_TAG}/releases/{UK_DENSE_LINE}/release_manifest.json"
+)
+EFRS_URI = (
+    "hf://model/policyengine/policyengine-uk-data-private"
+    "@0aa3eee1cdae8f8125f4aff126a8f01957595dc3/releases/1.58.0/release_manifest.json"
+)
+UK_MODEL_VERSION = "2.126.12"
+EFRS_REPO = "policyengine/policyengine-uk-data-private"
+
+
+def _microcosm_uk_national_payload() -> dict:
+    return {
+        "schema_version": 1,
+        "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+        "default_datasets": {"national": "microcosm_uk_2024_25"},
+        "compatible_model_packages": [
+            {"name": "policyengine-uk", "specifier": f"=={UK_MODEL_VERSION}"}
+        ],
+        "build": {
+            "build_id": UK_NATIONAL_LINE,
+            "cut_tag": UK_NATIONAL_TAG,
+            "built_with_model_package": {
+                "name": "policyengine-uk",
+                "version": UK_MODEL_VERSION,
+            },
+        },
+        "artifacts": {
+            "microcosm_uk_2024_25": {
+                "kind": "microdata",
+                "path": "microcosm_uk_2024_25.h5",
+                "repo_id": "policyengine/populace-uk-private",
+                "revision": UK_NATIONAL_TAG,
+                "sha256": "a" * 64,
+            },
+            "calibration_diagnostics": {
+                "kind": "diagnostics",
+                "path": "calibration_diagnostics.json",
+                "repo_id": "policyengine/populace-uk-private",
+                "revision": UK_NATIONAL_TAG,
+            },
+        },
+    }
+
+
+def _microcosm_uk_dense_payload() -> dict:
+    return {
+        "schema_version": 1,
+        "data_package": {"name": "microcosm-data", "version": "0.1.0"},
+        "dataset_role": "non_default_local_area",
+        "is_default": False,
+        "default_datasets": {},
+        "build": {
+            "build_id": UK_DENSE_LINE,
+            "cut_tag": UK_DENSE_TAG,
+            "built_with_model_package": {
+                "name": "policyengine-uk",
+                "version": UK_MODEL_VERSION,
+            },
+        },
+        "artifacts": {
+            "microcosm_uk_2024_25_dense": {
+                "kind": "microdata",
+                "path": "microcosm_uk_2024_25_dense.h5",
+                "repo_id": "policyengine/populace-uk-private",
+                "revision": UK_DENSE_TAG,
+                "sha256": "b" * 64,
+            },
+            "rowwise_candidate_manifest": {
+                "kind": "diagnostics",
+                "path": "rowwise_candidate_manifest.json",
+                "repo_id": "policyengine/populace-uk-private",
+                "revision": UK_DENSE_TAG,
+            },
+        },
+    }
+
+
+def _efrs_release_payload() -> dict:
+    """Shaped like policyengine-uk-data's enhanced FRS 1.58.0 release."""
+
+    def artifact(kind: str, path: str, digit: str) -> dict:
+        return {
+            "kind": kind,
+            "path": path,
+            "repo_id": EFRS_REPO,
+            "revision": "1.58.0",
+            "sha256": digit * 64,
+        }
+
+    return {
+        "schema_version": 1,
+        "data_package": {"name": "policyengine-uk-data", "version": "1.58.0"},
+        "default_datasets": {
+            "national": "enhanced_frs_2024_25",
+            "baseline": "frs_2024_25",
+        },
+        "compatible_model_packages": [
+            {"name": "policyengine-uk", "specifier": "==2.122.2"},
+            {"name": "policyengine-uk", "specifier": f"=={UK_MODEL_VERSION}"},
+        ],
+        "build": {
+            "build_id": "policyengine-uk-data-1.58.0",
+            "built_with_model_package": {
+                "name": "policyengine-uk",
+                "version": "2.122.2",
+            },
+        },
+        "artifacts": {
+            "enhanced_frs_2024_25": artifact(
+                "microdata", "enhanced_frs_2024_25.h5", "1"
+            ),
+            "frs_2024_25": artifact("microdata", "frs_2024_25.h5", "2"),
+            "local_authority_weights": artifact(
+                "weights", "local_authority_weights.h5", "3"
+            ),
+            "local_geography_weights": artifact(
+                "weights", "local_geography_weights.csv.gz", "4"
+            ),
+            "parliamentary_constituency_weights": artifact(
+                "weights", "parliamentary_constituency_weights.h5", "5"
+            ),
+        },
+    }
+
+
+def _response(payload: dict) -> MagicMock:
+    response = MagicMock()
+    response.status_code = 200
+    response.content = json.dumps(payload).encode()
+    return response
+
+
+def _without_releases_record(responses):
+    """Serve each manifest request in turn, and answer the repository's
+    ``releases.json`` with Hugging Face's 404: these repositories publish
+    tagged builds, so certification finds no record there.
+
+    ``responses`` is a list, served in order, or one response served for every
+    manifest request.
+    """
+
+    remaining = list(responses) if isinstance(responses, list) else None
+
+    def get(url, headers=None, timeout=None):
+        if url.endswith("/resolve/main/releases.json"):
+            missing = MagicMock()
+            missing.status_code = 404
+            missing.content = b"Entry not found"
+            missing.headers = {"X-Error-Code": "EntryNotFound"}
+            return missing
+        if remaining is None:
+            return responses
+        response = remaining.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+    return get
+
+
+def _certify_uk(
+    bundle_path: Path, responses: list, manifest_uri: str = UK_NATIONAL_URI, **kwargs
+):
+    with (
+        patch(
+            "policyengine.provenance.certification.requests.get",
+            side_effect=_without_releases_record(responses),
+        ),
+        patch(
+            "policyengine.provenance.certification.head_artifact",
+            return_value=True,
+        ),
+        patch(
+            "policyengine.provenance.certification.head_artifact_reference",
+            return_value=True,
+        ),
+        patch(
+            "policyengine.provenance.certification.fetch_pypi_wheel_metadata",
+            return_value={"sha256": "d" * 64, "url": "https://example"},
+        ),
+        patch(
+            "policyengine.provenance.certification.policyengine_version",
+            return_value="9.9.9",
+        ),
+    ):
+        return certify_data_release(
+            country="uk",
+            data_producer="populace",
+            manifest_uri=manifest_uri,
+            model_version=UK_MODEL_VERSION,
+            bundle_path=bundle_path,
+            **kwargs,
+        )
+
+
+def _sim_api_routes_both_area_types(release: dict) -> bool:
+    # policyengine-sim-api's uk_area_regions_routed: a UK default without area
+    # codes is accepted only when both area region types are routed.
+    manifest = CountryReleaseManifest.model_validate(release)
+    return all(
+        region_type in manifest.region_datasets
+        for region_type in ("constituency", "local_authority")
+    )
+
+
+class TestUKRegionalMerge:
+    def _national(self) -> DataReleaseManifest:
+        return DataReleaseManifest.model_validate(_microcosm_uk_national_payload())
+
+    def test__given_uk_local_area_release__then_routes_constituencies_and_las(self):
+        merged, kind = merge_regional_release_manifest(
+            "uk",
+            self._national(),
+            DataReleaseManifest.model_validate(_microcosm_uk_dense_payload()),
+            regional_repo_type="dataset",
+        )
+
+        assert kind == "local_area"
+        assert merged.metadata["region_datasets"] == {
+            "national": {"path_template": "microcosm_uk_2024_25.h5"},
+            "constituency": {"path_template": "microcosm_uk_2024_25_dense.h5"},
+            "local_authority": {"path_template": "microcosm_uk_2024_25_dense.h5"},
+        }
+        dense = merged.artifacts["microcosm_uk_2024_25_dense"]
+        assert dense.revision == UK_DENSE_TAG
+        assert dense.repo_type == "dataset"
+        # Only the microdata joins; the local release's evidence stays there.
+        assert "rowwise_candidate_manifest" not in merged.artifacts
+
+    def test__given_efrs_as_area_coded_national__then_carries_dataset_and_matrices(
+        self,
+    ):
+        merged, kind = merge_regional_release_manifest(
+            "uk",
+            self._national(),
+            DataReleaseManifest.model_validate(_efrs_release_payload()),
+            release_kind="area_coded_national",
+            regional_repo_type="model",
+        )
+
+        assert kind == "area_coded_national"
+        assert merged.default_datasets == {"national": "microcosm_uk_2024_25"}
+        region_datasets = merged.metadata["region_datasets"]
+        assert region_datasets["constituency"] == {
+            "path_template": "enhanced_frs_2024_25.h5"
+        }
+        assert region_datasets["local_authority"] == region_datasets["constituency"]
+        carried = {
+            "enhanced_frs_2024_25",
+            "local_authority_weights",
+            "local_geography_weights",
+            "parliamentary_constituency_weights",
+        }
+        assert carried <= set(merged.artifacts)
+        assert "frs_2024_25" not in merged.artifacts
+        for name in carried:
+            artifact = merged.artifacts[name]
+            assert (artifact.repo_id, artifact.revision) == (EFRS_REPO, "1.58.0")
+            assert artifact.repo_type == "model"
+
+    def test__given_national_release_without_kind__then_names_the_flag(self):
+        with pytest.raises(
+            CertificationError, match="--regional-release-kind area_coded_national"
+        ):
+            merge_regional_release_manifest(
+                "uk",
+                self._national(),
+                DataReleaseManifest.model_validate(_efrs_release_payload()),
+            )
+
+    def test__given_area_coded_release_without_a_matrix__then_rejects_it(self):
+        payload = _efrs_release_payload()
+        payload["artifacts"].pop("local_authority_weights")
+
+        with pytest.raises(CertificationError, match="local_authority_weights.h5"):
+            merge_area_coded_national_release_manifest(
+                "uk",
+                self._national(),
+                DataReleaseManifest.model_validate(payload),
+            )
+
+    def test__given_local_area_release_as_area_coded_national__then_rejects_it(self):
+        with pytest.raises(CertificationError, match="must be a national release"):
+            merge_area_coded_national_release_manifest(
+                "uk",
+                self._national(),
+                DataReleaseManifest.model_validate(_microcosm_uk_dense_payload()),
+            )
+
+    def test__given_us_area_coded_national__then_rejects_it(self):
+        with pytest.raises(CertificationError, match="only supported for the UK"):
+            merge_area_coded_national_release_manifest(
+                "us",
+                DataReleaseManifest.model_validate(
+                    _populace_manifest_payload_without_regions()
+                ),
+                DataReleaseManifest.model_validate(_efrs_release_payload()),
+            )
+
+    def test__given_uk_local_area_release__then_generic_merge_checks_role(self):
+        payload = _microcosm_uk_dense_payload()
+        payload["is_default"] = True
+
+        with pytest.raises(
+            CertificationError, match="UK local-area release must declare is_default"
+        ):
+            merge_local_area_release_manifest(
+                "uk",
+                self._national(),
+                DataReleaseManifest.model_validate(payload),
+            )
+
+
+class TestUKRegionalCertification:
+    def test__given_national_first_efrs_route__then_bundle_routes_areas_to_efrs(
+        self, tmp_path
+    ):
+        bundle_path = _tmp_bundle(tmp_path)
+
+        result = _certify_uk(
+            bundle_path,
+            [
+                _response(_microcosm_uk_national_payload()),
+                _response(_efrs_release_payload()),
+            ],
+            regional_manifest_uri=EFRS_URI,
+            regional_release_kind="area_coded_national",
+        )
+
+        release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+        assert release["default_dataset"] == "microcosm_uk_2024_25"
+        assert release["regional_release_kind"] == "area_coded_national"
+        assert release["regional_source_manifest_uri"] == EFRS_URI
+        assert release["region_datasets"]["constituency"] == {
+            "path_template": "enhanced_frs_2024_25.h5"
+        }
+        assert _sim_api_routes_both_area_types(release)
+        # sim-api binds a matrix only to the release of the dataset it
+        # reweights: the same repo and revision.
+        datasets = release["datasets"]
+        for name in (
+            "enhanced_frs_2024_25",
+            "parliamentary_constituency_weights",
+            "local_authority_weights",
+        ):
+            assert (datasets[name]["repo_id"], datasets[name]["revision"]) == (
+                EFRS_REPO,
+                "1.58.0",
+            )
+            assert datasets[name]["repo_type"] == "model"
+        # Diagnostics stay under the release directory of the national cut.
+        assert datasets["calibration_diagnostics"]["path"] == (
+            f"releases/{UK_NATIONAL_LINE}/calibration_diagnostics.json"
+        )
+        # The cut tag, not the line name, identifies the certified build.
+        assert release["version"] == UK_NATIONAL_TAG
+        assert release["certification"]["data_build_id"] == UK_NATIONAL_TAG
+        assert result.build_id == UK_NATIONAL_TAG
+
+    def test__given_ship_together_dense_route__then_bundle_routes_areas_to_local(
+        self, tmp_path
+    ):
+        bundle_path = _tmp_bundle(tmp_path)
+
+        _certify_uk(
+            bundle_path,
+            [
+                _response(_microcosm_uk_national_payload()),
+                _response(_microcosm_uk_dense_payload()),
+            ],
+            regional_manifest_uri=UK_DENSE_URI,
+        )
+
+        release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+        assert release["regional_release_kind"] == "local_area"
+        assert release["region_datasets"]["local_authority"] == {
+            "path_template": "microcosm_uk_2024_25_dense.h5"
+        }
+        assert release["datasets"]["microcosm_uk_2024_25_dense"]["revision"] == (
+            UK_DENSE_TAG
+        )
+        assert _sim_api_routes_both_area_types(release)
+
+    def test__given_regional_release_without_a_claim__then_refuses(self, tmp_path):
+        efrs = _efrs_release_payload()
+        efrs["compatible_model_packages"] = [
+            {"name": "policyengine-uk", "specifier": "==2.122.2"}
+        ]
+
+        with pytest.raises(CertificationError, match="Regional release .*2.126.12"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [
+                    _response(_microcosm_uk_national_payload()),
+                    _response(efrs),
+                ],
+                regional_manifest_uri=EFRS_URI,
+                regional_release_kind="area_coded_national",
+            )
+
+    def _older_dense(self) -> dict:
+        dense = _microcosm_uk_dense_payload()
+        dense["build"]["built_with_model_package"]["version"] = "2.120.0"
+        dense["build"]["built_with_core_package"] = {
+            "name": "policyengine-core",
+            "version": "3.33.3",
+        }
+        dense["build"]["built_at"] = "2026-10-19T02:07:51+00:00"
+        dense["compatible_model_packages"] = [
+            {"name": "policyengine-uk", "specifier": "==2.120.0"}
+        ]
+        return dense
+
+    def test__given_older_dense_cut__then_refuses_without_an_accepted_mismatch(
+        self, tmp_path
+    ):
+        with pytest.raises(CertificationError, match="Regional release .*2.126.12"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [
+                    _response(_microcosm_uk_national_payload()),
+                    _response(self._older_dense()),
+                ],
+                regional_manifest_uri=UK_DENSE_URI,
+            )
+
+    def test__given_accepted_mismatch__then_routes_and_records_it(
+        self, tmp_path, monkeypatch
+    ):
+        bundle_path = _tmp_bundle(tmp_path)
+        reason = "area receipts are uncertified; the dense cut lags one release"
+        from policyengine.provenance.certification import (
+            regional_defaults_limitation,
+        )
+        from tests.test_regional_input_evidence import (
+            fake_model_surfaces,
+            input_evidence,
+        )
+
+        fake_model_surfaces(monkeypatch)
+        evidence = input_evidence(self._older_dense())
+
+        result = _certify_uk(
+            bundle_path,
+            [
+                _response(_microcosm_uk_national_payload()),
+                _response(self._older_dense()),
+            ],
+            regional_manifest_uri=UK_DENSE_URI,
+            regional_model_mismatch_reason=reason,
+            regional_input_surface_evidence=evidence,
+        )
+
+        release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+        assert release["regional_release_kind"] == "local_area"
+        assert release["regional_certification"] == {
+            "compatibility_basis": "accepted_model_mismatch",
+            "certified_for_model_version": UK_MODEL_VERSION,
+            "built_with_model_version": "2.120.0",
+            "accepted_reason": reason,
+            "area_receipts": "uncertified",
+            "regional_manifest_uri": UK_DENSE_URI,
+            "regional_manifest_sha256": evidence["regional_manifest_sha256"],
+            "defaulted_inputs": evidence["defaulted_inputs"],
+            "dropped_columns": [],
+            "never_modelled_columns": [],
+            "stored_columns": "auditor_attested",
+            "limitations": [
+                *evidence["limitations"],
+                regional_defaults_limitation(
+                    "policyengine-uk",
+                    UK_MODEL_VERSION,
+                    "2.120.0",
+                    evidence["defaulted_inputs"],
+                ),
+            ],
+            "evidence": evidence,
+        }
+        # The national certificate itself is untouched by the regional record.
+        assert release["certification"]["compatibility_basis"] == (
+            "built_with_model_package"
+        )
+        assert _sim_api_routes_both_area_types(release)
+        manifest = CountryReleaseManifest.model_validate(release)
+        assert manifest.regional_certification is not None
+        assert manifest.regional_certification.built_with_model_version == "2.120.0"
+        mismatch = [w for w in result.warnings if "accepted mismatch" in w]
+        assert len(mismatch) == 1 and "2.120.0" in mismatch[0]
+
+    def test__given_a_covering_regional_release__then_an_accepted_mismatch_refuses(
+        self, tmp_path
+    ):
+        with pytest.raises(CertificationError, match="drop --accept-regional"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [
+                    _response(_microcosm_uk_national_payload()),
+                    _response(_microcosm_uk_dense_payload()),
+                ],
+                regional_manifest_uri=UK_DENSE_URI,
+                regional_model_mismatch_reason="not needed",
+            )
+
+    # A zero-width space is not whitespace, so strip() alone kept it.
+    @pytest.mark.parametrize("reason", ["", "   ", "\t\n", "\u200b", "\ufeff\u2060"])
+    def test__given_an_empty_reason__then_refuses(self, tmp_path, reason):
+        with pytest.raises(CertificationError, match="needs a reason"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [
+                    _response(_microcosm_uk_national_payload()),
+                    _response(self._older_dense()),
+                ],
+                regional_manifest_uri=UK_DENSE_URI,
+                regional_model_mismatch_reason=reason,
+            )
+
+    def test__given_an_accepted_mismatch__then_the_core_must_still_be_covered(
+        self, tmp_path, monkeypatch
+    ):
+        from tests.test_regional_input_evidence import (
+            fake_model_surfaces,
+            input_evidence,
+        )
+
+        fake_model_surfaces(monkeypatch)
+        national = _microcosm_uk_national_payload()
+        national["compatible_core_packages"] = [
+            {"name": "policyengine-core", "specifier": "==3.33.0"}
+        ]
+        with pytest.raises(
+            CertificationError, match="Regional release .*policyengine-core 3.33.0"
+        ):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [_response(national), _response(self._older_dense())],
+                regional_manifest_uri=UK_DENSE_URI,
+                regional_model_mismatch_reason="area receipts are uncertified",
+                regional_input_surface_evidence=input_evidence(self._older_dense()),
+                core_version="3.33.0",
+            )
+
+    def test__given_an_accepted_mismatch_without_a_regional_release__then_refuses(
+        self, tmp_path
+    ):
+        with pytest.raises(CertificationError, match="pass --regional-manifest-uri"):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [_response(_microcosm_uk_national_payload())],
+                drop_regional_release=True,
+                regional_model_mismatch_reason="area receipts are uncertified",
+            )
+
+    def test__given_bundle_wrapper_accepted_mismatch__then_forwards_it(
+        self, monkeypatch
+    ):
+        bundle_script = _load_bundle_script(monkeypatch)
+        captured: dict[str, list[str]] = {}
+        fake = ModuleType("certify_data_release")
+
+        def fake_main(argv):
+            captured["argv"] = argv
+            return 0
+
+        fake.main = fake_main
+        monkeypatch.setitem(sys.modules, "certify_data_release", fake)
+        reason = "area receipts are uncertified"
+        assert (
+            bundle_script.main(
+                [
+                    "certify-data",
+                    "--country",
+                    "uk",
+                    "--manifest-uri",
+                    UK_NATIONAL_URI,
+                    "--regional-manifest-uri",
+                    UK_DENSE_URI,
+                    "--accept-regional-model-mismatch",
+                    reason,
+                    "--regional-input-surface-evidence",
+                    "regional-audit.json",
+                ]
+            )
+            == 0
+        )
+        argv = captured["argv"]
+        assert argv[argv.index("--accept-regional-model-mismatch") + 1] == reason
+        assert (
+            argv[argv.index("--regional-input-surface-evidence") + 1]
+            == "regional-audit.json"
+        )
+
+    def test__given_bundle_wrapper_empty_reason__then_certifier_refuses_it(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        bundle_script = _load_bundle_script(monkeypatch)
+        spec = importlib.util.spec_from_file_location(
+            "certify_data_release",
+            Path(__file__).resolve().parents[1] / "scripts" / "certify_data_release.py",
+        )
+        certifier = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(certifier)
+        monkeypatch.setitem(sys.modules, "certify_data_release", certifier)
+        bundle_path = _tmp_bundle(tmp_path)
+        original_bundle = bundle_path.read_bytes()
+        captured = {}
+
+        def certify_temporary_bundle(**kwargs):
+            captured.update(kwargs)
+            kwargs["bundle_path"] = bundle_path
+            return certify_data_release(**kwargs)
+
+        monkeypatch.setattr(certifier, "certify_data_release", certify_temporary_bundle)
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                side_effect=_without_releases_record(
+                    [
+                        _response(_microcosm_uk_national_payload()),
+                        _response(self._older_dense()),
+                    ]
+                ),
+            ),
+            pytest.raises(SystemExit) as error,
+        ):
+            bundle_script.main(
+                [
+                    "certify-data",
+                    "--country",
+                    "uk",
+                    "--manifest-uri",
+                    UK_NATIONAL_URI,
+                    "--model-version",
+                    UK_MODEL_VERSION,
+                    "--regional-manifest-uri",
+                    UK_DENSE_URI,
+                    "--accept-regional-model-mismatch",
+                    "",
+                    "--no-generate",
+                    "--no-changelog",
+                    "--skip-artifact-check",
+                ]
+            )
+        # bundle.py reports the certifier's refusal as a usage error.
+        assert error.value.code == 2
+        assert isinstance(error.value.__context__, CertificationError)
+        assert "needs a reason" in str(error.value.__context__)
+        assert capsys.readouterr().out == ""
+        assert captured["regional_model_mismatch_reason"] == ""
+        assert bundle_path.read_bytes() == original_bundle
+
+    def test__given_pinned_core__then_the_regional_release_must_cover_it(
+        self, tmp_path
+    ):
+        # A qualified pair names the primary release only, so the regional
+        # release covers the pinned core by its own build or claims.
+        national = _microcosm_uk_national_payload()
+        national["compatible_core_packages"] = [
+            {"name": "policyengine-core", "specifier": "==3.33.0"}
+        ]
+
+        with pytest.raises(
+            CertificationError, match="Regional release .*policyengine-core 3.33.0"
+        ):
+            _certify_uk(
+                _tmp_bundle(tmp_path),
+                [_response(national), _response(_efrs_release_payload())],
+                regional_manifest_uri=EFRS_URI,
+                regional_release_kind="area_coded_national",
+                core_version="3.33.0",
+            )
+
+        efrs = _efrs_release_payload()
+        efrs["compatible_core_packages"] = [
+            {"name": "policyengine-core", "specifier": "==3.33.0"}
+        ]
+        bundle_path = _tmp_bundle(tmp_path)
+        _certify_uk(
+            bundle_path,
+            [_response(national), _response(efrs)],
+            regional_manifest_uri=EFRS_URI,
+            regional_release_kind="area_coded_national",
+            core_version="3.33.0",
+        )
+        release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+        assert release["certification"]["certified_for_core_version"] == "3.33.0"
+        assert release["certification"]["core_binding"] == "certified"
+        assert release["regional_release_kind"] == "area_coded_national"
+
+    def test__given_no_core_version__then_the_certificate_follows_the_pin_openly(
+        self, tmp_path
+    ):
+        """Without --core-version the certificate follows the bundle's core pin.
+
+        It says so (core_binding bundle_pin), and certification reports a
+        release that does not claim the pin instead of refusing it.
+        """
+        national = _microcosm_uk_national_payload()
+        national["compatible_core_packages"] = [
+            {"name": "policyengine-core", "specifier": "==3.33.3"}
+        ]
+        bundle_path = _tmp_bundle(tmp_path)
+        bundle = json.loads(bundle_path.read_text())
+        bundle["packages"]["policyengine-core"] = {
+            "name": "policyengine-core",
+            "version": "3.33.3",
+        }
+        bundle_path.write_text(json.dumps(bundle))
+
+        result = _certify_uk(
+            bundle_path,
+            [_response(national), _response(_microcosm_uk_dense_payload())],
+            regional_manifest_uri=UK_DENSE_URI,
+        )
+
+        written = json.loads(bundle_path.read_text())
+        certification = written["data_releases"]["uk"]["certification"]
+        assert certification["core_binding"] == "bundle_pin"
+        assert "certified_for_core_version" not in certification
+        assert written["packages"]["policyengine-core"]["version"] == "3.33.3"
+        # The national release claims the pin; the local-area one claims no core.
+        unclaimed = [w for w in result.warnings if "follows the core pin" in w]
+        assert len(unclaimed) == 1
+        assert unclaimed[0].startswith("regional release: ")
+
+    def test__given_unreachable_regional_artifact__then_refuses(self, tmp_path):
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                side_effect=_without_releases_record(
+                    [
+                        _response(_microcosm_uk_national_payload()),
+                        _response(_microcosm_uk_dense_payload()),
+                    ]
+                ),
+            ),
+            patch(
+                "policyengine.provenance.certification.head_artifact",
+                side_effect=lambda artifact, token=None: (
+                    artifact.path != "microcosm_uk_2024_25_dense.h5"
+                ),
+            ),
+            pytest.raises(CertificationError, match="Regional artifact"),
+        ):
+            certify_data_release(
+                country="uk",
+                data_producer="populace",
+                manifest_uri=UK_NATIONAL_URI,
+                regional_manifest_uri=UK_DENSE_URI,
+                model_version=UK_MODEL_VERSION,
+                bundle_path=_tmp_bundle(tmp_path),
+            )
+
+    def test__given_routed_bundle__then_recertifying_without_regional_refuses(
+        self, tmp_path
+    ):
+        bundle_path = _tmp_bundle(tmp_path)
+        _certify_uk(
+            bundle_path,
+            [
+                _response(_microcosm_uk_national_payload()),
+                _response(_microcosm_uk_dense_payload()),
+            ],
+            regional_manifest_uri=UK_DENSE_URI,
+        )
+
+        with pytest.raises(CertificationError, match="--drop-regional-release"):
+            _certify_uk(bundle_path, [_response(_microcosm_uk_national_payload())])
+
+        _certify_uk(
+            bundle_path,
+            [_response(_microcosm_uk_national_payload())],
+            drop_regional_release=True,
+        )
+        release = json.loads(bundle_path.read_text())["data_releases"]["uk"]
+        assert "regional_source_manifest_uri" not in release
+        assert "regional_release_kind" not in release
+        assert set(release["region_datasets"]) == {"national"}
+
+    def test__given_a_rollback_to_overlaid_names__then_their_overlays_go(
+        self, tmp_path
+    ):
+        """A rollback certifies names the bundle keeps as overlays.
+
+        Overlays may not shadow certified names, so a bundle that kept them
+        would refuse every release-manifest read, and import with it.
+        """
+        bundle_path = _tmp_bundle(tmp_path)
+        _certify_uk(
+            bundle_path,
+            [
+                _response(_microcosm_uk_national_payload()),
+                _response(_microcosm_uk_dense_payload()),
+            ],
+            regional_manifest_uri=UK_DENSE_URI,
+        )
+        bundle = json.loads(bundle_path.read_text())
+        kept = {"path": "populace_uk_2023.h5", "repo_id": "x", "revision": "r"}
+        bundle["dataset_overlays"] = {
+            "uk": {
+                "enhanced_frs_2024_25": {"path": "enhanced_frs_2024_25.h5"},
+                "frs_2024_25": {"path": "frs_2024_25.h5"},
+                "populace_uk_2023": kept,
+            }
+        }
+        bundle_path.write_text(json.dumps(bundle))
+
+        result = _certify_uk(
+            bundle_path,
+            [_response(_efrs_release_payload())],
+            manifest_uri=EFRS_URI,
+            drop_regional_release=True,
+        )
+
+        bundle = json.loads(bundle_path.read_text())
+        assert bundle["data_releases"]["uk"]["default_dataset"] == (
+            "enhanced_frs_2024_25"
+        )
+        assert bundle["dataset_overlays"]["uk"] == {"populace_uk_2023": kept}
+        assert any("enhanced_frs_2024_25, frs_2024_25" in w for w in result.warnings)
+        # The Microcosm names stop resolving, and certification says so.
+        dropped = next(w for w in result.warnings if "no longer resolve" in w)
+        assert "microcosm_uk_2024_25_dense" in dropped
+        manifest = CountryReleaseManifest.model_validate(
+            _apply_dataset_overlays("uk", bundle["data_releases"]["uk"], bundle)
+        )
+        assert "populace_uk_2023" in manifest.datasets
+
+    def test__given_drop_and_a_regional_release__then_refuses_both(self, tmp_path):
+        # Dropping the routing and routing to a release are opposite requests;
+        # neither silently wins.
+        with (
+            patch(
+                "policyengine.provenance.certification.requests.get",
+                side_effect=AssertionError("no fetch"),
+            ),
+            pytest.raises(CertificationError, match="cannot be combined"),
+        ):
+            certify_data_release(
+                country="uk",
+                data_producer="populace",
+                manifest_uri=UK_NATIONAL_URI,
+                regional_manifest_uri=UK_DENSE_URI,
+                drop_regional_release=True,
+                model_version=UK_MODEL_VERSION,
+                bundle_path=_tmp_bundle(tmp_path),
+            )
+
+    def test__given_bundle_wrapper_regional_kind__then_forwards_to_certifier(
+        self, monkeypatch
+    ):
+        bundle_script = _load_bundle_script(monkeypatch)
+        captured: dict[str, list[str]] = {}
+        fake = ModuleType("certify_data_release")
+
+        def fake_main(argv):
+            captured["argv"] = argv
+            return 0
+
+        fake.main = fake_main
+        monkeypatch.setitem(sys.modules, "certify_data_release", fake)
+
+        assert (
+            bundle_script.main(
+                [
+                    "certify-data",
+                    "--country",
+                    "uk",
+                    "--manifest-uri",
+                    UK_NATIONAL_URI,
+                    "--regional-manifest-uri",
+                    EFRS_URI,
+                    "--regional-release-kind",
+                    "area_coded_national",
+                    "--drop-regional-release",
+                ]
+            )
+            == 0
+        )
+        argv = captured["argv"]
+        assert argv[argv.index("--regional-release-kind") + 1] == (
+            "area_coded_national"
+        )
+        assert "--drop-regional-release" in argv

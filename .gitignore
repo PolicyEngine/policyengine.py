@@ -8,3 +8,8 @@ _build/
 **/.DS_Store
 build/
 .hypothesis/
+# Agent job state and diagnostics: .github/check-agent-notes.sh fails a pull
+# request that adds them.
+.job/
+.job-git/
+.diag/

@@ -30,8 +30,11 @@ import h5py
 import pandas as pd
 
 from policyengine.core import (
+    Entity,
+    EnumValue,
     Parameter,
     ParameterNode,
+    StaleOutputError,
     TaxBenefitModelVersion,
     Variable,
 )
@@ -92,6 +95,18 @@ def build_runtime_dataset_provenance(
     return provenance
 
 
+# The value types an EnumValue label may hold.
+_ENUM_LABEL_TYPES = (str, int, float, bool, type(None))
+
+
+def _core_input_flag(core_variable: Any) -> Optional[bool]:
+    """Return whether users enter a core variable, or None if core cannot say."""
+    is_input_variable = getattr(core_variable, "is_input_variable", None)
+    if is_input_variable is None:
+        return None
+    return bool(is_input_variable())
+
+
 class MicrosimulationModelVersion(TaxBenefitModelVersion):
     """Shared init / save / load logic for country microsim model versions.
 
@@ -128,6 +143,11 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             kwargs["version"] = manifest.model_package.version
 
         installed_model_version = metadata.version(self.package_name)
+        # What this process loads: a receipt refuses a run whose installed
+        # versions change afterwards.
+        from policyengine.provenance.loaded import record_loaded_versions
+
+        record_loaded_versions((self.package_name, "policyengine-core", "policyengine"))
         if installed_model_version != manifest.model_package.version:
             warnings.warn(
                 f"Installed {self.package_name} version "
@@ -160,6 +180,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         self.id = f"{self.model.id}@{self.version}"
 
         system = self._load_system()
+        self._populate_entities(system)
         self._populate_variables(system)
         self._populate_parameters(system)
 
@@ -183,6 +204,18 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         raise NotImplementedError
 
     # --- Shared loading helpers ------------------------------------------
+    def _populate_entities(self, system) -> None:
+        """Copy the entities and basic inputs the country package declares."""
+        self.entities = [
+            Entity(
+                key=core_entity.key,
+                plural=core_entity.plural,
+                is_person=bool(core_entity.is_person),
+            )
+            for core_entity in system.entities
+        ]
+        self.basic_inputs = list(getattr(system, "basic_inputs", None) or [])
+
     def _populate_variables(self, system) -> None:
         from policyengine_core.enums import Enum
         from policyengine_core.parameters.operations.get_parameter import (
@@ -219,6 +252,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     var_obj, "is_period_size_independent", None
                 ),
                 metadata=getattr(var_obj, "metadata", None) or {},
+                is_input_variable=_core_input_flag(var_obj),
+                hidden_input=getattr(var_obj, "hidden_input", None),
+                module_name=getattr(var_obj, "module_name", None),
             )
             if (
                 hasattr(var_obj, "possible_values")
@@ -230,13 +266,25 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                         var_obj.possible_values._value2member_map_.values(),
                     )
                 )
+                members = list(var_obj.possible_values)
+                # A label is a scalar. A model whose members declare any
+                # other value still loads, without labels.
+                if all(
+                    isinstance(member.value, _ENUM_LABEL_TYPES) for member in members
+                ):
+                    variable.enum_values = [
+                        EnumValue(value=member.name, label=member.value)
+                        for member in members
+                    ]
             # Resolve parameter-path adds/subtracts to concrete lists so
-            # consumers always see list[str].
+            # consumers always see list[str], and record the path itself,
+            # since the parameter's list can differ in other years.
             for attr in ("adds", "subtracts"):
                 value = getattr(var_obj, attr, None)
                 if value is None:
                     continue
                 if isinstance(value, str):
+                    setattr(variable, f"{attr}_parameter_path", value)
                     try:
                         param = get_parameter(system.parameters, value)
                         setattr(variable, attr, list(param("2025-01-01")))
@@ -249,6 +297,7 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
     def _populate_parameters(self, system) -> None:
         from policyengine_core.parameters import Parameter as CoreParameter
         from policyengine_core.parameters import ParameterNode as CoreParameterNode
+        from policyengine_core.parameters import ParameterScale as CoreParameterScale
 
         scale_lookup = build_scale_lookup(system)
 
@@ -264,9 +313,24 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     description=param_node.description,
                     data_type=type(param_node(2025)),
                     unit=param_node.metadata.get("unit"),
+                    economy=bool(param_node.metadata.get("economy", True)),
+                    household=bool(param_node.metadata.get("household", True)),
                     _core_param=param_node,
                 )
                 self.add_parameter(parameter)
+            elif isinstance(param_node, CoreParameterScale):
+                # A bracket schedule is not a core ParameterNode, but it groups
+                # its brackets (``name[0]``, ``name[1]``, ...) as a node does.
+                if not param_node.brackets:
+                    continue
+                schedule = ParameterNode(
+                    id=self.id + "-" + param_node.name,
+                    name=param_node.name,
+                    label=param_node.metadata.get("label"),
+                    description=param_node.description,
+                    tax_benefit_model_version=self,
+                )
+                self.add_parameter_node(schedule)
             elif isinstance(param_node, CoreParameterNode):
                 if not param_node.children:
                     continue
@@ -388,6 +452,28 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                     "inputs were mapped when it was calculated; run again "
                     "before saving"
                 )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                RECORD_KEY,
+                simulation_request,
+            )
+
+            # ``PolicyEngineUKDataset.save()`` writes the record into the
+            # file, and ``load()`` refuses an output without it.
+            record = (getattr(simulation.output_dataset, "metadata", None) or {}).get(
+                RECORD_KEY
+            )
+            if record is None:
+                raise ValueError(
+                    "This UK output does not record the capital gains "
+                    "realisation response it was calculated under; run again "
+                    "before saving"
+                )
+            if record["request"]["digest"] != simulation_request(simulation)["digest"]:
+                raise ValueError(
+                    "Capital gains response settings changed since this output "
+                    "was calculated; run again before saving"
+                )
         simulation.output_dataset.save()
         if serialized_spm is not None:
             # Store UTF-8 JSON in a dataset rather than an attribute: the
@@ -417,6 +503,14 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 RENAMES_RECORD_KEY,
                 read_renames_record,
             )
+            from policyengine.tax_benefit_models.us.legacy_spm import (
+                RECORD_KEY as LEGACY_SPM_RECORD_KEY,
+            )
+            from policyengine.tax_benefit_models.us.legacy_spm import (
+                expected_profile_for_dataset,
+                read_record_value,
+                record_problem,
+            )
 
             with h5py.File(filepath, "r") as stream:
                 raw = (
@@ -426,21 +520,69 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 )
             recorded_renames = read_renames_record(filepath)
             if raw is None:
-                raise ValueError(
+                raise StaleOutputError(
                     "Saved US simulation has no SPM configuration or receipt"
                 )
             recorded = json.loads(raw)
             if recorded["config"] != simulation.spm_config:
-                raise ValueError("Saved US simulation uses different SPM settings")
+                raise StaleOutputError(
+                    "Saved US simulation uses different SPM settings"
+                )
             receipt = SPMProvenance.model_validate(recorded["provenance"])
             # Outputs saved before stored inputs were mapped onto renamed
             # live inputs were calculated without them (for example with
             # every WIC-eligible person taking WIC up), so they are not
             # reused. ``Simulation.ensure()`` runs such a simulation again.
             if recorded_renames is None:
-                raise ValueError(
+                raise StaleOutputError(
                     "Saved US simulation predates the mapping of renamed "
                     "stored inputs (it has no record of them); run it again"
+                )
+            # BACKWARD COMPATIBILITY (#597, #598): an output is reused only
+            # under exactly the legacy SPM declarations its input needs.
+            recorded_legacy_spm = read_record_value(filepath)
+            legacy_problem = record_problem(
+                recorded_legacy_spm, expected_profile_for_dataset(simulation.dataset)
+            )
+            if legacy_problem is not None:
+                raise StaleOutputError(
+                    f"Saved US simulation output is out of date: {legacy_problem}; "
+                    "run it again"
+                )
+
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.datasets import (
+                _year_file_records_data_year,
+            )
+
+            # UK outputs saved before runs anchored on the observed data year
+            # (PolicyEngine/policyengine.py#556) took a projected year as
+            # observed and uprated the State Pension by CPI, so they are not
+            # reused. ``Simulation.ensure()`` runs such a simulation again.
+            if not _year_file_records_data_year(Path(filepath)):
+                raise StaleOutputError(
+                    "Saved UK simulation predates anchoring on the observed "
+                    "data year (it records none); run it again"
+                )
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                read_record,
+                saved_record_problem,
+                simulation_request,
+            )
+
+            # An output is reused only under the capital gains realisation
+            # response it was calculated with: the same policyengine-uk
+            # release (whose default may differ from another's) and the same
+            # explicit settings.
+            with pd.HDFStore(filepath, mode="r") as store:
+                response_record = read_record(store)
+            problem = saved_record_problem(
+                response_record, simulation_request(simulation)
+            )
+            if problem is not None:
+                raise StaleOutputError(
+                    f"Saved UK simulation output is out of date: {problem}; "
+                    "run it again"
                 )
 
         simulation.output_dataset = self._dataset_class(
@@ -459,6 +601,16 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
             simulation.output_dataset.metadata.update(
                 {"spm_config": recorded["config"], RENAMES_RECORD_KEY: recorded_renames}
             )
+            if isinstance(recorded_legacy_spm, dict):
+                simulation.output_dataset.metadata[LEGACY_SPM_RECORD_KEY] = (
+                    recorded_legacy_spm
+                )
+        if self.country_code == "uk":
+            from policyengine.tax_benefit_models.uk.capital_gains_responses import (
+                RECORD_KEY,
+            )
+
+            simulation.output_dataset.metadata[RECORD_KEY] = response_record
 
         if os.path.exists(filepath):
             simulation.created_at = datetime.datetime.fromtimestamp(

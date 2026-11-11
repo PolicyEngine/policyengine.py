@@ -1,0 +1,161 @@
+{
+ "cases": [],
+ "contract_id": "policyengine-uk/budget-reform-contract",
+ "contract_version": "1.0.0",
+ "dataset": {
+  "path": "<huggingface cache blob of enhanced_frs_2024_25.h5>",
+  "sha256": "5ba399ea5ab9a6c7d4e9aaf6c623080beb34d9ad5f330f6244dbad72b8d960b6"
+ },
+ "elapsed_seconds": 23.6,
+ "holds": true,
+ "max_examples": 0,
+ "population": [
+  {
+   "check_id": "population_baseline_isolation",
+   "detail": null,
+   "route": "country.reform_dict",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_baseline_isolation",
+   "detail": null,
+   "route": "country.scenario_parameter_changes",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_baseline_isolation",
+   "detail": null,
+   "route": "country.reform_from_dict",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_baseline_isolation",
+   "detail": null,
+   "route": "unreformed",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_query_order",
+   "detail": null,
+   "route": "unreformed",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_routes_agree",
+   "route": "country.reform_dict = country.scenario_parameter_changes",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_routes_agree",
+   "route": "country.reform_dict = country.reform_from_dict",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_april_rate_change",
+   "detail": {
+    "2026_unchanged": true,
+    "2027_people_with_higher_tax": 1093,
+    "2027_people_with_lower_tax": 0
+   },
+   "route": "country.reform_dict",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_april_rate_change",
+   "detail": {
+    "2026_unchanged": true,
+    "2027_people_with_higher_tax": 1093,
+    "2027_people_with_lower_tax": 0
+   },
+   "route": "country.scenario_parameter_changes",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_april_rate_change",
+   "detail": {
+    "2026_unchanged": true,
+    "2027_people_with_higher_tax": 1093,
+    "2027_people_with_lower_tax": 0
+   },
+   "route": "country.reform_from_dict",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_finite_change_expires",
+   "route": "country.reform_dict",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_finite_change_expires",
+   "route": "country.scenario_parameter_changes",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  },
+  {
+   "check_id": "population_finite_change_expires",
+   "route": "country.reform_from_dict",
+   "seed": 0,
+   "status": "pass",
+   "subsample_households": 1000
+  }
+ ],
+ "prior_law_option": "projected",
+ "properties": [
+  {
+   "examples_run": 0,
+   "property_id": "annual_values_match_the_oracle",
+   "reason": "max_examples is 0, so no examples were requested",
+   "status": "unsupported"
+  },
+  {
+   "examples_run": 0,
+   "property_id": "routes_agree_and_baselines_hold",
+   "reason": "max_examples is 0, so no examples were requested",
+   "status": "unsupported"
+  }
+ ],
+ "routes": [
+  "country.reform_dict",
+  "country.scenario_parameter_changes",
+  "country.reform_from_dict",
+  "wrapper.household",
+  "wrapper.policy",
+  "api.sim_api"
+ ],
+ "seed": 0,
+ "summary": {
+  "error": 0,
+  "fail": 0,
+  "pass": 13,
+  "pending": 0,
+  "unsupported": 2
+ },
+ "versions": {
+  "policyengine": "6.2.6",
+  "policyengine-core": "3.33.0",
+  "policyengine-uk": "2.126.8"
+ }
+}
