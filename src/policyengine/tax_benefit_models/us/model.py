@@ -6,6 +6,7 @@ import pandas as pd
 from microdf import MicroDataFrame
 
 from policyengine.core import TaxBenefitModel
+from policyengine.core.scoping_strategy import RowFilterStrategy
 from policyengine.provenance.dataset_materialization import (
     materialize_dataset,
 )
@@ -537,7 +538,7 @@ def managed_microsimulation(
     dataset: Optional[str] = None,
     allow_unmanaged: bool = False,
     spm: Optional[SPMSelection] = None,
-    scoping_strategy=None,
+    scoping_strategy: Optional[RowFilterStrategy] = None,
     **kwargs,
 ):
     """Construct a country-package Microsimulation pinned to this bundle.
@@ -578,8 +579,6 @@ def managed_microsimulation(
         source.bundle_dataset.sha256 if source.bundle_dataset else None
     )
     if scoping_strategy is not None:
-        from policyengine.core.scoping_strategy import RowFilterStrategy
-
         if type(scoping_strategy) is not RowFilterStrategy:
             raise ValueError("Managed scoping supports only RowFilterStrategy.")
         if legacy_source is not None:
@@ -597,7 +596,7 @@ def managed_microsimulation(
         )
 
         scoped_dataset, scoping_record = scope_native_history(
-            microsim.dataset, scoping_strategy
+            microsim.dataset, scoping_strategy, microsim.tax_benefit_system.variables
         )
         # Release the national input-only simulation before constructing the
         # scoped simulation. All retained data belong to copied scoped tables.

@@ -20,7 +20,7 @@ def _digest(values: pd.Series) -> str:
     return digest.hexdigest()
 
 
-def scope_native_history(dataset, strategy: RowFilterStrategy):
+def scope_native_history(dataset, strategy: RowFilterStrategy, variables=None):
     """Return an official native dataset for one fixed, closed cohort.
 
     The caller obtains ``dataset`` from the ordinary native constructor, so
@@ -38,6 +38,7 @@ def scope_native_history(dataset, strategy: RowFilterStrategy):
     scoped_years = []
     reference_ids = None
     reference_memberships = None
+    eternity_inputs = {}
     receipt_years = {}
     for year, single in sorted(dataset.datasets.items()):
         tables = {entity: getattr(single, entity) for entity in ENTITIES}
@@ -58,6 +59,8 @@ def scope_native_history(dataset, strategy: RowFilterStrategy):
             column = _resolve_id_column(person, group)
             if not person[column].isin(tables[group][f"{group}_id"]).all():
                 raise ValueError(f"Dangling {group} membership for {year}.")
+            if set(person[column]) != set(tables[group][f"{group}_id"]):
+                raise ValueError(f"Managed scoping requires members in every {group}.")
             # A group spanning selected and unselected households cannot be
             # calculated on either subset without changing its population.
             membership = pd.DataFrame(
@@ -75,6 +78,21 @@ def scope_native_history(dataset, strategy: RowFilterStrategy):
         # RowFilterStrategy's temporary MicroDataFrame metadata never supplies
         # statistical weights here. Keep only the original table columns.
         scoped = {entity: pd.DataFrame(scoped[entity]).copy() for entity in ENTITIES}
+        for table in scoped.values():
+            for name in table:
+                variable = (variables or {}).get(name)
+                if (
+                    variable is not None
+                    and str(variable.definition_period) == "eternity"
+                ):
+                    values = table[name].reset_index(drop=True)
+                    if name in eternity_inputs and not values.equals(
+                        eternity_inputs[name]
+                    ):
+                        raise ValueError(
+                            f"Conflicting ETERNITY input {name} across years."
+                        )
+                    eternity_inputs[name] = values
         ids = {
             entity: table[f"{entity}_id"].reset_index(drop=True)
             for entity, table in scoped.items()
