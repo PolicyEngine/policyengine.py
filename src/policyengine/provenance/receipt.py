@@ -161,6 +161,7 @@ __all__ = [
     "content_sha256",
     "fiscal_year_label",
     "installed_package_identity",
+    "phased_scenario_reform_identity",
     "reform_identity",
     "regional_certification_identity",
     "scenario_reform_identity",
@@ -205,12 +206,19 @@ ReformRepresentation = Literal[
     # Several reforms applied in one policyengine-uk ``Scenario``, in a stated
     # order: see composed_reform_identity().
     "policyengine-uk.scenario_composition/v1",
+    # A native Scenario whose before/after-data-load parts keep their phases.
+    "policyengine-uk.phased_scenario/v1",
 ]
 
 #: Representation of a composition of member reforms.
 COMPOSITION_REPRESENTATION: Literal["policyengine-uk.scenario_composition/v1"] = (
     "policyengine-uk.scenario_composition/v1"
 )
+
+PHASED_SCENARIO_REPRESENTATION: Literal["policyengine-uk.phased_scenario/v1"] = (
+    "policyengine-uk.phased_scenario/v1"
+)
+PHASED_SCENARIO_APPLICATION = "before_data_load_then_after_data_load"
 
 #: v1 rules that JSON Schema cannot express. Published in the schema file.
 CROSS_FIELD_RULES: tuple[str, ...] = (
@@ -239,6 +247,7 @@ DIGEST_RULES: dict[str, str] = {
     "regional_certification.record_sha256": "the bundle manifest's data_releases.<country_id>.regional_certification record, its evidence included",
     "reform.reform_sha256": 'RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {"$nonfinite": "Infinity"} or {"$nonfinite": "-Infinity"}, and a payload may not use the key $nonfinite itself',
     "outputs_sha256": "the canonical output payload the receipt binds",
+    "reform.phased_scenario_sha256": "For policyengine-uk.phased_scenario/v1, RFC 8785 over {representation, payload}, with payload {application: before_data_load_then_after_data_load, before: {representation, reform_sha256, binding}, after: {representation, reform_sha256, binding}}; each phase binds the native Scenario.parts_by_data_load() result through scenario/v1. Common parameter changes occur once, in the before phase. A scenario_composition/v1 cannot contain this representation.",
 }
 
 HashEvidence = Literal["installed_record_verified", "installer_archive_hash"]
@@ -975,6 +984,10 @@ def reform_identity(
         raise ReceiptError("Bind a Scenario with scenario_reform_identity().")
     if representation == COMPOSITION_REPRESENTATION:
         raise ReceiptError("Bind a composition with composed_reform_identity().")
+    if representation == PHASED_SCENARIO_REPRESENTATION:
+        raise ReceiptError(
+            "Bind a phased Scenario with phased_scenario_reform_identity()."
+        )
     digest = _payload_sha256({"representation": representation, "payload": payload})
     return ReformIdentity(
         kind="reform", representation=representation, reform_sha256=digest, name=name
@@ -3177,6 +3190,28 @@ def _modifier_identity(
     }
 
 
+def _scenario_data_load_parts(scenario: Any) -> Optional[tuple[Any, Any]]:
+    """The engine's phase split, when this Scenario version exposes it.
+
+    Dated reform objects have no supported receipt representation here.
+    Refuse them rather than dropping semantics from a parameter payload.
+    """
+    if getattr(scenario, "dated_reforms", None):
+        raise ReceiptError(
+            "Scenario.dated_reforms cannot be bound as a parameter Scenario; "
+            "bind the reform dictionary with reform_identity() instead."
+        )
+    split = getattr(scenario, "parts_by_data_load", None)
+    if split is None:
+        return None
+    if not callable(split):
+        raise ReceiptError("Scenario.parts_by_data_load must be callable.")
+    parts = split()
+    if not isinstance(parts, tuple) or len(parts) != 2:
+        raise ReceiptError("Scenario.parts_by_data_load must return two phase parts.")
+    return parts
+
+
 def scenario_reform_identity(
     scenario: Any,
     *,
@@ -3216,6 +3251,21 @@ def scenario_reform_identity(
         raise ReceiptError("Scenario.parameter_changes must be a mapping or None.")
     if modifier is not None and not callable(modifier):
         raise ReceiptError("Scenario.simulation_modifier must be callable or None.")
+    parts = _scenario_data_load_parts(scenario)
+    if parts is not None and all(part is not None for part in parts):
+        raise ReceiptError(
+            "A Scenario with before- and after-data-load phases cannot use "
+            "scenario/v1; bind it with phased_scenario_reform_identity()."
+        )
+    if parts is not None:
+        effective = parts[0] if parts[0] is not None else parts[1]
+        if effective is not None and (
+            effective.applied_before_data_load != applied_before_data_load
+        ):
+            raise ReceiptError(
+                "A Scenario's effective data-load phase differs from its aggregate "
+                "flag; bind it with phased_scenario_reform_identity()."
+            )
 
     def checked(identity: ReformIdentity) -> ReformIdentity:
         revision = dict(code_revision) if code_revision is not None else None
@@ -3264,6 +3314,106 @@ def scenario_reform_identity(
             name=name,
         )
     )
+
+
+def phased_scenario_reform_identity(
+    scenario: Any,
+    *,
+    code_revision: Optional[Mapping[str, str]] = None,
+    name: Optional[str] = None,
+) -> ReformIdentity:
+    """Bind a native UK Scenario without flattening its data-load phases.
+
+    A single-phase Scenario keeps its existing ``scenario/v1`` digest.
+    A mixed-phase Scenario uses ``policyengine-uk.phased_scenario/v1``:
+    ``{application: before_data_load_then_after_data_load, before: identity,
+    after: identity}``. Each phase identity contains only representation,
+    digest and binding. The engine's ``parts_by_data_load()`` determines
+    which parameter changes and modifier run in each phase; common
+    parameters appear once in its before-data-load part.
+
+    Modifiers satisfy the same module, source, defaults and revision
+    checks as :func:`scenario_reform_identity`. This API does not accept
+    closures, flatten modifier chains, or invent a phase from aggregate
+    flags. The identity's live handle rechecks the original Scenario,
+    including later edits that change its phase split.
+    """
+    try:
+        from policyengine_uk.utils.scenario import Scenario
+    except ImportError as exc:
+        raise ReceiptError(
+            "phased_scenario_reform_identity requires policyengine-uk."
+        ) from exc
+    if not isinstance(scenario, Scenario):
+        raise ReceiptError(
+            "phased_scenario_reform_identity requires a native policyengine-uk Scenario."
+        )
+
+    def checked(identity: ReformIdentity) -> ReformIdentity:
+        revision = dict(code_revision) if code_revision is not None else None
+        object.__setattr__(
+            identity,
+            "_recompute_identity",
+            lambda: phased_scenario_reform_identity(
+                scenario, code_revision=revision, name=name
+            ),
+        )
+        return identity
+
+    parts = _scenario_data_load_parts(scenario)
+    if parts is None:
+        return checked(
+            scenario_reform_identity(scenario, code_revision=code_revision, name=name)
+        )
+    if any(part is None for part in parts):
+        effective = parts[0] if parts[0] is not None else parts[1]
+        if not isinstance(effective, Scenario):
+            raise ReceiptError("Scenario's effective phase must be a native Scenario.")
+        # A mixed-timing sum can have no after-load modifier. The engine
+        # then applies its parameters only before loading even though the
+        # aggregate flag is False. Bind that actual part, retaining a
+        # recheck handle to the original sum rather than its detached copy.
+        return checked(
+            scenario_reform_identity(effective, code_revision=code_revision, name=name)
+        )
+    before, after = parts
+    if not isinstance(before, Scenario) or not isinstance(after, Scenario):
+        raise ReceiptError("Scenario phase parts must be native Scenarios.")
+    if before.applied_before_data_load is not True or (
+        after.applied_before_data_load is not False
+    ):
+        raise ReceiptError("Scenario phase parts have inconsistent data-load timing.")
+    phase_identities = [
+        scenario_reform_identity(part, code_revision=code_revision)
+        for part in (before, after)
+    ]
+    if any(identity.kind != "reform" for identity in phase_identities):
+        raise ReceiptError("A mixed-phase Scenario must have two nonempty phase parts.")
+    payload = {
+        "application": PHASED_SCENARIO_APPLICATION,
+        **{
+            phase: {
+                "representation": identity.representation,
+                "reform_sha256": identity.reform_sha256,
+                "binding": identity.binding,
+            }
+            for phase, identity in zip(("before", "after"), phase_identities)
+        },
+    }
+    identity = ReformIdentity(
+        kind="reform",
+        representation=PHASED_SCENARIO_REPRESENTATION,
+        reform_sha256=_payload_sha256(
+            {"representation": PHASED_SCENARIO_REPRESENTATION, "payload": payload}
+        ),
+        binding=(
+            "code_revision"
+            if any(phase.binding == "code_revision" for phase in phase_identities)
+            else "content"
+        ),
+        name=name,
+    )
+    return checked(identity)
 
 
 #: The order a ``policyengine-uk.scenario_composition/v1`` run applies its
@@ -3374,6 +3524,12 @@ def composed_reform_identity(
             ) from exc
         if member.kind == "current_law":
             continue
+        if member.representation == PHASED_SCENARIO_REPRESENTATION:
+            raise ReceiptError(
+                f"Member {index} is a phased Scenario; scenario_composition/v1 "
+                "cannot flatten or override its data-load timing. Bind the "
+                "actual combined Scenario with phased_scenario_reform_identity()."
+            )
         bound.append(
             {
                 "representation": member.representation,
