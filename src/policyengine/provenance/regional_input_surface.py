@@ -247,7 +247,10 @@ def compare_input_surface(
         for supplied in periods:
             # A UK move always applies. .py applies a US rename only where the
             # live input is not stored: across the whole file in the
-            # variable/period layout, and in the entity's one table otherwise.
+            # variable/period layout, and in the live input's entity table in
+            # an entity-table file. The evidence keeps one column list per
+            # file, so for entity tables this checks across all of them: a
+            # legacy column stored in another entity's table counts as mapped.
             mapped = {
                 donor
                 for donor, target in aliases.items()
@@ -764,8 +767,8 @@ def measure_regional_input_surface(
 
     The operator supplies local files named by the immutable regional release.
     Every microdata H5 must be measured and match its manifest's SHA-256 both
-    before and after metadata inspection. The installed policyengine-uk must
-    be ``model_version``. The country model is the one the manifest's build
+    before and after metadata inspection. The installed target must be
+    ``model_version``. The country model is the one the manifest's build
     model names, policyengine-uk or policyengine-us. The build model and core
     named by the manifest are
     read in a throwaway ``uv run`` environment through ``run``

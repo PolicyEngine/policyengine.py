@@ -379,7 +379,8 @@ with three US differences:
   tables, one per US entity (`person`, `household`, `tax_unit`, `spm_unit`,
   `family`, `marital_unit`), with `_time_period` naming its year; every entity
   table is required, and a file storing them by year (`person/2024`) refuses,
-  since no US loader reads that. A file in PolicyEngine core's variable/period layout (an
+  since .py's US loader and policyengine-us's `Microsimulation(dataset=<path>)`
+  read single-year files only. A file in PolicyEngine core's variable/period layout (an
   H5 group per variable, holding an array per period, and a `person_id`
   group) is read by group and period names; a top-level dataset there is file
   metadata, and a period that is not a year refuses. A file in neither layout
@@ -389,6 +390,9 @@ with three US differences:
   defines the live name and not the legacy one, and the file stores the
   legacy column but not the live one (in any period, for the variable/period
   layout). The audit records the target's pending renames as `input_aliases`.
+  For entity tables .py checks the live input's own entity table; the audit,
+  whose evidence keeps one column list per file, checks across all of them,
+  so a legacy column stored in another entity's table would count as mapped.
   Where a rename applies, it counts the live input as supplied and the legacy
   column as neither dropped nor never modelled; where it doesn't, the legacy
   column is classified like any other. Certification re-reads the renames
