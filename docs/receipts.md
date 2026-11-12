@@ -83,6 +83,8 @@ None of these depends on where the code is checked out or which Python version r
 
 The old `scenario_reform_identity` refuses mixed phases and effective-phase/aggregate-flag mismatches instead of assigning the aggregate flag to every part. `composed_reform_identity` v1 refuses phased members because its contract overrides member timing. Bind the actual combined Scenario through the phased API instead. Dated reform objects are outside both Scenario representations: bind an original reform dictionary as its dictionary representation rather than silently omitting it. Closures and computed modifier chains remain unsupported.
 
+For several modifiers in either phase, use the [ordered Scenario API](ordered-scenarios.md). It binds actual trusted callable leaves, preserves their order and repetitions, and provides an offline plan recomposer.
+
 Build the receipt after the run. An identity returned by `scenario_reform_identity` keeps a private handle to the same scenario and code revision. Both receipt builders recompute `reform` and `baseline` identities with handles, and refuse if recomputing is refused or an identity member differs. The handle is excluded from equality, serialization, schemas and digests. A serialized identity loaded back has no handle and is not re-checked; its producer must ensure it describes the run. These checks take snapshots at identity time and receipt build time, so they cannot describe later changes.
 
 **The modifier's module.** A digest can only name what the module's source fixes, so the module holding a bound modifier must have a shape whose state that source determines. At module level it may hold only:
@@ -190,7 +192,7 @@ The pre-promotion replay interface with policyengine-scorecard follows a differe
 | `reform.reform_sha256` | `{"representation": ..., "payload": ...}`, with the payload exactly as given, nulls kept (strict JSON conversion with infinities as `{"$nonfinite": "Infinity"}` or `"-Infinity"`, then RFC 8785, with no null removal). For a composition the payload is `{"applied_before_data_load": ..., "application": "parameter_changes_then_modifiers", "members": [{"representation", "reform_sha256", "binding"}, ...]}`, with members in application order. |
 | `outputs_sha256` | The output payload. |
 
-Reform digests are never normalized across representations. The same keys can legitimately mean different things in different representations: for example, a bare year in a policyengine-uk country dictionary changes that one year only. So each digest is tied to the representation that was submitted. The v1 representations are `policyengine.parameter_values/v1`, `policyengine.reform_dict/v1`, `policyengine-uk.reform_dict/v1`, `policyengine-uk.scenario/v1`, `policyengine-uk.scenario_composition/v1` and `policyengine-sim-api.policy/v1`.
+Reform digests are never normalized across representations. The same keys can legitimately mean different things in different representations: for example, a bare year in a policyengine-uk country dictionary changes that one year only. So each digest is tied to the representation that was submitted. Receipts support `policyengine.parameter_values/v1`, `policyengine.reform_dict/v1`, `policyengine-uk.reform_dict/v1`, `policyengine-uk.scenario/v1`, `policyengine-uk.scenario_composition/v1`, `policyengine-uk.phased_scenario/v1`, `policyengine-uk.phased_scenario_composition/v1` and `policyengine-sim-api.policy/v1`.
 
 ## Rules JSON Schema cannot express
 
