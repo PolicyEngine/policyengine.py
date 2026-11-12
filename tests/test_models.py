@@ -135,13 +135,14 @@ class TestUSModel:
         assert us_latest.release_manifest is not None
         assert us_latest.release_manifest.country_id == "us"
         assert us_latest.model_package.name == "policyengine-us"
-        assert us_latest.model_package.version == "2.2.1"
+        assert us_latest.model_package.version == "2.2.2"
         assert us_latest.data_package.name == "microcosm-data"
         assert us_latest.data_package.version == "0.1.0"
         assert (
             us_latest.default_dataset_uri
-            == "hf://policyengine/populace-us/populace_us_2024.h5"
-            "@populace-us-2024-spm-20260915"
+            == "hf://policyengine/populace-us/releases/microcosm-us-2024-national/"
+            "populace-us-2024-spm-20260915/populace_us_2024.h5"
+            "@0ff35303e4e5c10bf1cfb2da8f65c83d7dfa9ab3"
         )
 
     def test_has_hundreds_of_parameters(self):

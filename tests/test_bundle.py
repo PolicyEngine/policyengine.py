@@ -78,7 +78,7 @@ def test_bundle_install_requirements_are_country_scoped():
         f"policyengine=={manifest['policyengine_version']}",
         manifest["packages"]["policyengine-core"]["install_requirement"],
         manifest["packages"]["policyengine-us"]["install_requirement"],
-        "spm-calculator==1.0.0",
+        "spm-calculator==1.1.0",
     ]
     assert not any("policyengine-us-data" in req for req in us_requirements)
 
