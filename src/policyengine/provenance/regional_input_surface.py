@@ -1,7 +1,8 @@
-"""Audit regional H5 bytes against their build model and the exact UK target.
+"""Audit regional H5 bytes against their build model and the exact target.
 
 A local-area release keeps serving area runs after the national bundle moves
-to a newer policyengine-uk. The audit compares the columns actually stored in
+to a newer policyengine-uk or policyengine-us. The audit compares the columns
+actually stored in
 every artifact and period with two models: the release's build model, which
 its manifest records (``build.built_with_model_package`` and
 ``build.built_with_core_package``), and the installed target model. As in
@@ -25,6 +26,16 @@ again (``verify_model_surfaces``); only the stored columns rest on the
 auditor's word, bound to each H5's SHA-256. No household values are included
 in the resulting audit.
 
+The two countries differ in three ways. A UK file stores entity tables, read
+with PyTables. A US file is in either layout .py's US loader reads: entity
+tables (the Microcosm ACS-local release's, with ``_time_period`` naming the
+year), or PolicyEngine core's variable/period layout (an H5 group per
+variable, an array per period), read with h5py. A UK input alias
+is policyengine-uk's ``move_values`` from one variable it defines to another;
+a US alias is .py's rename of a stored input policyengine-us no longer defines
+onto its live input (``LEGACY_INPUT_RENAMES``). And each country's build model
+is read with its own package.
+
 policyengine-uk 2.147.2 silently skips unknown columns in both dataset loaders;
 the audit must detect that loss before certification. See the ``continue``
 branches in ``build_from_dataset`` and ``build_from_multi_year_dataset``:
@@ -36,6 +47,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib
 import inspect
 import json
 import os
@@ -57,6 +69,18 @@ from policyengine.provenance.manifest import (
 )
 
 UK_ENTITIES = ("person", "benunit", "household")
+#: The tables a US entity-table H5 stores, as .py's US loader reads them.
+US_ENTITIES = ("person", "household", "tax_unit", "spm_unit", "family", "marital_unit")
+#: The table naming the year a single-year entity-table H5 holds, by country.
+UK_TIME_PERIOD_KEY = "/time_period"
+US_TIME_PERIOD_KEY = "/_time_period"
+#: The country models an audit reads, by package: the module each imports as.
+MODEL_MODULES = {
+    "policyengine-uk": "policyengine_uk",
+    "policyengine-us": "policyengine_us",
+}
+#: A US file in PolicyEngine core's variable/period layout has this group.
+US_CORE_LAYOUT_MARKER = "person_id"
 #: The interpreter of the throwaway environment that reads the build model.
 BUILD_MODEL_PYTHON = "3.13"
 #: The only index that environment resolves from.
@@ -80,15 +104,15 @@ BUILD_MODEL_KEPT_UV_SETTINGS = frozenset(
 )
 #: Runs in the build model's environment: the model API ``_model_surface``
 #: uses, and the package versions it actually imported.
-BUILD_MODEL_PROBE = """
+_BUILD_MODEL_PROBE_TEMPLATE = """
 import json
 from importlib.metadata import version
 
-import policyengine_uk
+import {module}
 
-system = policyengine_uk.CountryTaxBenefitSystem()
-print(json.dumps({
-    "model_version": version("policyengine-uk"),
+system = {module}.CountryTaxBenefitSystem()
+print(json.dumps({{
+    "model_version": version("{package}"),
     "core_version": version("policyengine-core"),
     "variables": sorted(system.variables),
     "inputs": sorted(
@@ -96,12 +120,33 @@ print(json.dumps({
         for name, variable in system.variables.items()
         if variable.is_input_variable()
     ),
-}))
+}}))
 """
 
 
 class RegionalInputSurfaceError(ValueError):
     """A complete, byte-bound regional surface cannot be established."""
+
+
+def _model_module(model_package: str) -> str:
+    """Return the module ``model_package`` imports as; refuse other packages."""
+    try:
+        return MODEL_MODULES[model_package]
+    except KeyError as exc:
+        raise RegionalInputSurfaceError(
+            f"The audit reads policyengine-uk or policyengine-us, not {model_package}."
+        ) from exc
+
+
+def build_model_probe(model_package: str) -> str:
+    """Return the probe that reads ``model_package``'s surface in its environment."""
+    return _BUILD_MODEL_PROBE_TEMPLATE.format(
+        module=_model_module(model_package), package=model_package
+    )
+
+
+#: The UK probe, kept under its earlier name.
+BUILD_MODEL_PROBE = build_model_probe("policyengine-uk")
 
 
 def readable(text: str) -> bool:
@@ -134,6 +179,7 @@ def compare_input_surface(
     *,
     build_model_variables: list[str],
     build_model_inputs: list[str],
+    model_package: str = "policyengine-uk",
 ) -> dict[str, list[str]]:
     """Recompute dropped, never-modelled and defaulted names per period.
 
@@ -144,6 +190,11 @@ def compare_input_surface(
     by the target's unconditional ``move_values`` calls use the destination
     name after the move. Every artifact and period must pass: the union of
     supplied columns cannot hide a missing input in another period.
+
+    An alias has its model's shape. A policyengine-uk move reads a variable
+    the target defines; a policyengine-us rename reads a stored legacy input
+    the target no longer defines. A stored alias source is read, so it is
+    neither dropped nor never modelled.
     """
     variables = _names(model_variables, "model_variables")
     inputs = _names(model_inputs, "model_inputs")
@@ -156,9 +207,10 @@ def compare_input_surface(
             "build_model_inputs must be build_model_variables."
         )
     aliases = input_aliases or {}
+    renames = _model_module(model_package) == "policyengine_us"
     for donor, target in aliases.items():
         if (
-            donor not in variables
+            (donor in variables if renames else donor not in variables)
             or target not in inputs
             or donor == target
             or target in aliases
@@ -187,13 +239,10 @@ def compare_input_surface(
                 f"{name} columns must equal the union of columns_by_period."
             )
         for supplied in periods:
-            dropped.update((supplied & build_variables) - variables)
-            never_modelled.update(supplied - build_variables - variables)
-            effective = set(supplied)
-            for donor, target in aliases.items():
-                if donor in effective:
-                    effective.remove(donor)
-                    effective.add(target)
+            mapped = {donor for donor in aliases if donor in supplied}
+            dropped.update((supplied & build_variables) - variables - mapped)
+            never_modelled.update(supplied - build_variables - variables - mapped)
+            effective = (supplied - mapped) | {aliases[donor] for donor in mapped}
             defaulted.update((inputs - effective) - build_inputs)
     return {
         "dropped_columns": sorted(dropped),
@@ -255,37 +304,56 @@ def _input_aliases(simulation_class: Any) -> dict[str, str]:
     return aliases
 
 
-def _model_surface(model_version: str) -> tuple[list[str], list[str], dict[str, str]]:
+def _us_input_aliases(variables: Any) -> dict[str, str]:
+    """Return .py's renames of stored legacy inputs this policyengine-us needs.
+
+    These are the ``LEGACY_INPUT_RENAMES`` entries whose live input the engine
+    defines and whose legacy name it does not, as the US loaders apply them.
+    """
+    from policyengine.tax_benefit_models.us.legacy_inputs import (  # noqa: PLC0415
+        pending_legacy_input_renames,
+    )
+
+    return pending_legacy_input_renames(variables)
+
+
+def _model_surface(
+    model_version: str, model_package: str = "policyengine-uk"
+) -> tuple[list[str], list[str], dict[str, str]]:
+    module_name = _model_module(model_package)
     try:
-        installed = version("policyengine-uk")
+        installed = version(model_package)
     except PackageNotFoundError as exc:
         raise RegionalInputSurfaceError(
-            "Install the exact policyengine-uk target first."
+            f"Install the exact {model_package} target first."
         ) from exc
     if installed != model_version:
         raise RegionalInputSurfaceError(
-            f"Installed policyengine-uk {installed} differs from requested {model_version}."
+            f"Installed {model_package} {installed} differs from requested {model_version}."
         )
     # Imported here, not at module level: importing this module must not load
     # the country model. The audit and certification's verify_model_surfaces
     # load it on purpose.
-    import policyengine_uk
+    model = importlib.import_module(module_name)
 
-    system = policyengine_uk.CountryTaxBenefitSystem()
+    system = model.CountryTaxBenefitSystem()
     variables = sorted(system.variables)
     inputs = sorted(
         name
         for name, variable in system.variables.items()
         if variable.is_input_variable()
     )
-    return variables, inputs, _input_aliases(policyengine_uk.Simulation)
+    if module_name == "policyengine_us":
+        return variables, inputs, _us_input_aliases(system.variables)
+    return variables, inputs, _input_aliases(model.Simulation)
 
 
-def regional_build_versions(manifest: DataReleaseManifest) -> tuple[str, str]:
-    """Return the regional release's build model and core: the audit baseline.
+def regional_build_versions(manifest: DataReleaseManifest) -> tuple[str, str, str]:
+    """Return the regional release's build model package, its version and core.
 
-    A release that records neither, or records other packages, refuses: there
-    is no model to tell a dropped column from one no model ever defined.
+    These are the audit baseline. A release that records neither, or records
+    a package the audit does not read, refuses: there is no model to tell a
+    dropped column from one no model ever defined.
     """
     build = manifest.build
     model = build.built_with_model_package if build is not None else None
@@ -296,10 +364,10 @@ def regional_build_versions(manifest: DataReleaseManifest) -> tuple[str, str]:
             "(build.built_with_model_package and build.built_with_core_package), "
             "so the audit has no baseline."
         )
-    if model.name != "policyengine-uk" or core.name != "policyengine-core":
+    if model.name not in MODEL_MODULES or core.name != "policyengine-core":
         raise RegionalInputSurfaceError(
             f"The regional release was built with {model.name} and {core.name}, "
-            "not policyengine-uk and policyengine-core."
+            "not policyengine-uk or policyengine-us, and policyengine-core."
         )
     for package in (model, core):
         try:
@@ -309,7 +377,7 @@ def regional_build_versions(manifest: DataReleaseManifest) -> tuple[str, str]:
                 f"The regional manifest's {package.name} build version "
                 f"{package.version!r} is not a version."
             ) from exc
-    return model.version, core.version
+    return model.name, model.version, core.version
 
 
 def regional_build_cutoff(manifest: DataReleaseManifest) -> str:
@@ -346,6 +414,7 @@ def _build_model_surface(
     core_version: str,
     run: Callable[..., Any] | None = None,
     exclude_newer: str | None = None,
+    model_package: str = "policyengine-uk",
 ) -> tuple[list[str], list[str]]:
     """Read the build model's variables and inputs in a throwaway environment.
 
@@ -358,7 +427,8 @@ def _build_model_surface(
     probe reports the versions it imported, and any other resolution refuses.
     """
     run = run if run is not None else subprocess.run
-    label = f"policyengine-uk {model_version} with policyengine-core {core_version}"
+    probe = build_model_probe(model_package)
+    label = f"{model_package} {model_version} with policyengine-core {core_version}"
     command = [
         "uv",
         "run",
@@ -371,13 +441,13 @@ def _build_model_surface(
         "--python",
         BUILD_MODEL_PYTHON,
         "--with",
-        f"policyengine-uk=={model_version}",
+        f"{model_package}=={model_version}",
         "--with",
         f"policyengine-core=={core_version}",
         "python",
         "-I",
         "-c",
-        BUILD_MODEL_PROBE,
+        probe,
     ]
     env = {
         key: value
@@ -409,7 +479,7 @@ def _build_model_surface(
     resolved = (surface.get("model_version"), surface.get("core_version"))
     if resolved != (model_version, core_version):
         raise RegionalInputSurfaceError(
-            f"The build-model probe resolved policyengine-uk {resolved[0]} with "
+            f"The build-model probe resolved {model_package} {resolved[0]} with "
             f"policyengine-core {resolved[1]}, not {label}."
         )
     variables, inputs = surface.get("variables"), surface.get("inputs")
@@ -446,8 +516,11 @@ def verify_model_surfaces(
     without the H5: the auditor attests them, and the evidence binds them to
     each H5's SHA-256.
     """
-    variables, inputs, aliases = _model_surface(evidence.model_version)
-    target = f"policyengine-uk {evidence.model_version}"
+    package = evidence.model_package
+    variables, inputs, aliases = _model_surface(
+        evidence.model_version, model_package=package
+    )
+    target = f"{package} {evidence.model_version}"
     for field, claimed, actual in (
         ("model_variables", evidence.model_variables, variables),
         ("model_inputs", evidence.model_inputs, inputs),
@@ -466,9 +539,10 @@ def verify_model_surfaces(
         evidence.build_core_version,
         run=run,
         exclude_newer=regional_build_cutoff(regional_manifest),
+        model_package=package,
     )
     build = (
-        f"policyengine-uk {evidence.build_model_version} with policyengine-core "
+        f"{package} {evidence.build_model_version} with policyengine-core "
         f"{evidence.build_core_version}"
     )
     for field, claimed, actual in (
@@ -490,17 +564,28 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _hdf_columns(path: Path) -> dict[str, list[str]]:
+def _hdf_columns(
+    path: Path,
+    entities: tuple[str, ...] = UK_ENTITIES,
+    time_period_key: str = UK_TIME_PERIOD_KEY,
+    country: str = "UK",
+) -> dict[str, list[str]]:
+    """Return each period's stored columns in an entity-table H5.
+
+    A single-year file stores one table per entity and names its year in
+    ``time_period_key``; a multi-year file stores ``<entity>/<year>`` tables.
+    Reads column names only, never a row. Other keys are producer metadata.
+    """
     import pandas as pd
 
     try:
         with pd.HDFStore(path, mode="r") as store:
             keys = set(store.keys())
-            flat = {f"/{entity}" for entity in UK_ENTITIES} & keys
+            flat = {f"/{entity}" for entity in entities} & keys
             nested = {
                 key
                 for key in keys
-                if any(key.startswith(f"/{entity}/") for entity in UK_ENTITIES)
+                if any(key.startswith(f"/{entity}/") for entity in entities)
             }
             if flat and nested:
                 raise RegionalInputSurfaceError(
@@ -508,20 +593,18 @@ def _hdf_columns(path: Path) -> dict[str, list[str]]:
                 )
             entity_keys: dict[str, dict[str, str]] = {}
             if flat:
-                if "/time_period" not in keys:
+                if time_period_key not in keys:
                     raise RegionalInputSurfaceError(
-                        "Single-year H5 requires /time_period."
+                        f"Single-year H5 requires {time_period_key}."
                     )
-                metadata = store.select("/time_period")
+                metadata = store.select(time_period_key)
                 values = metadata.to_numpy().ravel().tolist()
                 if len(values) != 1 or not re.fullmatch(r"[0-9]{4}", str(values[0])):
                     raise RegionalInputSurfaceError(
-                        "H5 /time_period must name one year."
+                        f"H5 {time_period_key} must name one year."
                     )
                 entity_keys[str(values[0])] = {
-                    entity: f"/{entity}"
-                    for entity in UK_ENTITIES
-                    if f"/{entity}" in flat
+                    entity: f"/{entity}" for entity in entities if f"/{entity}" in flat
                 }
             else:
                 for key in sorted(nested):
@@ -532,19 +615,20 @@ def _hdf_columns(path: Path) -> dict[str, list[str]]:
                         )
                     entity_keys.setdefault(parts[1], {})[parts[0]] = key
             if not entity_keys:
-                raise RegionalInputSurfaceError("H5 has no UK entity periods.")
+                raise RegionalInputSurfaceError(f"H5 has no {country} entity periods.")
             columns_by_period = {}
-            for period, entities in sorted(entity_keys.items()):
-                missing = set(UK_ENTITIES) - set(entities)
+            for period, period_keys in sorted(entity_keys.items()):
+                missing = set(entities) - set(period_keys)
                 if missing:
                     raise RegionalInputSurfaceError(
-                        f"H5 period {period} is missing entity tables: {sorted(missing)}."
+                        f"H5 period {period} is missing {country} entity tables: "
+                        f"{sorted(missing)}."
                     )
                 columns: set[str] = set()
-                for entity in UK_ENTITIES:
+                for entity in entities:
                     # This obtains the same column metadata for fixed and table
                     # stores without selecting household or person rows.
-                    frame = store.select(entities[entity], start=0, stop=0)
+                    frame = store.select(period_keys[entity], start=0, stop=0)
                     columns.update(
                         _names(list(frame.columns), f"{entity}/{period} columns")
                     )
@@ -556,6 +640,77 @@ def _hdf_columns(path: Path) -> dict[str, list[str]]:
         raise RegionalInputSurfaceError(
             f"Cannot read H5 entity metadata from {path.name}."
         ) from exc
+
+
+def _us_core_h5_columns(path: Path) -> dict[str, list[str]]:
+    """Return each year's stored variables in a US core variable/period H5.
+
+    Reads group and period names only, never an array. A top-level dataset is
+    file metadata (such as .py's renames record), not a variable.
+    """
+    import h5py  # noqa: PLC0415
+
+    try:
+        with h5py.File(path, "r") as file:
+            if not isinstance(file.get(US_CORE_LAYOUT_MARKER), h5py.Group):
+                raise RegionalInputSurfaceError(
+                    f"{path.name} is not in PolicyEngine core's variable/period "
+                    f"layout: it has no {US_CORE_LAYOUT_MARKER} group."
+                )
+            columns_by_period: dict[str, set[str]] = {}
+            for name, node in file.items():
+                if not isinstance(node, h5py.Group):
+                    continue
+                periods = list(node.keys())
+                if not periods:
+                    raise RegionalInputSurfaceError(
+                        f"{path.name} stores {name!r} for no period."
+                    )
+                for period in periods:
+                    if not re.fullmatch(r"[0-9]{4}", period):
+                        raise RegionalInputSurfaceError(
+                            f"{path.name} stores {name!r} for period {period!r}; "
+                            "the audit reads year periods only."
+                        )
+                    columns_by_period.setdefault(period, set()).add(name)
+            return {
+                period: sorted(_names(sorted(names), f"{period} columns"))
+                for period, names in sorted(columns_by_period.items())
+            }
+    except RegionalInputSurfaceError:
+        raise
+    except (OSError, KeyError, ValueError, ImportError) as exc:
+        raise RegionalInputSurfaceError(
+            f"Cannot read H5 variable metadata from {path.name}."
+        ) from exc
+
+
+def _us_layout(path: Path) -> str:
+    """Return which of .py's two US layouts a file uses: ``core`` or ``entity``."""
+    import h5py  # noqa: PLC0415
+
+    try:
+        with h5py.File(path, "r") as file:
+            if isinstance(file.get(US_CORE_LAYOUT_MARKER), h5py.Group):
+                return "core"
+            if any(entity in file for entity in US_ENTITIES):
+                return "entity"
+    except OSError as exc:
+        raise RegionalInputSurfaceError(f"Cannot read {path.name} as H5.") from exc
+    raise RegionalInputSurfaceError(
+        f"{path.name} is in neither US layout .py loads: it has no "
+        f"{US_CORE_LAYOUT_MARKER} group (PolicyEngine core's variable/period "
+        f"layout) and no entity tables ({', '.join(US_ENTITIES)})."
+    )
+
+
+def _stored_columns(path: Path, model_package: str) -> dict[str, list[str]]:
+    """Read a regional H5's stored columns in its country's layout."""
+    if _model_module(model_package) != "policyengine_us":
+        return _hdf_columns(path)
+    if _us_layout(path) == "core":
+        return _us_core_h5_columns(path)
+    return _hdf_columns(path, US_ENTITIES, US_TIME_PERIOD_KEY, "US")
 
 
 def measure_regional_input_surface(
@@ -573,7 +728,9 @@ def measure_regional_input_surface(
     The operator supplies local files named by the immutable regional release.
     Every microdata H5 must be measured and match its manifest's SHA-256 both
     before and after metadata inspection. The installed policyengine-uk must
-    be ``model_version``. The build model and core named by the manifest are
+    be ``model_version``. The country model is the one the manifest's build
+    model names, policyengine-uk or policyengine-us. The build model and core
+    named by the manifest are
     read in a throwaway ``uv run`` environment through ``run``
     (``subprocess.run`` by default), resolving as of the manifest's
     ``build.built_at``. Dropped columns refuse. This reads no unit values for
@@ -593,7 +750,9 @@ def measure_regional_input_surface(
     manifest, manifest_sha256, parts = fetch_release_manifest(
         regional_manifest_uri, token=token
     )
-    build_model_version, build_core_version = regional_build_versions(manifest)
+    model_package, build_model_version, build_core_version = regional_build_versions(
+        manifest
+    )
     build_cutoff = regional_build_cutoff(manifest)
     expected = {
         name: artifact
@@ -605,9 +764,15 @@ def measure_regional_input_surface(
             "Supplied artifact paths must exactly cover the regional microdata H5 artifacts: "
             f"{sorted(expected)}."
         )
-    variables, inputs, aliases = _model_surface(model_version)
+    variables, inputs, aliases = _model_surface(
+        model_version, model_package=model_package
+    )
     build_variables, build_inputs = _build_model_surface(
-        build_model_version, build_core_version, run=run, exclude_newer=build_cutoff
+        build_model_version,
+        build_core_version,
+        run=run,
+        exclude_newer=build_cutoff,
+        model_package=model_package,
     )
     artifacts = {}
     for name, artifact in sorted(expected.items()):
@@ -621,7 +786,7 @@ def measure_regional_input_surface(
             raise RegionalInputSurfaceError(
                 f"Artifact {name!r} bytes differ from its manifest sha256."
             )
-        periods = _hdf_columns(path)
+        periods = _stored_columns(path, model_package)
         after = _sha256_file(path)
         if after != before:
             raise RegionalInputSurfaceError(
@@ -645,10 +810,11 @@ def measure_regional_input_surface(
         aliases,
         build_model_variables=build_variables,
         build_model_inputs=build_inputs,
+        model_package=model_package,
     )
     if comparison["dropped_columns"]:
         raise RegionalInputSurfaceError(
-            f"Columns policyengine-uk {build_model_version} defines and "
+            f"Columns {model_package} {build_model_version} defines and "
             f"{model_version} does not would be dropped, which refuses "
             f"acceptance: {comparison['dropped_columns']}."
         )
@@ -656,7 +822,7 @@ def measure_regional_input_surface(
         schema_version=2,
         regional_manifest_uri=regional_manifest_uri,
         regional_manifest_sha256=manifest_sha256,
-        model_package="policyengine-uk",
+        model_package=model_package,
         model_version=model_version,
         build_model_version=build_model_version,
         build_core_version=build_core_version,

@@ -238,7 +238,7 @@ def _parser() -> argparse.ArgumentParser:
         "--accept-regional-model-mismatch",
         metavar="REASON",
         help=(
-            "UK only: route regions to a regional release on another model "
+            "UK or US: route regions to a regional release on another model "
             "version, recording this reviewed reason; forwarded to "
             "scripts/certify_data_release.py."
         ),
