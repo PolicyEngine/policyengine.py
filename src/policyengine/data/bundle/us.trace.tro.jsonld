@@ -74,7 +74,7 @@
             "@type": "trov:ResearchArtifact",
             "schema:name": "policyengine.py bundle manifest for us",
             "trov:mimeType": "application/json",
-            "trov:sha256": "e231b2c83d03856d5c23e87ffe8fe599d3a8d3307e1b4ba303dde518853ed6c7"
+            "trov:sha256": "097c853cebe0f814619f51b1bc25f687b322b20c009c84b23347c3a3535d59ac"
           },
           {
             "@id": "composition/1/artifact/data_release_manifest",
@@ -101,7 +101,7 @@
         "trov:hasFingerprint": {
           "@id": "composition/1/fingerprint",
           "@type": "trov:CompositionFingerprint",
-          "trov:sha256": "67ea7fab285c8ca7bf4359fdb8e0c71806b6bebc640014b107b6b548170a5507"
+          "trov:sha256": "0f6f9420cfbf8bdde5e6377a5ed8e55f0395600b3f838e9a96ae368267b85769"
         }
       },
       "trov:hasPerformance": {
@@ -117,7 +117,7 @@
         "pe:regionalCertification": {
           "@type": "@json",
           "@value": {
-            "accepted_reason": "Accepted by Anthony Volk on 2026-11-12: policyengine-us 2.2.2 is 2.2.1 plus the spm-calculator 1.1 pin and CBO's 2036 CPI-U points (policyengine-us#10765), and the audit finds no dropped column and no new default.",
+            "accepted_reason": "Accepted by Anthony Volk on 2026-11-12: policyengine-us 2.2.2 is 2.2.1 plus the spm-calculator 1.1 pin and CBO's 2036 CPI-U points (policyengine-us#10765); 2.2.1 and 2.2.2 define the same variables and inputs, and the audit finds no dropped column.",
             "area_receipts": "uncertified",
             "built_with_model_version": "2.2.1",
             "certified_for_model_version": "2.2.2",

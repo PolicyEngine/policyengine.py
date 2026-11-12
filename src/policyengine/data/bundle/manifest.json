@@ -253,7 +253,7 @@
         }
       },
       "regional_certification": {
-        "accepted_reason": "Accepted by Anthony Volk on 2026-11-12: policyengine-us 2.2.2 is 2.2.1 plus the spm-calculator 1.1 pin and CBO's 2036 CPI-U points (policyengine-us#10765), and the audit finds no dropped column and no new default.",
+        "accepted_reason": "Accepted by Anthony Volk on 2026-11-12: policyengine-us 2.2.2 is 2.2.1 plus the spm-calculator 1.1 pin and CBO's 2036 CPI-U points (policyengine-us#10765); 2.2.1 and 2.2.2 define the same variables and inputs, and the audit finds no dropped column.",
         "area_receipts": "uncertified",
         "built_with_model_version": "2.2.1",
         "certified_for_model_version": "2.2.2",
@@ -15883,7 +15883,7 @@
     "spm": {
       "as_of": null,
       "county_vintage": "2020",
-      "forecast_content_sha256": "335e6755bc8e0bd883e09b76c2bd53a5315683773e44d50085c7d6b8832b6291",
+      "forecast_content_sha256": "335e6755dc8e0bd883e09b76c2bd53a5315683773e44d50085c7d6b8832b6291",
       "geography_id": null,
       "geography_kind": "county",
       "scenario": "ce_trend"
