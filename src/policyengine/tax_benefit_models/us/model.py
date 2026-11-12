@@ -537,6 +537,7 @@ def managed_microsimulation(
     dataset: Optional[str] = None,
     allow_unmanaged: bool = False,
     spm: Optional[SPMSelection] = None,
+    scoping_strategy=None,
     **kwargs,
 ):
     """Construct a country-package Microsimulation pinned to this bundle.
@@ -548,6 +549,11 @@ def managed_microsimulation(
     Stored inputs the engine has since renamed are mapped onto their live
     inputs (see ``legacy_inputs.LEGACY_INPUT_RENAMES``), and the renames
     applied are recorded as ``policyengine_bundle["legacy_input_renames"]``.
+
+    ``scoping_strategy=RowFilterStrategy(...)`` selects a fixed, closed
+    household cohort from every native projected year before financial
+    calculations. This retains earlier supplied income for lookbacks. The
+    unscoped constructor continues to own projection and reform timing.
     """
 
     from policyengine_us import Microsimulation
@@ -564,8 +570,6 @@ def managed_microsimulation(
         dataset,
         allow_unmanaged=allow_unmanaged,
     )
-    microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
-    legacy_input_renames = apply_legacy_input_renames_to_microsimulation(microsim)
     # BACKWARD COMPATIBILITY (#597, #598): a legacy certified source carries
     # no SPM declarations, so derive them from its stored evidence and set
     # them on the simulation and its branches (see ``legacy_spm``).
@@ -573,6 +577,41 @@ def managed_microsimulation(
     legacy_source = legacy_spm_source(
         source.bundle_dataset.sha256 if source.bundle_dataset else None
     )
+    if scoping_strategy is not None:
+        from policyengine.core.scoping_strategy import RowFilterStrategy
+
+        if type(scoping_strategy) is not RowFilterStrategy:
+            raise ValueError("Managed scoping supports only RowFilterStrategy.")
+        if legacy_source is not None:
+            raise ValueError(
+                "Managed scoping does not support legacy SPM declarations."
+            )
+
+    microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
+    scoping_record = None
+    if scoping_strategy is not None:
+        import gc
+
+        from policyengine.tax_benefit_models.us.managed_scope import (
+            scope_native_history,
+        )
+
+        scoped_dataset, scoping_record = scope_native_history(
+            microsim.dataset, scoping_strategy
+        )
+        # Release the national input-only simulation before constructing the
+        # scoped simulation. All retained data belong to copied scoped tables.
+        del microsim
+        gc.collect()
+        scoped_kwargs = dict(kwargs)
+        # A native multi-year dataset already contains the exact projected
+        # horizon; country constructors accept this option only for single-year
+        # inputs. Do not project or extend the scoped data a second time.
+        scoped_kwargs.pop("dataset_end_year", None)
+        microsim = Microsimulation(
+            dataset=scoped_dataset, spm=selection, **scoped_kwargs
+        )
+    legacy_input_renames = apply_legacy_input_renames_to_microsimulation(microsim)
     if legacy_source is not None:
         declarations, years = derive_from_stored_tables(
             legacy_source, microsim.dataset, data_dir=Path(source.path).parent
@@ -596,6 +635,8 @@ def managed_microsimulation(
     )
     if legacy_spm_record is not None:
         microsim.policyengine_bundle[LEGACY_SPM_RECORD_KEY] = legacy_spm_record
+    if scoping_record is not None:
+        microsim.policyengine_bundle["scoping"] = scoping_record
     return microsim
 
 
