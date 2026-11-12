@@ -449,3 +449,100 @@ def test_compiler_annotation_helpers_do_not_claim_native_runtime_callables():
     found = _codes(code)
     assert "Example.method" in found
     assert not any(name.rsplit(".", 1)[-1] == "__annotate__" for name in found)
+
+
+def test_callable_class_cannot_replace_a_source_declared_adapter_method(monkeypatch):
+    """C1: callable classes must not bypass the method's source-code check."""
+    from policyengine.provenance import ordered_scenario as api
+
+    bound = build_ordered_scenario(
+        before_modifiers=[leaf(modifiers.add_one), leaf(modifiers.double)],
+    )
+    identity = bound.identity
+    assert execute_bound(bound)[0] == 4
+
+    class SkipAdapterExecution:
+        def __init__(self, simulation):
+            self.skipped = True
+
+    monkeypatch.setattr(api._OrderedModifier, "__call__", SkipAdapterExecution)
+    with pytest.raises(ReceiptError, match="adapter implementation"):
+        identity._recheck()
+    with pytest.raises(ReceiptError, match="adapter implementation"):
+        bound.scenario
+
+
+def test_callable_class_replacement_refuses_the_real_native_run(monkeypatch):
+    """C1: refuse the replacement that changed native execution from 45 to 10."""
+    from policyengine_uk import Simulation
+
+    from policyengine.provenance import ordered_scenario as api
+
+    bound = build_ordered_scenario(
+        before_modifiers=[leaf(modifiers.bump_limit), leaf(modifiers.scale_limit)],
+        after_modifiers=[leaf(modifiers.scale_limit), leaf(modifiers.bump_limit)],
+    )
+    identity = bound.identity
+    situation = {
+        "people": {"p": {"age": {2027: 40}}},
+        "benunits": {"b": {"members": ["p"]}},
+        "households": {"h": {"members": ["p"]}},
+    }
+    assert (
+        Simulation(situation=situation, scenario=bound.scenario).max_spiral_loops == 45
+    )
+
+    class SkipAdapterExecution:
+        def __init__(self, simulation):
+            self.skipped = True
+
+    monkeypatch.setattr(api._OrderedModifier, "__call__", SkipAdapterExecution)
+    with pytest.raises(ReceiptError, match="adapter implementation"):
+        Simulation(situation=situation, scenario=bound.scenario)
+    with pytest.raises(ReceiptError, match="adapter implementation"):
+        identity._recheck()
+
+
+@pytest.mark.parametrize(
+    "initial, replacement", [(True, 1), (1, True), (False, 0), (0, False)]
+)
+@pytest.mark.parametrize("ordered", [False, True])
+@pytest.mark.parametrize("target", ["original", "native"])
+def test_boolean_numeric_parameter_mutations_refuse_stale_identity(
+    initial, replacement, ordered, target
+):
+    """C2: canonical JSON distinguishes true/1 and false/0 in either direction."""
+    parameters = {"gov.example.flag": initial}
+    leaves = [leaf(modifiers.add_one)] if ordered else []
+    bound = build_ordered_scenario(parameters, before_modifiers=leaves)
+    identity = bound.identity
+    native = bound.scenario
+    fresh = build_ordered_scenario(
+        {"gov.example.flag": replacement}, before_modifiers=leaves
+    )
+    assert fresh.identity.reform_sha256 != identity.reform_sha256
+    if target == "original":
+        parameters["gov.example.flag"] = replacement
+    else:
+        native.parameter_changes["gov.example.flag"] = replacement
+    with pytest.raises(ReceiptError, match="changed after"):
+        identity._recheck()
+
+
+@pytest.mark.parametrize("ordered", [False, True])
+@pytest.mark.parametrize("target", ["original", "native"])
+def test_equal_integer_float_parameters_keep_official_canonical_identity(
+    ordered, target
+):
+    """C2 control: official RFC 8785 numeric 1 and 1.0 have the same content."""
+    parameters = {"gov.example.number": 1}
+    bound = build_ordered_scenario(
+        parameters, before_modifiers=[leaf(modifiers.add_one)] if ordered else []
+    )
+    identity = bound.identity
+    native = bound.scenario
+    if target == "original":
+        parameters["gov.example.number"] = 1.0
+    else:
+        native.parameter_changes["gov.example.number"] = 1.0
+    assert identity._recheck() == identity

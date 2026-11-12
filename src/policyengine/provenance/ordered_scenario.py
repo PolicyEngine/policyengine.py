@@ -6,6 +6,7 @@ module or qualified name, and cannot grant permission to execute Python.
 
 from __future__ import annotations
 
+import ast
 import inspect
 import math
 import sys
@@ -64,6 +65,11 @@ def _plain(value):
     if isinstance(value, list | tuple):
         return [_plain(item) for item in value]
     return value
+
+
+def _same_content(first, second):
+    """Compare JSON content: distinguish true/1 and equate numeric1/1.0."""
+    return canonical_sha256(_plain(first)) == canonical_sha256(_plain(second))
 
 
 class _PlanModel(BaseModel):
@@ -418,6 +424,9 @@ def _adapter_digest():
     module = sys.modules[__name__]
     source = inspect.getsource(module)
     compiled = _codes(compile(source, __file__, "exec", dont_inherit=True))
+    class_bodies = {
+        node.name for node in ast.parse(source).body if isinstance(node, ast.ClassDef)
+    }
     for name, expected in _ADAPTER_BINDINGS.items():
         if vars(module).get(name) is not expected:
             raise ReceiptError(f"Ordered adapter binding {name} changed after import.")
@@ -427,12 +436,15 @@ def _adapter_digest():
         loaded = module
         for part in qualname.split("."):
             loaded = getattr(loaded, part, None)
-        if inspect.isclass(loaded):
+        if qualname in class_bodies:
+            if not inspect.isclass(loaded):
+                raise ReceiptError(f"Ordered adapter class {qualname} changed.")
             continue
         if isinstance(loaded, property):
             loaded = loaded.fget
-        loaded = getattr(loaded, "__func__", loaded)
-        if not callable(loaded) or not hasattr(loaded, "__code__"):
+        if inspect.ismethod(loaded):
+            loaded = loaded.__func__
+        if not inspect.isfunction(loaded):
             raise ReceiptError(f"Ordered adapter implementation {qualname} changed.")
         if code_shape(loaded.__code__) != code_shape(expected):
             raise ReceiptError(
@@ -521,11 +533,18 @@ class BoundOrderedScenario(_PlanModel):
         live, before, after = _make_plan(
             self._parameter_source, self._before_source, self._after_source
         )
-        if live != _validated_plan(self.plan):
+        if not _same_content(
+            live.model_dump(mode="json"),
+            _validated_plan(self.plan).model_dump(mode="json"),
+        ):
             raise ReceiptError("Ordered Scenario inputs changed after binding.")
         for held, rebuilt in ((self._before, before), (self._after, after)):
             if len(held) != len(rebuilt) or any(
-                original[0] is not current[0] or original[2] != current[2]
+                original[0] is not current[0]
+                or not _same_content(
+                    original[2].model_dump(mode="json"),
+                    current[2].model_dump(mode="json"),
+                )
                 for original, current in zip(held, rebuilt)
             ):
                 raise ReceiptError("Ordered modifier leaves changed after binding.")
@@ -561,7 +580,7 @@ class BoundOrderedScenario(_PlanModel):
                 raise ReceiptError("The native Scenario timing changed after binding.")
             actual = _parameter_values(part.parameter_changes or {}, encoded=False)
             if (
-                actual != _plain(proof.parameter_changes)
+                not _same_content(actual, proof.parameter_changes)
                 or part.simulation_modifier is not adapter
             ):
                 raise ReceiptError(
@@ -669,7 +688,9 @@ def bind_ordered_scenario_plan(
         after_modifiers=after_modifiers,
         name=name,
     )
-    if bound.plan != expected:
+    if not _same_content(
+        bound.plan.model_dump(mode="json"), expected.model_dump(mode="json")
+    ):
         raise ReceiptError(
             "Trusted execution leaves or adapter do not match the ordered plan."
         )

@@ -7,8 +7,10 @@ from policyengine.provenance import build_ordered_scenario
 
 bound = build_ordered_scenario(
     complete_parameter_changes,
-    before_modifiers=[(first_modifier, first_revision),
-                      (second_modifier, second_revision)],
+    before_modifiers=[
+        (first_modifier, first_revision),
+        (second_modifier, second_revision),
+    ],
     after_modifiers=[(third_modifier, third_revision)],
 )
 simulation = NativeUKSimulation(situation=situation, scenario=bound.scenario)
