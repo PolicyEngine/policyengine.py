@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import os
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -570,3 +571,69 @@ def test_us_accepted_mismatch_without_evidence_refuses(tmp_path, us_surfaces):
             local_area_release(),
             regional_model_mismatch_reason=REASON,
         )
+
+
+def test_a_us_legacy_column_stored_beside_its_live_input_is_not_read():
+    """.py maps a legacy column only where the live input is not stored."""
+    comparison = _module().compare_input_surface(
+        {LOCAL: _artifact({"2024": ["person_id", LEGACY_WIC, LIVE_WIC]})},
+        ["person_id", LIVE_WIC],
+        ["person_id", LIVE_WIC],
+        {LEGACY_WIC: LIVE_WIC},
+        build_model_variables=["person_id", LEGACY_WIC, LIVE_WIC],
+        build_model_inputs=["person_id", LEGACY_WIC, LIVE_WIC],
+        model_package="policyengine-us",
+    )
+    # The target skips the legacy column, which the build model read.
+    assert comparison["dropped_columns"] == [LEGACY_WIC]
+
+
+def test_a_us_rename_applies_only_when_no_period_stores_the_live_input():
+    """In the variable/period layout .py maps a rename file-wide or not at all."""
+    comparison = _module().compare_input_surface(
+        {
+            LOCAL: _artifact(
+                {"2023": ["person_id", LIVE_WIC], "2024": ["person_id", LEGACY_WIC]}
+            )
+        },
+        ["person_id", LIVE_WIC],
+        ["person_id", LIVE_WIC],
+        {LEGACY_WIC: LIVE_WIC},
+        build_model_variables=["person_id", LEGACY_WIC],
+        build_model_inputs=["person_id", LEGACY_WIC],
+        model_package="policyengine-us",
+    )
+    # 2024's legacy column is skipped, so its live input is not supplied.
+    assert comparison["dropped_columns"] == [LEGACY_WIC]
+    assert comparison["defaulted_inputs"] == [LIVE_WIC]
+
+
+def test_reading_the_us_aliases_does_not_load_the_us_model():
+    """The audit runs before the bundle certifies the target, so it must not
+    build .py's pinned US model, which checks the bundle's certification."""
+    code = (
+        "import sys\n"
+        "from policyengine.provenance.regional_input_surface import _us_input_aliases\n"
+        f"print(_us_input_aliases({{{LIVE_WIC!r}: object()}}))\n"
+        "print('policyengine.tax_benefit_models.us.model' in sys.modules)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "POLICYENGINE_SKIP_COUNTRY_IMPORTS": "1"},
+    )
+    aliases, loaded = result.stdout.strip().splitlines()[-2:]
+    assert aliases == repr({LEGACY_WIC: LIVE_WIC})
+    assert loaded == "False"
+
+
+def test_a_multi_year_us_entity_table_file_refuses(tmp_path, us_model):
+    """.py's US loaders read one table per entity, never <entity>/<year>."""
+    path = tmp_path / f"{LOCAL}.h5"
+    with pd.HDFStore(path, mode="w") as store:
+        for entity, columns in US_ENTITY_COLUMNS.items():
+            store.put(f"{entity}/2024", pd.DataFrame({c: [1.0] for c in columns}))
+    with pytest.raises(ValueError, match="single-year"):
+        measure(us_model, {LOCAL: path})
