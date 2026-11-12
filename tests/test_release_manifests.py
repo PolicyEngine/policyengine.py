@@ -424,8 +424,8 @@ class TestReleaseManifests:
             == US_LOCAL_AREA_PATH
         )
 
-    def test__given_local_area_name__then_resolves_to_its_immutable_tag(self):
-        """The local-area dataset resolves to its own immutable release tag."""
+    def test__given_local_area_name__then_resolves_to_its_build_folder(self):
+        """The local-area dataset resolves to its build folder at the publishing commit."""
         assert (
             resolve_dataset_reference("us", US_LOCAL_AREA_DATASET)
             == US_LOCAL_AREA_DATASET_URI
@@ -441,9 +441,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         reference = manifest.datasets[US_LOCAL_AREA_DATASET]
-        assert reference.path == "populace_us_2024_acs_local.h5"
+        assert reference.path == US_LOCAL_AREA_PATH
         assert reference.repo_id == "policyengine/populace-us"
-        assert reference.revision == US_LOCAL_AREA_RELEASE_ID
+        assert reference.revision == US_LOCAL_AREA_REVISION
         assert reference.sha256 == US_LOCAL_AREA_SHA256
         assert US_LOCAL_AREA_DATASET in resolve_default_datasets("us")
         assert US_LOCAL_AREA_DATASET != manifest.default_dataset
