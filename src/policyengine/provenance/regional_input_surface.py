@@ -27,10 +27,11 @@ auditor's word, bound to each H5's SHA-256. No household values are included
 in the resulting audit.
 
 The two countries differ in three ways. A UK file stores entity tables, read
-with PyTables. A US file is in either layout .py's US loader reads: entity
-tables (the Microcosm ACS-local release's, with ``_time_period`` naming the
-year), or PolicyEngine core's variable/period layout (an H5 group per
-variable, an array per period), read with h5py. A UK input alias
+with PyTables. A US file is in either layout .py's US loader reads:
+single-year entity tables (the Microcosm ACS-local release's, with
+``_time_period`` naming the year), or PolicyEngine core's variable/period
+layout (an H5 group per variable, an array per period), read with h5py. A UK
+input alias
 is policyengine-uk's ``move_values`` from one variable it defines to another;
 a US alias is .py's rename of a stored input policyengine-us no longer defines
 onto its live input (``LEGACY_INPUT_RENAMES``). And each country's build model
@@ -48,11 +49,13 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib
+import importlib.util
 import inspect
 import json
 import os
 import re
 import subprocess
+import sys
 import textwrap
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -79,6 +82,8 @@ MODEL_MODULES = {
     "policyengine-uk": "policyengine_uk",
     "policyengine-us": "policyengine_us",
 }
+#: .py's register of renamed US inputs, the US input aliases.
+US_LEGACY_INPUTS_MODULE = "policyengine.tax_benefit_models.us.legacy_inputs"
 #: A US file in PolicyEngine core's variable/period layout has this group.
 US_CORE_LAYOUT_MARKER = "person_id"
 #: The interpreter of the throwaway environment that reads the build model.
@@ -238,8 +243,16 @@ def compare_input_surface(
             raise RegionalInputSurfaceError(
                 f"{name} columns must equal the union of columns_by_period."
             )
+        stored = set(artifact.columns)
         for supplied in periods:
-            mapped = {donor for donor in aliases if donor in supplied}
+            # A UK move always applies. .py applies a US rename only where the
+            # live input is not stored: across the whole file in the
+            # variable/period layout, and in the entity's one table otherwise.
+            mapped = {
+                donor
+                for donor, target in aliases.items()
+                if donor in supplied and not (renames and target in stored)
+            }
             dropped.update((supplied & build_variables) - variables - mapped)
             never_modelled.update(supplied - build_variables - variables - mapped)
             effective = (supplied - mapped) | {aliases[donor] for donor in mapped}
@@ -310,11 +323,28 @@ def _us_input_aliases(variables: Any) -> dict[str, str]:
     These are the ``LEGACY_INPUT_RENAMES`` entries whose live input the engine
     defines and whose legacy name it does not, as the US loaders apply them.
     """
-    from policyengine.tax_benefit_models.us.legacy_inputs import (  # noqa: PLC0415
-        pending_legacy_input_renames,
-    )
-
-    return pending_legacy_input_renames(variables)
+    module = sys.modules.get(US_LEGACY_INPUTS_MODULE)
+    if module is None:
+        # Loaded from its file: importing it through its package would run
+        # ``policyengine.tax_benefit_models.us``'s ``__init__``, which builds
+        # .py's pinned US model and checks the installed bundle's certification.
+        # The audit runs before the bundle certifies the target.
+        path = (
+            Path(__file__)
+            .resolve()
+            .parents[1]
+            .joinpath("tax_benefit_models", "us", "legacy_inputs.py")
+        )
+        spec = importlib.util.spec_from_file_location(
+            "policyengine_regional_audit_us_legacy_inputs", path
+        )
+        if spec is None or spec.loader is None:
+            raise RegionalInputSurfaceError(
+                "Cannot read .py's register of renamed US inputs."
+            )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    return module.pending_legacy_input_renames(variables)
 
 
 def _model_surface(
@@ -569,11 +599,13 @@ def _hdf_columns(
     entities: tuple[str, ...] = UK_ENTITIES,
     time_period_key: str = UK_TIME_PERIOD_KEY,
     country: str = "UK",
+    multi_year: bool = True,
 ) -> dict[str, list[str]]:
     """Return each period's stored columns in an entity-table H5.
 
     A single-year file stores one table per entity and names its year in
-    ``time_period_key``; a multi-year file stores ``<entity>/<year>`` tables.
+    ``time_period_key``; a multi-year file stores ``<entity>/<year>`` tables,
+    which only countries whose loaders read them accept (``multi_year``).
     Reads column names only, never a row. Other keys are producer metadata.
     """
     import pandas as pd
@@ -587,6 +619,11 @@ def _hdf_columns(
                 for key in keys
                 if any(key.startswith(f"/{entity}/") for entity in entities)
             }
+            if nested and not multi_year:
+                raise RegionalInputSurfaceError(
+                    f"{path.name} stores {country} entity tables by year; .py's "
+                    f"{country} loaders read single-year files, one table per entity."
+                )
             if flat and nested:
                 raise RegionalInputSurfaceError(
                     "H5 mixes single-year and multi-year entity keys."
@@ -710,7 +747,7 @@ def _stored_columns(path: Path, model_package: str) -> dict[str, list[str]]:
         return _hdf_columns(path)
     if _us_layout(path) == "core":
         return _us_core_h5_columns(path)
-    return _hdf_columns(path, US_ENTITIES, US_TIME_PERIOD_KEY, "US")
+    return _hdf_columns(path, US_ENTITIES, US_TIME_PERIOD_KEY, "US", multi_year=False)
 
 
 def measure_regional_input_surface(
