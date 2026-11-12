@@ -1,3 +1,10 @@
+## [6.18.0] - 2026-11-12
+
+### Added
+
+- Bind UK Scenario execution receipts to their actual before- and after-data-load phases, preserving existing single-phase digests and refusing phase flattening through older representations.
+
+
 ## [6.17.2] - 2026-11-11
 
 ### Changed
