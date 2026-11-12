@@ -263,11 +263,72 @@ def test_without_the_legacy_column_the_live_input_is_not_supplied(tmp_path, us_m
     assert measure(us_model, paths, run=run).defaulted_inputs == [LIVE_WIC]
 
 
-def test_a_us_file_in_entity_table_layout_refuses(tmp_path, us_model):
-    path = tmp_path / f"{LOCAL}.h5"
+US_ENTITY_COLUMNS = {
+    "person": ["person_id", "employment_income", LEGACY_WIC],
+    "household": ["household_id", "household_weight"],
+    "tax_unit": ["tax_unit_id"],
+    "spm_unit": ["spm_unit_id"],
+    "family": ["family_id"],
+    "marital_unit": ["marital_unit_id"],
+}
+
+
+def entity_table_h5(path, *, year=2024, missing=None, time_period=True, fmt="fixed"):
+    """Write the Microcosm US layout: one table per entity, and ``_time_period``."""
     with pd.HDFStore(path, mode="w") as store:
-        store.put("person/2024", pd.DataFrame({"person_id": [1.0]}))
-    with pytest.raises(ValueError, match="variable/period layout"):
+        if time_period:
+            store.put("_time_period", pd.Series([year]), format="table")
+        # Producer metadata, not an entity table.
+        store.put("_populace_staging_metadata", pd.Series(["{}"]), format="table")
+        for entity, columns in US_ENTITY_COLUMNS.items():
+            if entity == missing:
+                continue
+            store.put(entity, pd.DataFrame({c: [1.0] for c in columns}), format=fmt)
+    return path
+
+
+def entity_inputs():
+    columns = {c for cs in US_ENTITY_COLUMNS.values() for c in cs} - {LEGACY_WIC}
+    return sorted(columns | {LIVE_WIC})
+
+
+@pytest.mark.parametrize("fmt", ["fixed", "table"])
+def test_a_us_entity_table_file_is_audited_against_policyengine_us(
+    tmp_path, monkeypatch, us_model, fmt
+):
+    """The ACS-local release stores a table per entity and the year it holds."""
+    monkeypatch.setitem(sys.modules, "policyengine_us", fake_us_system(entity_inputs()))
+    paths = {LOCAL: entity_table_h5(tmp_path / f"{LOCAL}.h5", fmt=fmt)}
+    run = FakeRunner(inputs=entity_inputs())
+
+    evidence = measure(us_model, paths, run=run)
+
+    stored = sorted({c for cs in US_ENTITY_COLUMNS.values() for c in cs})
+    assert evidence.artifacts[LOCAL].columns_by_period == {"2024": stored}
+    assert evidence.input_aliases == {LEGACY_WIC: LIVE_WIC}
+    assert evidence.dropped_columns == []
+    assert evidence.never_modelled_columns == []
+    assert evidence.defaulted_inputs == []
+
+
+@pytest.mark.parametrize("entity", list(US_ENTITY_COLUMNS))
+def test_a_us_entity_table_file_needs_every_entity(tmp_path, us_model, entity):
+    paths = {LOCAL: entity_table_h5(tmp_path / f"{LOCAL}.h5", missing=entity)}
+    with pytest.raises(ValueError, match=rf"missing US entity tables: \['{entity}'\]"):
+        measure(us_model, paths)
+
+
+def test_a_us_entity_table_file_needs_its_time_period(tmp_path, us_model):
+    paths = {LOCAL: entity_table_h5(tmp_path / f"{LOCAL}.h5", time_period=False)}
+    with pytest.raises(ValueError, match="_time_period"):
+        measure(us_model, paths)
+
+
+def test_a_us_file_in_neither_layout_refuses(tmp_path, us_model):
+    path = tmp_path / f"{LOCAL}.h5"
+    with h5py.File(path, "w") as file:
+        file.create_group("something_else")
+    with pytest.raises(ValueError, match="neither"):
         measure(us_model, {LOCAL: path})
 
 
