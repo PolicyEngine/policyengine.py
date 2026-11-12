@@ -527,6 +527,21 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             df = pd.DataFrame(entity_df).set_index(f"{entity_name}_id", drop=False)
             df = df.loc[microsim.populations[entity_name].ids]
             stored_tables[entity_name] = df
+            # Declaring population IDs does not populate the live ID variables:
+            # person_id would otherwise calculate a new regional row number.
+            # Keep the native inputs for ID-keyed formulas as well as structure.
+            live_ids = {f"{entity_name}_id": f"{entity_name}_id"}
+            if entity_name == "person":
+                live_ids.update(
+                    person_household_id=household_id_col,
+                    person_marital_unit_id=marital_unit_id_col,
+                    person_family_id=family_id_col,
+                    person_spm_unit_id=spm_unit_id_col,
+                    person_tax_unit_id=tax_unit_id_col,
+                )
+            for live_name, column in live_ids.items():
+                if live_name in system.variables:
+                    microsim.set_input(live_name, dataset.year, df[column].values)
             for column in df.columns:
                 if column not in id_columns and column in system.variables:
                     microsim.set_input(column, dataset.year, df[column].values)

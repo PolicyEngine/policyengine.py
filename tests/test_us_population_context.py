@@ -109,6 +109,14 @@ def test_population_context_precedes_inputs_in_both_arms(
         assert country.is_over_dataset
         assert country.dataset is None
         assert not country.check_macro_cache("employment_income", "2026")
+        for entity, population in country.populations.items():
+            np.testing.assert_array_equal(
+                country.calculate(f"{entity}_id", 2026).values, population.ids
+            )
+        for entity in ("household", "tax_unit", "spm_unit", "family", "marital_unit"):
+            np.testing.assert_array_equal(
+                country.calculate(f"person_{entity}_id", 2026).values, [1, 2]
+            )
         np.testing.assert_array_equal(
             country.calculate("medicaid_slcsp_state_denominator", 2026).values,
             [800.0, 800.0],
