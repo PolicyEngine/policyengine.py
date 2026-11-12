@@ -103,6 +103,9 @@ from .receipt import (
     composed_reform_identity as composed_reform_identity,
 )
 from .receipt import (
+    phased_scenario_reform_identity as phased_scenario_reform_identity,
+)
+from .receipt import (
     reform_identity as reform_identity,
 )
 from .receipt import (
