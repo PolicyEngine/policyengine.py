@@ -314,25 +314,29 @@ their `_tiny` files.
 
 ### US
 
-For US Populace certification, certify the Populace release manifest directly:
+For US Populace certification, certify the Populace release manifests
+directly. `policyengine/populace-us` publishes each build in its own release
+folder (it has `releases.json`), so give each manifest's folder at the commit
+that published it:
 
 ```bash
 python scripts/bundle.py certify-data --country us --data-producer populace \
-  --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json" \
-  --regional-manifest-uri "hf://dataset/policyengine/populace-us@<local-area-tag>/releases/<local-area-tag>/release_manifest.json" \
+  --manifest-uri "hf://dataset/policyengine/populace-us@<commit>/releases/microcosm-us-2024-national/<build>/release_manifest.json" \
+  --regional-manifest-uri "hf://dataset/policyengine/populace-us@<commit>/releases/microcosm-us-2024-local/<build>/release_manifest.json" \
   --model-version "<policyengine-us-version>"
 ```
 
 US state and congressional-district regions are row filters over one shared,
 certified ACS-local Populace dataset. Its release manifest must declare
 `dataset_role: non_default_local_area`, `is_default: false`, no default
-datasets, and exactly one pinned H5 microdata artifact. Certification writes:
+datasets, and exactly one pinned H5 microdata artifact. Certification writes
+each dataset's path in its build folder:
 
 ```json
 "region_datasets": {
-  "national": {"path_template": "populace_us_2024.h5"},
-  "state": {"path_template": "populace_us_2024_acs_local.h5"},
-  "congressional_district": {"path_template": "populace_us_2024_acs_local.h5"}
+  "national": {"path_template": "releases/microcosm-us-2024-national/<build>/populace_us_2024.h5"},
+  "state": {"path_template": "releases/microcosm-us-2024-local/<build>/populace_us_2024_acs_local.h5"},
+  "congressional_district": {"path_template": "releases/microcosm-us-2024-local/<build>/populace_us_2024_acs_local.h5"}
 }
 ```
 
@@ -374,22 +378,29 @@ with three US differences:
   and only names, never values. The Microcosm ACS-local release stores entity
   tables, one per US entity (`person`, `household`, `tax_unit`, `spm_unit`,
   `family`, `marital_unit`), with `_time_period` naming its year; every entity
-  table is required. A file in PolicyEngine core's variable/period layout (an
+  table is required, and a file storing them by year (`person/2024`) refuses,
+  since no US loader reads that. A file in PolicyEngine core's variable/period layout (an
   H5 group per variable, holding an array per period, and a `person_id`
   group) is read by group and period names; a top-level dataset there is file
   metadata, and a period that is not a year refuses. A file in neither layout
   refuses.
 - **The input aliases.** policyengine-us renames inputs; .py maps a stored
-  legacy column onto its live input (`LEGACY_INPUT_RENAMES`, applied when the
-  target defines the live name and not the legacy one, and the period stores
-  the legacy column but not the live one). The audit records those mappings
-  as `input_aliases`, counts the live input as supplied, and counts the legacy
-  column as neither dropped nor never modelled. Certification re-reads the
-  mappings from the installed target.
+  legacy column onto its live input (`LEGACY_INPUT_RENAMES`), when the target
+  defines the live name and not the legacy one, and the file stores the
+  legacy column but not the live one (in any period, for the variable/period
+  layout). The audit records the target's pending renames as `input_aliases`.
+  Where a rename applies, it counts the live input as supplied and the legacy
+  column as neither dropped nor never modelled; where it doesn't, the legacy
+  column is classified like any other. Certification re-reads the renames
+  from the installed target, without loading .py's US model.
 - **The models.** The build model is read with `--with policyengine-us==<build>`,
   and certification runs with the target policyengine-us installed.
 
-Area receipts on such a release are `uncertified`, as in the UK.
+.py writes execution receipts for UK results only, so a US run carries no
+per-run record of the exception. The record is `data_releases.us.regional_certification`
+in the bundle manifest, its evidence included, and the US TRO, which carries
+it separately from the national certification. The national certificate
+itself does not change.
 
 The script fetches and validates the manifest (every artifact must carry a
 revision pin; the certified dataset must be reachable), writes the canonical

@@ -1,11 +1,11 @@
 """Audit and accept a US local-area release built with an earlier policyengine-us.
 
-The US ACS-local release stores PolicyEngine core's variable/period layout:
-one H5 group per variable, holding one array per period. The audit reads the
-group and period names, never the arrays, and compares them with the release's
-build model and the installed target, as for the UK. A stored input that
-policyengine-us has since renamed counts as supplying its live input when .py
-maps it (``LEGACY_INPUT_RENAMES``).
+A US file is in one of the two layouts .py's US loaders read: single-year
+entity tables (the ACS-local release's) or PolicyEngine core's variable/period
+groups. The audit reads names, never values, and compares them with the
+release's build model and the installed target, as for the UK. A stored input
+that policyengine-us has since renamed counts as supplying its live input
+where .py maps it (``LEGACY_INPUT_RENAMES``).
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ URI = (
 )
 LOCAL = "populace_us_2024_acs_local"
 LIMITATION = "Built with policyengine-us 2.2.1; 2.2.2 changes no variables or inputs"
-#: The legacy take-up column the ACS-local release stores, and its live input.
+#: .py's registered legacy take-up column, and the live input it maps onto.
 LEGACY_WIC, LIVE_WIC = "would_claim_wic", "takes_up_wic_if_eligible"
 INPUTS = ["employment_income", "household_id", "household_weight", "person_id"]
 STORED = [*INPUTS, LEGACY_WIC]
