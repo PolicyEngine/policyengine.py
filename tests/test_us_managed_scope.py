@@ -303,7 +303,10 @@ def test_real_history_scope_preserves_irmaa_and_snap_medical_deduction(monkeypat
         not in unscoped.tax_benefit_system.variables
     ):
         pytest.skip("This country pin predates the Medicare IRMAA lookback variable")
-    from policyengine_us.tools.general import earliest_input_year
+    general = importlib.import_module("policyengine_us.tools.general")
+    if not hasattr(general, "earliest_input_year"):
+        pytest.skip("This country pin predates the supplied-history fallback helper")
+    earliest_input_year = general.earliest_input_year
 
     scoped = _managed(
         scoping_strategy=RowFilterStrategy(
