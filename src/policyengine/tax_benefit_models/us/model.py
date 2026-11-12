@@ -404,6 +404,11 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         validate_policyengine_inputs(dataset.data.entity_data)
         _validate_entity_ids(dataset.data.entity_data)
 
+        # These validated entity tables are a population even though the
+        # country constructor received situation={} rather than a Core Dataset.
+        # Set context before inputs so dataset-only SPM protections also apply.
+        microsim.is_over_dataset = True
+
         builder = SimulationBuilder()
         builder.populations = system.instantiate_entities()
 
