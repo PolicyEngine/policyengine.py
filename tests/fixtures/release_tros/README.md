@@ -7,7 +7,7 @@ generator. They do not certify a new canonical SPM release.
   PolicyEngine/policyengine.py commit
   `3c3b4f6442f4a5adc47274734d71a6ca10103b43`, under
   `src/policyengine/data/bundle/`.
-- `us-release_manifest.json`: published Populace release
+- `us-release_manifest.json`: published Microcosm release
   `populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z`, at
   `https://huggingface.co/datasets/policyengine/populace-us/resolve/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/releases/populace-us-2024-buildp-sparse-rmloss100-cae8640-20260728T011454Z/release_manifest.json`.
   Its raw SHA256 is

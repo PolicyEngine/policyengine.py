@@ -62,7 +62,7 @@ class LegacySPMSource(BaseModel):
 #: residents without declaring SPM scope, and it was built a few hours before
 #: PolicyEngine/microcosm#959, so its ASEC/PUF records lack the independence
 #: role that the national release carries for the same records.
-POPULACE_US_2024_ACS_LOCAL_BUILD_O = LegacySPMSource(
+MICROCOSM_US_2024_ACS_LOCAL_BUILD_O = LegacySPMSource(
     name=(
         "populace_us_2024_acs_local@"
         "populace-us-2024-buildo-acs-local-767312d60-20260923T074941Z"
@@ -82,7 +82,7 @@ POPULACE_US_2024_ACS_LOCAL_BUILD_O = LegacySPMSource(
 #: the measurement under Census's ACS household-population rule, as Build O's
 #: are. Remove the entry once a release carries the scope natively
 #: (PolicyEngine/policyengine-us#9462).
-POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263 = LegacySPMSource(
+MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263 = LegacySPMSource(
     name=(
         "populace_us_2024_acs_local@"
         "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
@@ -91,9 +91,16 @@ POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263 = LegacySPMSource(
     spm_universe_rule="acs_household_population",
 )
 
+POPULACE_US_2024_ACS_LOCAL_BUILD_O = (  # compat: populace alias, remove after 6.17.0
+    MICROCOSM_US_2024_ACS_LOCAL_BUILD_O
+)
+POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263 = (  # compat: populace alias, remove after 6.17.0
+    MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263
+)
+
 LEGACY_SPM_SOURCES: tuple[LegacySPMSource, ...] = (
-    POPULACE_US_2024_ACS_LOCAL_BUILD_O,
-    POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263,
+    MICROCOSM_US_2024_ACS_LOCAL_BUILD_O,
+    MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263,
 )
 
 

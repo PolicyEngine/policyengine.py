@@ -109,16 +109,25 @@ BASIS_QUALIFIED_PAIR = "qualified_exact_pair"
 QUALIFICATION_LEDGER_URL = (
     "https://github.com/PolicyEngine/policyengine.py/tree/uk-qualification-ledger"
 )
-POPULACE_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
-# The Populace US producer publishes under `microcosm-data` since the
-# source-enrichment releases; `populace-data` is its earlier name. Both denote
-# the same producer, so every Populace-specific rule below must accept either.
-POPULACE_DATA_PACKAGES = frozenset({"populace-data", "microcosm-data"})
-# The Hugging Face repos each country's Populace/Microcosm releases publish to.
-POPULACE_RELEASE_REPOS = {
+MICROCOSM_US_SOURCE_COVERAGE_FILE = "us_source_coverage.json"
+# The Microcosm US producer publishes under `microcosm-data` since the
+# source-enrichment releases; both published package names below denote
+# the same producer, so every Microcosm-specific rule below must accept either.
+MICROCOSM_DATA_PACKAGES = frozenset({"populace-data", "microcosm-data"})
+# The Hugging Face repos each country's Microcosm releases publish to.
+MICROCOSM_RELEASE_REPOS = {
     "us": "policyengine/populace-us",
     "uk": "policyengine/populace-uk-private",
 }
+POPULACE_US_SOURCE_COVERAGE_FILE = (  # compat: populace alias, remove after 6.17.0
+    MICROCOSM_US_SOURCE_COVERAGE_FILE
+)
+POPULACE_DATA_PACKAGES = (  # compat: populace alias, remove after 6.17.0
+    MICROCOSM_DATA_PACKAGES
+)
+POPULACE_RELEASE_REPOS = (  # compat: populace alias, remove after 6.17.0
+    MICROCOSM_RELEASE_REPOS
+)
 # Region types a regional release serves. Their regions load the routed dataset
 # and keep row-filtering it on their own geography column.
 LOCAL_AREA_REGION_TYPES: dict[CertifiedCountry, tuple[str, ...]] = {
@@ -948,10 +957,10 @@ def required_supplemental_release_files(
 ) -> tuple[str, ...]:
     if (
         country == "us"
-        and manifest.data_package.name in POPULACE_DATA_PACKAGES
+        and manifest.data_package.name in MICROCOSM_DATA_PACKAGES
         and uri_parts["repo_id"] == "policyengine/populace-us"
     ):
-        return (POPULACE_US_SOURCE_COVERAGE_FILE,)
+        return (MICROCOSM_US_SOURCE_COVERAGE_FILE,)
     return ()
 
 
@@ -960,9 +969,9 @@ def should_validate_vendored_artifacts(
     manifest: DataReleaseManifest,
     uri_parts: dict,
 ) -> bool:
-    return manifest.data_package.name in POPULACE_DATA_PACKAGES and uri_parts[
+    return manifest.data_package.name in MICROCOSM_DATA_PACKAGES and uri_parts[
         "repo_id"
-    ] == POPULACE_RELEASE_REPOS.get(country)
+    ] == MICROCOSM_RELEASE_REPOS.get(country)
 
 
 def _state_code_from_path(path: str, artifact_prefix: str) -> Optional[str]:
@@ -985,7 +994,7 @@ def merge_us_state_release_manifest(
     artifact_prefix: str = "states/",
     path_template: str = "states/{state_code}.h5",
 ) -> DataReleaseManifest:
-    """Add legacy US state artifacts to a primary Populace release manifest."""
+    """Add legacy US state artifacts to a primary Microcosm release manifest."""
 
     primary_payload = primary_manifest.model_dump(mode="json", exclude_none=True)
     merged_artifacts = primary_payload.setdefault("artifacts", {})
@@ -1359,7 +1368,7 @@ def build_country_manifest_payload(
     for name, artifact in manifest.artifacts.items():
         if (
             country == "us"
-            and manifest.data_package.name in POPULACE_DATA_PACKAGES
+            and manifest.data_package.name in MICROCOSM_DATA_PACKAGES
             and artifact.path.endswith(".h5")
             and (
                 artifact.path.startswith("states/")
@@ -1388,7 +1397,7 @@ def build_country_manifest_payload(
             path_template = template.get("path_template")
             if (
                 country == "us"
-                and manifest.data_package.name in POPULACE_DATA_PACKAGES
+                and manifest.data_package.name in MICROCOSM_DATA_PACKAGES
                 and region in {"state", "congressional_district"}
                 and isinstance(path_template, str)
                 and "{" in path_template
@@ -1559,7 +1568,7 @@ class LegacyDataProducerCertificationStrategy(DataProducerCertificationStrategy)
         )
 
 
-class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrategy):
+class MicrocosmDataProducerCertificationStrategy(DataProducerCertificationStrategy):
     data_producer = "populace"
 
     def certify(
@@ -1755,12 +1764,17 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
         )
 
 
+PopulaceDataProducerCertificationStrategy = (  # compat: populace alias, remove after 6.17.0
+    MicrocosmDataProducerCertificationStrategy
+)
+
+
 def certification_strategy(
     country: str, data_producer: Optional[str] = None
 ) -> DataProducerCertificationStrategy:
     producer = data_producer or ("populace" if country == "uk" else "legacy")
     if producer == "populace":
-        return PopulaceDataProducerCertificationStrategy()
+        return MicrocosmDataProducerCertificationStrategy()
     if producer == "legacy":
         return LegacyDataProducerCertificationStrategy()
     raise CertificationError(f"Unknown data-producer {producer!r}.")

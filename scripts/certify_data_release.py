@@ -48,7 +48,7 @@ def main(argv=None) -> int:
         "--data-producer",
         default=None,
         choices=["legacy", "populace"],
-        help="Data-producer strategy. Defaults to populace for UK, legacy otherwise.",
+        help="Data-producer strategy. Defaults to Microcosm for UK, legacy otherwise.",
     )
     parser.add_argument(
         "--manifest-uri",

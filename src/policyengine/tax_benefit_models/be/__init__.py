@@ -7,7 +7,7 @@ See ``examples/belgium_axiom_pilot.py`` for the end-to-end population run
 and ``model.py`` for scope and source-install requirements.
 """
 
-from .datasets import BEYearData, PopulaceBelgiumDataset
+from .datasets import BEYearData, MicrocosmBelgiumDataset
 from .model import (
     EMPLOYEE_SSC,
     PIT_BEFORE_WITHHOLDING,
@@ -17,13 +17,18 @@ from .model import (
     be_model,
 )
 
+PopulaceBelgiumDataset = (  # compat: populace alias, remove after 6.17.0
+    MicrocosmBelgiumDataset
+)
+
 __all__ = [
     "AxiomBelgium",
     "AxiomBelgiumPilot",
     "BEYearData",
     "EMPLOYEE_SSC",
     "PIT_BEFORE_WITHHOLDING",
-    "PopulaceBelgiumDataset",
+    "MicrocosmBelgiumDataset",
+    "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.17.0
     "REMUNERATION",
     "be_model",
 ]

@@ -1,6 +1,6 @@
 """Belgium population microsimulation through the Axiom rules engine.
 
-Runs the calibrated populace-be pilot dataset (populace-us support records
+Runs the calibrated Microcosm-BE pilot dataset (Microcosm-US support records
 reweighted to Statbel/SPF/ONSS/ONEM targets from PolicyEngine/ledger)
 through the rulespec-be composed worker pipeline, and scores the aggregates
 against Belgian administrative facts.
@@ -19,7 +19,7 @@ the input artifact; set a distinct output filepath explicitly before saving.
 
 Usage::
 
-    POPULACE_BE_DATASET=.../populace_be_pilot_2026.h5 \\
+    MICROCOSM_BE_DATASET=.../populace_be_pilot_2026.h5 \\
     RULESPEC_BE_ROOT=.../rulespec-be \\
     uv run python examples/belgium_axiom_pilot.py
 """
@@ -31,19 +31,23 @@ from policyengine.tax_benefit_models.be import (
     EMPLOYEE_SSC,
     PIT_BEFORE_WITHHOLDING,
     AxiomBelgiumPilot,
-    PopulaceBelgiumDataset,
+    MicrocosmBelgiumDataset,
 )
 
-DATASET = os.environ["POPULACE_BE_DATASET"]
+DATASET = os.environ.get("MICROCOSM_BE_DATASET")
+if DATASET is None:
+    DATASET = os.environ[
+        "POPULACE_BE_DATASET"  # compat: populace alias, remove after 6.17.0
+    ]
 RULESPEC = os.environ.get("RULESPEC_BE_ROOT", "~/TheAxiomFoundation/rulespec-be")
 
 # Ledger facts (PolicyEngine/ledger, Belgian publisher packages)
 ONSS_WORKER_CONTRIBUTIONS_2024 = 20_836_582_673
 SPF_PIT_BEFORE_WITHHOLDING_2023 = 62_840_116_134
 
-dataset = PopulaceBelgiumDataset(
-    name="populace-be-pilot",
-    description="populace-us support reweighted to Belgian ledger targets",
+dataset = MicrocosmBelgiumDataset(
+    name="microcosm-be-pilot",
+    description="Microcosm-US support reweighted to Belgian ledger targets",
     filepath=DATASET,
     year=2026,
 )
@@ -57,7 +61,7 @@ person = output.data.person
 ssc_net = person[EMPLOYEE_SSC].sum()
 pit = person[PIT_BEFORE_WITHHOLDING].sum()
 
-print("Belgium pilot (Axiom engine over populace-be, worker slice)")
+print("Belgium pilot (Axiom engine over Microcosm-BE, worker slice)")
 print(
     f"  data vintage {output.year}; policy period {output.policy_period}; "
     f"model {model_version.version}"
