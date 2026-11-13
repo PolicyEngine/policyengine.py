@@ -1,15 +1,18 @@
-"""Write a byte-bound audit of regional H5 columns for an installed UK model.
+"""Write a byte-bound audit of regional H5 columns for an installed country model.
 
-Run in an environment with the exact requested policyengine-uk version and
-PyTables installed. Supply the H5 files from the immutable regional manifest;
-the audit verifies their hashes and downloads no microdata. The baseline is the
-build model and core the regional manifest records: the audit reads their
-variables in a throwaway ``uv run --with`` environment, resolved from PyPI as
-of the manifest's build time, so it needs ``uv`` and PyPI. Certification reads
-both models again. Columns the build model defines and the target does not
-refuse; columns neither model defines are recorded as never modelled; and
-target inputs the files do not store that were not build inputs are recorded
-as defaulted.
+Run in an environment with the exact requested target model installed: the
+policyengine-uk or policyengine-us the regional manifest's build model names,
+at ``--model-version``. Entity-table files (UK, and the US ACS-local
+release) are read with PyTables; a US file in PolicyEngine core's
+variable/period layout with h5py. Supply the H5
+files from the immutable regional manifest; the audit verifies their hashes
+and downloads no microdata. The baseline is the build model and core the
+regional manifest records: the audit reads their variables in a throwaway
+``uv run --with`` environment, resolved from PyPI as of the manifest's build
+time, so it needs ``uv`` and PyPI. Certification reads both models again.
+Columns the build model defines and the target does not refuse; columns
+neither model defines are recorded as never modelled; and target inputs the
+files do not store that were not build inputs are recorded as defaulted.
 """
 
 from __future__ import annotations
@@ -57,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     args.output.write_text(evidence.model_dump_json(indent=2) + "\n")
     print(
         f"Saved {len(evidence.artifacts)} artifact input audits to {args.output}: "
-        f"policyengine-uk {evidence.model_version} against build model "
+        f"{evidence.model_package} {evidence.model_version} against build model "
         f"{evidence.build_model_version} (core {evidence.build_core_version}); "
         f"{len(evidence.dropped_columns)} dropped, "
         f"{len(evidence.never_modelled_columns)} never-modelled, "

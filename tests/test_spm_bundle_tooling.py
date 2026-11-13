@@ -99,7 +99,7 @@ def test_staged_config_preserves_certification_and_fails_release_gate(canonical_
     )
     assert updated["data_releases"] == before["data_releases"]
     assert updated["packages"] == before["packages"]
-    assert updated["packages"]["policyengine-us"]["version"] == "2.2.1"
+    assert updated["packages"]["policyengine-us"]["version"] == "2.2.2"
     validate_bundle_measurements(updated)
     with pytest.raises(ValueError, match="promotion pending"):
         validate_bundle_measurements(updated, require_published_spm=True)
@@ -300,3 +300,10 @@ def test_dependency_free_exact_version_validation_matches_packaging(version):
     except InvalidVersion:
         expected = False
     assert _is_normalized_version(version) is expected
+
+
+def test_the_bundle_pins_the_installed_spm_forecast(canonical_bundle):
+    """policyengine-us refuses a selection whose digest is not the installed one."""
+    spm_calculator = pytest.importorskip("spm_calculator")
+    pinned = canonical_bundle["measurements"]["spm"]["forecast_content_sha256"]
+    assert pinned == spm_calculator.load_forecast().content_sha256

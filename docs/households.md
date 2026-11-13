@@ -122,7 +122,7 @@ set of keys is:
 | `as_of` | Optional information-date cutoff accepted by the pinned artifact. |
 
 Forecast paths, provider objects and fallback policies are not settings. The
-canonical artifact covers 2022–2035. Its receipt distinguishes published
+canonical artifact covers 2022–2036. Its receipt distinguishes published
 national inputs from forecast components and research geography; an unsupported
 year fails instead of being extrapolated by the wrapper. Scenario forecasts
 are conditional research estimates, not agency forecasts or uncertainty bounds.
@@ -158,7 +158,7 @@ separate benefit inputs; they do not override SPM measurement composition.
 
 These changes require the coordinated canonical country/calculator bundle, which
 the packaged production manifest now pins and certifies: `policyengine-us`
-2.2.1, `policyengine-core` 3.33.3, `spm-calculator` 1.0.0, and the US data
+2.2.2, `policyengine-core` 3.33.3, `spm-calculator` 1.1.0, and the US data
 release `populace-us-2024-spm-20260915`. Local-wheel development manifest
 fixtures remain explicitly uncertified. The measurement receipt identifies a
 calculation; it does not certify a population dataset or establish publication
