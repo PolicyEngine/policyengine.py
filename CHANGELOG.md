@@ -1,3 +1,15 @@
+## [6.19.0] - 2026-11-13
+
+### Added
+
+- Added ordered UK Scenario plans that preserve modifier order and data-load phases, bind trusted callable sources, and support offline identity verification and worker rebinding.
+- Add optional household row filtering to US managed microsimulations while retaining every native projected year and the source dataset provenance.
+
+### Fixed
+
+- Preserve population-mode Medicaid, county and SPM behavior and live identifier inputs when US simulations are built from entity tables, including their baseline arms.
+
+
 ## [6.18.0] - 2026-11-12
 
 ### Added
