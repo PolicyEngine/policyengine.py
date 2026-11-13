@@ -208,6 +208,7 @@ ReformRepresentation = Literal[
     "policyengine-uk.scenario_composition/v1",
     # A native Scenario whose before/after-data-load parts keep their phases.
     "policyengine-uk.phased_scenario/v1",
+    "policyengine-uk.phased_scenario_composition/v1",
 ]
 
 #: Representation of a composition of member reforms.
@@ -248,6 +249,7 @@ DIGEST_RULES: dict[str, str] = {
     "reform.reform_sha256": 'RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {"$nonfinite": "Infinity"} or {"$nonfinite": "-Infinity"}, and a payload may not use the key $nonfinite itself',
     "outputs_sha256": "the canonical output payload the receipt binds",
     "reform.phased_scenario_sha256": "For policyengine-uk.phased_scenario/v1, RFC 8785 over {representation, payload}, with payload {application: before_data_load_then_after_data_load, before: {representation, reform_sha256, binding}, after: {representation, reform_sha256, binding}}; each phase binds the native Scenario.parts_by_data_load() result through scenario/v1. Common parameter changes occur once, in the before phase. A scenario_composition/v1 cannot contain this representation.",
+    "reform.ordered_scenario_sha256": "For policyengine-uk.phased_scenario_composition/v1, RFC 8785 over {representation, payload: OrderedScenarioPlan}; retain nulls and every ordered modifier occurrence, including repetitions. Parameters occur only before data load; leaf proofs carry actual source/module/default/revision identities and the plan binds the adapter source. Binding is code_revision. Use ordered_scenario_reform_identity for data-only recomposition. Parameter-only ordered plans retain the existing before-load scenario/v1 identity.",
 }
 
 HashEvidence = Literal["installed_record_verified", "installer_archive_hash"]
@@ -523,6 +525,11 @@ class ReformIdentity(_Contract):
 
     @model_validator(mode="after")
     def _current_law_has_no_digest(self) -> ReformIdentity:
+        if (
+            self.representation == "policyengine-uk.phased_scenario_composition/v1"
+            and self.binding != "code_revision"
+        ):
+            raise ValueError("An ordered modifier plan requires code_revision binding.")
         if self.kind == "current_law":
             if self.reform_sha256 is not None or self.representation is not None:
                 raise ValueError("current_law carries no representation or digest.")
@@ -749,6 +756,22 @@ class ExecutionReceipt(_Contract):
         """JSON Schema (2020-12), with the rules it cannot express attached."""
 
         schema = cls.model_json_schema()
+        schema["$defs"]["ReformIdentity"]["allOf"] = [
+            {
+                "if": {
+                    "properties": {
+                        "representation": {
+                            "const": "policyengine-uk.phased_scenario_composition/v1"
+                        }
+                    },
+                    "required": ["representation"],
+                },
+                "then": {
+                    "properties": {"binding": {"const": "code_revision"}},
+                    "required": ["binding"],
+                },
+            }
+        ]
         return {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": cls.SCHEMA_ID,
@@ -975,6 +998,10 @@ def reform_identity(
     ):
         raise ReceiptError(
             f"A reform payload is a JSON object or array, not {type(payload).__name__}."
+        )
+    if representation == "policyengine-uk.phased_scenario_composition/v1":
+        raise ReceiptError(
+            "Bind a validated ordered plan with ordered_scenario_reform_identity()."
         )
     if not payload:
         return ReformIdentity(kind="current_law", name=name)
@@ -3524,7 +3551,10 @@ def composed_reform_identity(
             ) from exc
         if member.kind == "current_law":
             continue
-        if member.representation == PHASED_SCENARIO_REPRESENTATION:
+        if member.representation in (
+            PHASED_SCENARIO_REPRESENTATION,
+            "policyengine-uk.phased_scenario_composition/v1",
+        ):
             raise ReceiptError(
                 f"Member {index} is a phased Scenario; scenario_composition/v1 "
                 "cannot flatten or override its data-load timing. Bind the "
