@@ -22,6 +22,36 @@ from policyengine.tax_benefit_models.us.model import PolicyEngineUSLatest
 from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
 
 
+def _assert_unemployment_allocation_uses_source_keys(country, person_ids):
+    """Exercise the ID-keyed monthly formula on country versions providing it."""
+    module_name = (
+        "policyengine_us.variables.gov.usda.snap.eligibility.work_requirements."
+        "is_receiving_unemployment_compensation"
+    )
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if module_name == exc.name or module_name.startswith(exc.name + "."):
+            return  # The bundled US2.2.1 predates this monthly allocation.
+        raise
+    start = module.unemployment_compensation_start_month_index(person_ids)
+    positional = module.unemployment_compensation_start_month_index(
+        np.arange(len(person_ids))
+    )
+    assert (start != positional).any(), "Fixture must distinguish source and row IDs"
+    country.set_input(
+        "unemployment_compensation_months", 2026, np.ones(len(person_ids))
+    )
+    for month in range(1, 13):
+        expected = (month - 1 - start) % 12 == 0
+        np.testing.assert_array_equal(
+            country.calculate(
+                "is_receiving_unemployment_compensation", f"2026-{month:02d}"
+            ).values,
+            expected,
+        )
+
+
 @pytest.fixture
 def independent_entity_frames():
     # Person order, group IDs, table orders, and indexes differ independently.
@@ -72,8 +102,11 @@ def independent_entity_frames():
 
 @pytest.mark.parametrize("format", ["fixed", "table"])
 @pytest.mark.parametrize("link_style", ["native", "plain"])
+@pytest.mark.parametrize(
+    "policy", [None, {"gov.irs.credits.ctc.amount.base[0].amount": 3_000}]
+)
 def test_native_inputs_and_calculated_outputs_align_by_id(
-    tmp_path, independent_entity_frames, format, link_style, monkeypatch
+    tmp_path, independent_entity_frames, format, link_style, policy, monkeypatch
 ):
     frames = independent_entity_frames
     if link_style == "plain":
@@ -124,10 +157,35 @@ def test_native_inputs_and_calculated_outputs_align_by_id(
         return applied
 
     monkeypatch.setattr(PolicyEngineUSLatest, "_build_simulation_from_dataset", capture)
-    simulation = pe.Simulation(dataset=dataset, tax_benefit_model_version=pe.us.model)
+    simulation = pe.Simulation(
+        dataset=dataset, tax_benefit_model_version=pe.us.model, policy=policy
+    )
     simulation.run()
     output = simulation.output_dataset.data.entity_data
     country = country_simulations[0]
+    assert len(country_simulations) == (2 if policy else 1)
+
+    # Query the live country variables, not only IDs copied into the output.
+    # Population structure alone leaves these accessors at row IDs or zero.
+    for native in country_simulations:
+        for entity, population in native.populations.items():
+            np.testing.assert_array_equal(
+                native.calculate(f"{entity}_id", 2026).values, population.ids
+            )
+        for entity in frames:
+            if entity == "person":
+                continue
+            native_link = f"person_{entity}_id"
+            source_link = (
+                native_link if native_link in inputs["person"] else f"{entity}_id"
+            )
+            np.testing.assert_array_equal(
+                native.calculate(native_link, 2026).values,
+                inputs["person"][source_link].to_numpy(),
+            )
+        _assert_unemployment_allocation_uses_source_keys(
+            native, inputs["person"]["person_id"].to_numpy()
+        )
 
     # Assert numeric geography at both boundaries, including the two CA people.
     assert output["person"]["county_fips"].tolist() == [
