@@ -37,7 +37,7 @@ from policyengine.tax_benefit_models.be import (
 DATASET = os.environ.get("MICROCOSM_BE_DATASET")
 if DATASET is None:
     DATASET = os.environ.get(
-        "POPULACE_BE_DATASET"  # compat: populace alias, remove after 6.20.1
+        "POPULACE_BE_DATASET"  # compat: populace alias, remove after 6.20.2
     )
 if DATASET is None:
     raise SystemExit(
