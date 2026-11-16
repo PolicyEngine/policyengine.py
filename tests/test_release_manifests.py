@@ -83,13 +83,16 @@ US_LOCAL_AREA_PATH = (
 US_LOCAL_AREA_DATASET_URI = (
     f"hf://policyengine/populace-us/{US_LOCAL_AREA_PATH}@{US_LOCAL_AREA_REVISION}"
 )
-UK_MODEL_VERSION = "2.174.1"
-UK_BUILT_WITH_MODEL_VERSION = "2.174.1"
+UK_MODEL_VERSION = "2.177.7"
+UK_BUILT_WITH_MODEL_VERSION = "2.177.7"
 UK_DATA_RELEASE_VERSION = "0.1.0"
-UK_DATA_RELEASE_ID = "microcosm-uk-2024-25-national-20261107T020434Z-eeb6093e"
-UK_DATA_RELEASE_REVISION = "microcosm-uk-2024-25-national-20261107T020434Z-eeb6093e"
-UK_DATA_RELEASE_PATH = "releases/microcosm-uk-2024-25-national/release_manifest.json"
-UK_LOCAL_AREA_RELEASE_ID = "microcosm-uk-2024-25-dense-20261107T173210Z-38605444"
+UK_DATA_RELEASE_ID = "uk-frs-calibration-attempt-20261115T104657Z-fcfac709"
+UK_DATA_RELEASE_REVISION = "ad84c0602ed28f694ef52662eb9b063779e4e923"
+UK_DATA_RELEASE_PATH = (
+    f"releases/microcosm-uk-2024-25-national/{UK_DATA_RELEASE_ID}/release_manifest.json"
+)
+UK_LOCAL_AREA_RELEASE_ID = "uk-local-candidate-f100-s42-20261116T102715Z-e2745e59"
+UK_LOCAL_AREA_RELEASE_REVISION = "4c594d7243fdaec8913ef2543207f1d0934174ab"
 # The prior certified default (policyengine-uk-data 1.58.1), kept resolvable
 # via dataset_overlays.
 UK_EFRS_DATASET_URI = (
@@ -106,12 +109,13 @@ UK_MICROCOSM_2023_DATASET_URI = (
 )
 UK_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 UK_CERTIFIED_DATASET_URI = (
-    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
-    f"@{UK_DATA_RELEASE_ID}"
+    "hf://policyengine/populace-uk-private/releases/microcosm-uk-2024-25-national/"
+    f"{UK_DATA_RELEASE_ID}/microcosm_uk_2024_25.h5@{UK_DATA_RELEASE_REVISION}"
 )
 UK_LOCAL_AREA_DATASET_URI = (
-    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
-    f"@{UK_LOCAL_AREA_RELEASE_ID}"
+    "hf://policyengine/populace-uk-private/releases/microcosm-uk-2024-25-dense/"
+    f"{UK_LOCAL_AREA_RELEASE_ID}/microcosm_uk_2024_25_dense.h5"
+    f"@{UK_LOCAL_AREA_RELEASE_REVISION}"
 )
 
 
@@ -357,9 +361,18 @@ class TestReleaseManifests:
             region_type: template.path_template
             for region_type, template in manifest.region_datasets.items()
         } == {
-            "national": "microcosm_uk_2024_25.h5",
-            "constituency": "microcosm_uk_2024_25_dense.h5",
-            "local_authority": "microcosm_uk_2024_25_dense.h5",
+            "national": (
+                "releases/microcosm-uk-2024-25-national/"
+                f"{UK_DATA_RELEASE_ID}/microcosm_uk_2024_25.h5"
+            ),
+            "constituency": (
+                "releases/microcosm-uk-2024-25-dense/"
+                f"{UK_LOCAL_AREA_RELEASE_ID}/microcosm_uk_2024_25_dense.h5"
+            ),
+            "local_authority": (
+                "releases/microcosm-uk-2024-25-dense/"
+                f"{UK_LOCAL_AREA_RELEASE_ID}/microcosm_uk_2024_25_dense.h5"
+            ),
         }
         assert (
             resolve_dataset_reference("uk", "microcosm_uk_2024_25_dense")

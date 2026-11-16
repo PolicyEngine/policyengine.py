@@ -23,12 +23,14 @@ from policyengine.provenance.manifest import CountryReleaseManifest
 # The certified bundle's national dataset, and the Microcosm local-area
 # release its constituency and local-authority regions are routed to.
 UK_CERTIFIED_NATIONAL_URI = (
-    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25.h5"
-    "@microcosm-uk-2024-25-national-20261107T020434Z-eeb6093e"
+    "hf://policyengine/populace-uk-private/releases/microcosm-uk-2024-25-national/"
+    "uk-frs-calibration-attempt-20261115T104657Z-fcfac709/microcosm_uk_2024_25.h5"
+    "@ad84c0602ed28f694ef52662eb9b063779e4e923"
 )
 UK_CERTIFIED_LOCAL_AREA_URI = (
-    "hf://policyengine/populace-uk-private/microcosm_uk_2024_25_dense.h5"
-    "@microcosm-uk-2024-25-dense-20261107T173210Z-38605444"
+    "hf://policyengine/populace-uk-private/releases/microcosm-uk-2024-25-dense/"
+    "uk-local-candidate-f100-s42-20261116T102715Z-e2745e59/microcosm_uk_2024_25_dense.h5"
+    "@4c594d7243fdaec8913ef2543207f1d0934174ab"
 )
 UK_AREA_REGION_COUNT = 650 + 361
 
