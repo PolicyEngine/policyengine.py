@@ -40,11 +40,11 @@ def test_bundle_manifest_exposes_data_releases():
     # producer label names the strict verification contract, not the producing
     # repo.
     assert manifest["data_releases"]["uk"]["data_producer"] == "populace"
-    assert manifest["data_releases"]["uk"]["version"].startswith(
-        "microcosm-uk-2024-25-national-"
-    )
+    uk_build = manifest["data_releases"]["uk"]["version"]
+    assert uk_build == manifest["data_releases"]["uk"]["certification"]["data_build_id"]
     assert manifest["data_releases"]["uk"]["default_dataset_uri"].startswith(
-        "hf://policyengine/populace-uk-private/microcosm_uk_"
+        "hf://policyengine/populace-uk-private/releases/microcosm-uk-2024-25-national/"
+        f"{uk_build}/microcosm_uk_"
     )
 
 
@@ -95,7 +95,9 @@ def test_selected_dataset_plan_uses_certified_release_metadata(tmp_path):
     assert plan.country_id == "uk"
     assert plan.data_package_name == "microcosm-data"
     assert plan.repo_type == "dataset"
-    assert plan.destination == tmp_path / "microcosm_uk_2024_25.h5"
+    # A build-folder file keeps its folder under the data directory.
+    assert plan.destination == tmp_path / release["datasets"][plan.dataset]["path"]
+    assert plan.destination.name == "microcosm_uk_2024_25.h5"
     assert plan.sha256 == release["datasets"][plan.dataset]["sha256"]
 
 
