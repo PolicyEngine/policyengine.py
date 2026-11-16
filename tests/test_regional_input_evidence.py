@@ -116,12 +116,18 @@ def fake_model_surfaces(monkeypatch) -> dict:
         "reads": [],
     }
 
-    def target_surface(model_version):
+    def target_surface(model_version, model_package="policyengine-uk"):
         surfaces["reads"].append(("target", model_version))
         target = surfaces["target"]
         return sorted(target["variables"]), sorted(target["inputs"]), target["aliases"]
 
-    def build_surface(model_version, core_version, run=None, exclude_newer=None):
+    def build_surface(
+        model_version,
+        core_version,
+        run=None,
+        exclude_newer=None,
+        model_package="policyengine-uk",
+    ):
         surfaces["reads"].append(("build", model_version, core_version, exclude_newer))
         build = surfaces["build"]
         return sorted(build["variables"]), sorted(build["inputs"])
@@ -291,7 +297,7 @@ def test_certification_refuses_without_the_target_model_installed(
 ):
     from policyengine.provenance import regional_input_surface
 
-    def not_installed(model_version):
+    def not_installed(model_version, model_package="policyengine-uk"):
         raise regional_input_surface.RegionalInputSurfaceError(
             f"Installed policyengine-uk 2.132.6 differs from requested {model_version}."
         )

@@ -11,9 +11,12 @@ from policyengine.countries.us.regions import (
 )
 from policyengine.provenance.manifest import CountryReleaseManifest
 
+# populace-us publishes builds in their own release folders, read at the
+# commit that published them.
 US_LOCAL_AREA_DATASET_URI = (
-    "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
-    "@populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z"
+    "hf://policyengine/populace-us/releases/microcosm-us-2024-local/"
+    "populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z/"
+    "populace_us_2024_acs_local.h5@28f355b8931d14fd9705ebe818554f578f1719d6"
 )
 
 
@@ -115,8 +118,9 @@ class TestUSRegionRegistry:
         assert national.label == "United States"
         assert national.region_type == "national"
         assert national.dataset_path == (
-            "hf://policyengine/populace-us/populace_us_2024.h5"
-            "@populace-us-2024-spm-20260915"
+            "hf://policyengine/populace-us/releases/microcosm-us-2024-national/"
+            "populace-us-2024-spm-20260915/populace_us_2024.h5"
+            "@0ff35303e4e5c10bf1cfb2da8f65c83d7dfa9ab3"
         )
 
     def test__given_us_registry__then_has_51_states(self):
