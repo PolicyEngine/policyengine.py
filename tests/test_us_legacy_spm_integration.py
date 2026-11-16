@@ -69,15 +69,15 @@ from policyengine.tax_benefit_models.us.legacy_spm.model_adapter import (  # noq
     SPM_MEASUREMENT_VARIABLES,
 )
 from policyengine.tax_benefit_models.us.legacy_spm.registry import (  # noqa: E402
-    POPULACE_US_2024_ACS_LOCAL_BUILD_O,
-    POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263,
+    MICROCOSM_US_2024_ACS_LOCAL_BUILD_O,
+    MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263,
 )
 from policyengine.tax_benefit_models.us.model import PolicyEngineUSLatest  # noqa: E402
 
 # The ``us`` package's ``model`` attribute is the model version, not the module.
 us_model = importlib.import_module("policyengine.tax_benefit_models.us.model")
 
-BUILD_O = POPULACE_US_2024_ACS_LOCAL_BUILD_O
+BUILD_O = MICROCOSM_US_2024_ACS_LOCAL_BUILD_O
 LIST_PIN = BUILD_O.independence_list
 YEAR = 2026
 ACS = "acs_2024_1yr"
@@ -792,7 +792,7 @@ def test_other_sources_get_no_declarations(tmp_path):
 
 # --- The microcosm#1263 rebuild: scope rule, roles stored -------------------
 
-REBUILD = POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263
+REBUILD = MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263
 #: The roles the rebuilt source stores: ACS head, ASEC head and the ASEC teen
 #: who heads their own SPM unit.
 REBUILD_ROLES = [True, False, False, False, True, True]

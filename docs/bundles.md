@@ -206,7 +206,7 @@ python scripts/bundle.py certify-data \
   --manifest-uri hf://dataset/policyengine/populace-uk-private@<release>/releases/<release>/release_manifest.json
 ```
 
-For US Populace releases, certify the Populace release manifest directly:
+For US Microcosm releases, certify the Microcosm release manifest directly:
 
 ```bash
 python scripts/bundle.py certify-data \
@@ -218,7 +218,7 @@ python scripts/bundle.py certify-data \
 ```
 
 US state and congressional-district regions scope one certified ACS-local
-Populace dataset with row filters. Pass its non-default local-area release
+Microcosm dataset with row filters. Pass its non-default local-area release
 manifest through `--regional-manifest-uri`; certification adds the pinned H5
 artifact to `data_releases.us.datasets` and writes both regional path templates
 under `data_releases.us.region_datasets`. If a legacy release publishes derived

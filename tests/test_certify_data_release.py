@@ -132,7 +132,7 @@ def _release_manifest_payload() -> dict:
     }
 
 
-def _populace_manifest_payload_without_regions() -> dict:
+def _microcosm_manifest_payload_without_regions() -> dict:
     payload = _release_manifest_payload()
     payload["metadata"] = {}
     payload["artifacts"].pop("states/AK")
@@ -385,7 +385,7 @@ class TestBuildCountryManifestPayload:
         assert payload["model_package"]["sha256"] == "d" * 64
         assert payload["model_package"]["wheel_url"] == "https://example/wheel"
 
-    def test__given_populace_area_h5_artifact__then_omits_it_from_runtime_bundle(self):
+    def test__given_microcosm_area_h5_artifact__then_omits_it_from_runtime_bundle(self):
         payload = self._payload()
 
         assert "states/AK" not in payload["datasets"]
@@ -406,7 +406,7 @@ class TestBuildCountryManifestPayload:
             f"releases/{TAG}/us_source_coverage.json"
         )
 
-    def test__given_populace_region_templates__then_only_national_is_carried_through(
+    def test__given_microcosm_region_templates__then_only_national_is_carried_through(
         self,
     ):
         payload = self._payload()
@@ -415,13 +415,13 @@ class TestBuildCountryManifestPayload:
             "national": {"path_template": "populace_us_2024.h5"}
         }
 
-    def test__given_populace_manifest_without_regions__then_adds_national_template(
+    def test__given_microcosm_manifest_without_regions__then_adds_national_template(
         self,
     ):
         payload = build_country_manifest_payload(
             country="us",
             manifest=DataReleaseManifest.model_validate(
-                _populace_manifest_payload_without_regions()
+                _microcosm_manifest_payload_without_regions()
             ),
             uri_parts=parse_manifest_uri(MANIFEST_URI),
             policyengine_version="9.9.9",
@@ -452,7 +452,7 @@ class TestBuildCountryManifestPayload:
 class TestMergeUSStateReleaseManifest:
     def test__given_state_manifest__then_does_not_vendor_state_region_artifacts(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         states = DataReleaseManifest.model_validate(_state_release_manifest_payload())
 
@@ -474,7 +474,7 @@ class TestMergeUSStateReleaseManifest:
 
     def test__given_missing_state_artifact__then_raises(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         states = DataReleaseManifest.model_validate(
             _state_release_manifest_payload(missing={"CA"})
@@ -485,7 +485,7 @@ class TestMergeUSStateReleaseManifest:
 
     def test__given_malformed_state_path__then_raises(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         states = DataReleaseManifest.model_validate(
             _state_release_manifest_payload(malformed={"CA": "state/CA.h5"})
@@ -496,7 +496,7 @@ class TestMergeUSStateReleaseManifest:
 
     def test__given_state_without_hash__then_raises(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         states = DataReleaseManifest.model_validate(
             _state_release_manifest_payload(without_hash={"CA"})
@@ -507,7 +507,7 @@ class TestMergeUSStateReleaseManifest:
 
     def test__given_duplicate_state_artifact__then_warns_and_ignores_duplicate(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         state_payload = _state_release_manifest_payload()
         state_payload["artifacts"]["states/CA_duplicate"] = {
@@ -529,7 +529,7 @@ class TestMergeUSStateReleaseManifest:
 class TestMergeUSLocalAreaReleaseManifest:
     def test__given_typed_local_area_release__then_certifies_shared_dataset(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         regional = DataReleaseManifest.model_validate(
             _local_area_release_manifest_payload()
@@ -581,7 +581,7 @@ class TestMergeUSLocalAreaReleaseManifest:
         message,
     ):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         regional_payload = _local_area_release_manifest_payload()
         regional_payload[field] = value
@@ -592,7 +592,7 @@ class TestMergeUSLocalAreaReleaseManifest:
 
     def test__given_more_than_one_microdata_artifact__then_rejects_it(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         regional_payload = _local_area_release_manifest_payload()
         regional_payload["artifacts"]["second"] = {
@@ -606,7 +606,7 @@ class TestMergeUSLocalAreaReleaseManifest:
 
     def test__given_legacy_regional_release__then_uses_state_merge(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         states = DataReleaseManifest.model_validate(_state_release_manifest_payload())
 
@@ -619,7 +619,7 @@ class TestMergeUSLocalAreaReleaseManifest:
 
     def test__given_unknown_regional_role__then_rejects_it(self):
         primary = DataReleaseManifest.model_validate(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         )
         regional_payload = _local_area_release_manifest_payload()
         regional_payload["dataset_role"] = "unknown"
@@ -630,7 +630,7 @@ class TestMergeUSLocalAreaReleaseManifest:
 
 
 class TestCertifyDataRelease:
-    def test__given_fetched_populace_manifest__then_updates_bundle_manifest(
+    def test__given_fetched_microcosm_manifest__then_updates_bundle_manifest(
         self, tmp_path
     ):
         bundle_path = tmp_path / "manifest.json"
@@ -694,7 +694,7 @@ class TestCertifyDataRelease:
         primary_response = MagicMock()
         primary_response.status_code = 200
         primary_response.content = json.dumps(
-            _populace_manifest_payload_without_regions()
+            _microcosm_manifest_payload_without_regions()
         ).encode()
         regional_response = MagicMock()
         regional_response.status_code = 200
@@ -827,7 +827,7 @@ class TestCertifyDataRelease:
             "--skip-artifact-check",
         ]
 
-    def test__given_missing_populace_us_source_coverage__then_raises(self, tmp_path):
+    def test__given_missing_microcosm_us_source_coverage__then_raises(self, tmp_path):
         response = MagicMock()
         response.status_code = 200
         response.content = json.dumps(_release_manifest_payload()).encode()
@@ -946,7 +946,7 @@ class TestVendoredSidecarBinding:
 def _source_enrichment_manifest_payload() -> dict:
     """A `microcosm-data` release whose sidecars use the `evidence` kind.
 
-    This is the shape the Populace US producer publishes for source-enrichment
+    This is the shape the Microcosm US producer publishes for source-enrichment
     releases: the data package is named `microcosm-data` rather than
     `populace-data`, and release-directory sidecars are labelled `evidence`
     rather than `diagnostics`.
@@ -966,7 +966,7 @@ def _source_enrichment_manifest_payload() -> dict:
 
 
 class TestSourceEnrichmentProducerRelease:
-    """The `microcosm-data` producer name must keep every Populace rule armed.
+    """The `microcosm-data` producer name must keep every Microcosm rule armed.
 
     A release published under the newer producer name previously fell through
     every `populace-data` guard, which both skipped the per-artifact
@@ -1336,7 +1336,7 @@ class TestUKRegionalMerge:
             merge_area_coded_national_release_manifest(
                 "us",
                 DataReleaseManifest.model_validate(
-                    _populace_manifest_payload_without_regions()
+                    _microcosm_manifest_payload_without_regions()
                 ),
                 DataReleaseManifest.model_validate(_efrs_release_payload()),
             )

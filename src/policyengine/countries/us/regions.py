@@ -100,7 +100,7 @@ def build_us_region_registry() -> RegionRegistry:
                 )
             )
 
-    # 4. Place/city regions (hierarchy metadata only until Populace emits place_fips)
+    # 4. Place/city regions (hierarchy metadata only until Microcosm emits place_fips)
     for place in US_PLACES:
         state_abbrev = place["state"]
         fips = place["fips"]

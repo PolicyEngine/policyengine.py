@@ -39,17 +39,17 @@ from policyengine.tax_benefit_models.us.legacy_spm.independence import (
     independence_roles,
 )
 from policyengine.tax_benefit_models.us.legacy_spm.registry import (
-    POPULACE_US_2024_ACS_LOCAL_BUILD_O,
-    POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263,
+    MICROCOSM_US_2024_ACS_LOCAL_BUILD_O,
+    MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263,
 )
 from policyengine.tax_benefit_models.us.legacy_spm.universe import (
     classify_acs_household_population,
 )
 
 ACS = "acs_2024_1yr"
-BUILD_O = POPULACE_US_2024_ACS_LOCAL_BUILD_O
+BUILD_O = MICROCOSM_US_2024_ACS_LOCAL_BUILD_O
 #: The bundle's certified ACS-local file: scope rule only, roles stored.
-REBUILD = POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263
+REBUILD = MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263
 
 
 def _tables():

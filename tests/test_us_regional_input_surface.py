@@ -36,7 +36,7 @@ from tests.test_certify_data_release import (
     MANIFEST_URI,
     US_LOCAL_AREA_MANIFEST_URI,
     _local_area_release_manifest_payload,
-    _populace_manifest_payload_without_regions,
+    _microcosm_manifest_payload_without_regions,
     _response,
     _tmp_bundle,
     _without_releases_record,
@@ -420,7 +420,7 @@ def local_area_release() -> dict:
 
 
 def national_release() -> dict:
-    release = _populace_manifest_payload_without_regions()
+    release = _microcosm_manifest_payload_without_regions()
     release["compatible_model_packages"] = [
         {"name": "policyengine-us", "specifier": f">={BUILT_WITH},<1.725"}
     ]

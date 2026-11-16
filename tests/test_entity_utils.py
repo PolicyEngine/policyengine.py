@@ -161,7 +161,7 @@ class TestFilterDatasetByHouseholdVariable:
     def test__given_us_numeric_geography__then_filters_state_and_district(
         self, us_test_dataset
     ):
-        """Given: US data with Populace geography columns
+        """Given: US data with Microcosm geography columns
         When: Filtering by state FIPS and congressional district GEOID
         Then: Related entities are preserved for matching households only
         """

@@ -25,7 +25,7 @@ from policyengine.tax_benefit_models.be import (
     REMUNERATION,
     AxiomBelgiumPilot,
     BEYearData,
-    PopulaceBelgiumDataset,
+    MicrocosmBelgiumDataset,
 )
 from policyengine.tax_benefit_models.be import model as be_model_module
 
@@ -155,7 +155,7 @@ def pilot_dataset(tmp_path):
         weights="household_weight",
     )
     path = tmp_path / "microcosm_be_test.h5"
-    PopulaceBelgiumDataset(
+    MicrocosmBelgiumDataset(
         name="microcosm-be-test",
         description="four-person nonuniform-weight fixture",
         filepath=str(path),
@@ -164,7 +164,7 @@ def pilot_dataset(tmp_path):
         data=BEYearData(person=person, household=household),
     ).save()
     # Exercise load(), including metadata and _time_period, during the run.
-    return PopulaceBelgiumDataset(
+    return MicrocosmBelgiumDataset(
         name="microcosm-be-test",
         description="four-person nonuniform-weight fixture",
         filepath=str(path),
@@ -295,7 +295,7 @@ def test_output_metadata_round_trips_only_after_a_distinct_path_is_chosen(
 
     output.filepath = str(output_path)
     output.save()
-    reloaded = PopulaceBelgiumDataset(
+    reloaded = MicrocosmBelgiumDataset(
         name=output.name,
         description=output.description,
         filepath=str(output_path),
@@ -309,7 +309,7 @@ def test_output_metadata_round_trips_only_after_a_distinct_path_is_chosen(
 
 
 def test_dataset_rejects_a_mislabeled_hdf5_period(pilot_dataset):
-    mislabeled = PopulaceBelgiumDataset(
+    mislabeled = MicrocosmBelgiumDataset(
         name=pilot_dataset.name,
         description=pilot_dataset.description,
         filepath=pilot_dataset.filepath,
@@ -481,7 +481,7 @@ def test_dataset_rejects_a_mismatched_legacy_person_weight(tmp_path):
         time_period=2026,
     ).save(path)
 
-    dataset = PopulaceBelgiumDataset(
+    dataset = MicrocosmBelgiumDataset(
         name="legacy-mismatch",
         description="invalid redundant person weights",
         filepath=str(path),
@@ -524,7 +524,7 @@ def test_real_source_stack_computes_the_worker_slice(pilot_dataset):
 
 @pytest.fixture
 def in_memory_pilot_dataset():
-    return PopulaceBelgiumDataset(
+    return MicrocosmBelgiumDataset(
         name="in-memory-pilot",
         description="two-person household-authoritative weight fixture",
         year=2026,

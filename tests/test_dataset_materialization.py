@@ -77,7 +77,7 @@ def test_resolve_bundle_dataset_uses_cross_package_overlay(tmp_path):
     assert dataset.revision == "populace-release"
 
 
-def test_bundled_uk_populace_dataset_uses_dataset_repository_url():
+def test_bundled_uk_microcosm_dataset_uses_dataset_repository_url():
     dataset = _resolve_bundle_dataset("uk", "populace_uk_2023")
 
     url = https_dataset_uri(
@@ -163,7 +163,7 @@ def test_country_data_package_uses_model_repository_url(tmp_path):
     )
 
 
-def test_populace_package_uses_dataset_repository_url(tmp_path):
+def test_microcosm_package_uses_dataset_repository_url(tmp_path):
     session = _Session(_Response(b"populace-data"))
     manifest = _manifest_with_hash(
         _sha256(b"populace-data"),
