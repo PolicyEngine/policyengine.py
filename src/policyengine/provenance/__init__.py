@@ -93,6 +93,30 @@ from .manifest import (
 from .manifest import (
     resolve_managed_dataset_reference as resolve_managed_dataset_reference,
 )
+from .ordered_scenario import (
+    BoundOrderedScenario as BoundOrderedScenario,
+)
+from .ordered_scenario import (
+    ModifierCodeRevision as ModifierCodeRevision,
+)
+from .ordered_scenario import (
+    ModifierLeafIdentity as ModifierLeafIdentity,
+)
+from .ordered_scenario import (
+    OrderedScenarioPhase as OrderedScenarioPhase,
+)
+from .ordered_scenario import (
+    OrderedScenarioPlan as OrderedScenarioPlan,
+)
+from .ordered_scenario import (
+    bind_ordered_scenario_plan as bind_ordered_scenario_plan,
+)
+from .ordered_scenario import (
+    build_ordered_scenario as build_ordered_scenario,
+)
+from .ordered_scenario import (
+    ordered_scenario_reform_identity as ordered_scenario_reform_identity,
+)
 from .receipt import (
     ExecutionReceipt as ExecutionReceipt,
 )
@@ -101,6 +125,9 @@ from .receipt import (
 )
 from .receipt import (
     composed_reform_identity as composed_reform_identity,
+)
+from .receipt import (
+    phased_scenario_reform_identity as phased_scenario_reform_identity,
 )
 from .receipt import (
     reform_identity as reform_identity,

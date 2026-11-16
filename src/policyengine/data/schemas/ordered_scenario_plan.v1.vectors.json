@@ -1,0 +1,1313 @@
+{
+  "invalid": [
+    {
+      "id": "unknown_field",
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            }
+          ],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            }
+          ],
+          "parameter_changes": {
+            "gov.example.rate": {
+              "2027": 0.2
+            }
+          }
+        },
+        "invented": true
+      }
+    },
+    {
+      "id": "unknown_application",
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            }
+          ],
+          "parameter_changes": {}
+        },
+        "application": "after_then_before",
+        "before": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            }
+          ],
+          "parameter_changes": {
+            "gov.example.rate": {
+              "2027": 0.2
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "after_parameters",
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            }
+          ],
+          "parameter_changes": {
+            "gov.example.rate": 1
+          }
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            }
+          ],
+          "parameter_changes": {
+            "gov.example.rate": {
+              "2027": 0.2
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "unknown_leaf_field",
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            }
+          ],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [
+            {
+              "claimed_leaf_count": 1,
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            }
+          ],
+          "parameter_changes": {
+            "gov.example.rate": {
+              "2027": 0.2
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "unknown_default_type",
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            }
+          ],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "x": {
+                  "type": "object"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            }
+          ],
+          "parameter_changes": {
+            "gov.example.rate": {
+              "2027": 0.2
+            }
+          }
+        }
+      }
+    }
+  ],
+  "purpose": "Synthetic canonicalization vectors; no job approval or certification.",
+  "schema_version": 1,
+  "valid": [
+    {
+      "id": "empty",
+      "identity": {
+        "binding": "content",
+        "kind": "current_law",
+        "name": null,
+        "reform_sha256": null,
+        "representation": null
+      },
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [],
+          "parameter_changes": {}
+        }
+      }
+    },
+    {
+      "id": "parameter_only",
+      "identity": {
+        "binding": "content",
+        "kind": "reform",
+        "name": null,
+        "reform_sha256": "41da903bbae85350d60fda120cccb32ebfbed0ace0102b9b4e1bdaca0c556b06",
+        "representation": "policyengine-uk.scenario/v1"
+      },
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [],
+          "parameter_changes": {
+            "gov.example.rate": {
+              "2027": 0.2
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "parameter_infinity",
+      "identity": {
+        "binding": "content",
+        "kind": "reform",
+        "name": null,
+        "reform_sha256": "2e7342806436230de7e82b6364d217829175b4b74806b33e46e87d8b9a77107a",
+        "representation": "policyengine-uk.scenario/v1"
+      },
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [],
+          "parameter_changes": {
+            "gov.example.cap": {
+              "2027": {
+                "$nonfinite": "Infinity"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "two_each_phase",
+      "identity": {
+        "binding": "code_revision",
+        "kind": "reform",
+        "name": null,
+        "reform_sha256": "1c007f55edc6f8054a28035c0784cdb4e420b87927e534ee77d0bf391b51148c",
+        "representation": "policyengine-uk.phased_scenario_composition/v1"
+      },
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            }
+          ],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            }
+          ],
+          "parameter_changes": {
+            "gov.example.rate": {
+              "2027": 0.2
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "reverse_before",
+      "identity": {
+        "binding": "code_revision",
+        "kind": "reform",
+        "name": null,
+        "reform_sha256": "5efde0b2a8b07f024b70f383d7da18a00181482249519f0b300f1488b86c2886",
+        "representation": "policyengine-uk.phased_scenario_composition/v1"
+      },
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "double",
+              "source_sha256": "9c2b30ed7c115520b94c29a615568ea8e3611b8d81bf9722b67070e3f7af958c"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            }
+          ],
+          "parameter_changes": {}
+        }
+      }
+    },
+    {
+      "id": "repeated_leaf",
+      "identity": {
+        "binding": "code_revision",
+        "kind": "reform",
+        "name": null,
+        "reform_sha256": "007409e0f2eefd9b4ae5c9db81d129cce7d3956602052bc853dd354fc25c5ed2",
+        "representation": "policyengine-uk.phased_scenario_composition/v1"
+      },
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            },
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_one",
+              "source_sha256": "a87a9c457524c35b0d3623ca94f2cbe965325463f8195d30df6ea3fae8061fcb"
+            }
+          ],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [],
+          "parameter_changes": {}
+        }
+      }
+    },
+    {
+      "id": "typed_defaults",
+      "identity": {
+        "binding": "code_revision",
+        "kind": "reform",
+        "name": null,
+        "reform_sha256": "2f091d519022595340e76c34c32efbedae37d9c70ab72073eab7ed0a5791a305",
+        "representation": "policyengine-uk.phased_scenario_composition/v1"
+      },
+      "plan": {
+        "adapter_source_sha256": "692a6848be3e366a1243fe50668b152692374c88fd4cc94bd67008b78157519c",
+        "after": {
+          "modifier_leaves": [],
+          "parameter_changes": {}
+        },
+        "application": "before_data_load_then_after_data_load",
+        "before": {
+          "modifier_leaves": [
+            {
+              "code_revision": {
+                "git_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "repository": "PolicyEngine/test"
+              },
+              "module": "tests.ordered_receipt_modifiers",
+              "module_defaults": {
+                "add_default": {
+                  "items": [
+                    [
+                      "defaults",
+                      {
+                        "items": [
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ],
+                        "type": "list"
+                      }
+                    ],
+                    [
+                      "kwdefaults",
+                      {
+                        "items": [],
+                        "type": "dict"
+                      }
+                    ]
+                  ],
+                  "type": "dict"
+                }
+              },
+              "module_source_sha256": "d1649b4c79b32c9d0cccbe42f5f5aca301b81ed853ad8bbb972c396d8eae9823",
+              "qualname": "add_default",
+              "source_sha256": "010d9132edaa988604384d6b95f16b2ecd87e4d141fb6822a31eddc3033978b9"
+            }
+          ],
+          "parameter_changes": {}
+        }
+      }
+    }
+  ]
+}

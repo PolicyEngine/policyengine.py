@@ -382,6 +382,30 @@
     },
     "ReformIdentity": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "representation": {
+                "const": "policyengine-uk.phased_scenario_composition/v1"
+              }
+            },
+            "required": [
+              "representation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "binding": {
+                "const": "code_revision"
+              }
+            },
+            "required": [
+              "binding"
+            ]
+          }
+        }
+      ],
       "description": "A reform or baseline, bound by the digest of its canonical form.",
       "properties": {
         "binding": {
@@ -439,7 +463,9 @@
                 "policyengine-uk.reform_dict/v1",
                 "policyengine-sim-api.policy/v1",
                 "policyengine-uk.scenario/v1",
-                "policyengine-uk.scenario_composition/v1"
+                "policyengine-uk.scenario_composition/v1",
+                "policyengine-uk.phased_scenario/v1",
+                "policyengine-uk.phased_scenario_composition/v1"
               ],
               "type": "string"
             },
@@ -831,6 +857,8 @@
     "execution_identity_sha256": "{schema_version, country_id, wrapper, model, core, data, certification_status, certificate?, regional_certification?} where certificate keeps only bundle_version, country_id, certificate_sha256, compatibility_basis, certified_for_model_version, certified_for_core_version, certified_dataset_sha256 and certified_by",
     "outputs_sha256": "the canonical output payload the receipt binds",
     "receipt_sha256": "the whole receipt without runtime and without reform.name and baseline.name",
+    "reform.ordered_scenario_sha256": "For policyengine-uk.phased_scenario_composition/v1, RFC 8785 over {representation, payload: OrderedScenarioPlan}; retain nulls and every ordered modifier occurrence, including repetitions. Parameters occur only before data load; leaf proofs carry actual source/module/default/revision identities and the plan binds the adapter source. Binding is code_revision. Use ordered_scenario_reform_identity for data-only recomposition. Parameter-only ordered plans retain the existing before-load scenario/v1 identity.",
+    "reform.phased_scenario_sha256": "For policyengine-uk.phased_scenario/v1, RFC 8785 over {representation, payload}, with payload {application: before_data_load_then_after_data_load, before: {representation, reform_sha256, binding}, after: {representation, reform_sha256, binding}}; each phase binds the native Scenario.parts_by_data_load() result through scenario/v1. Common parameter changes occur once, in the before phase. A scenario_composition/v1 cannot contain this representation.",
     "reform.reform_sha256": "RFC 8785 over {representation, payload} where payload is the reform exactly as given in that representation, nulls kept (a null in a reform can mean something, unlike an absent receipt field); for policyengine-uk.scenario_composition/v1 the payload is {applied_before_data_load, application: parameter_changes_then_modifiers, members: [{representation, reform_sha256, binding}, ...]} with members in application order; an infinite number in a payload is the object {\"$nonfinite\": \"Infinity\"} or {\"$nonfinite\": \"-Infinity\"}, and a payload may not use the key $nonfinite itself",
     "regional_certification.record_sha256": "the bundle manifest's data_releases.<country_id>.regional_certification record, its evidence included"
   },

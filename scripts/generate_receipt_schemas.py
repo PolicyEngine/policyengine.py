@@ -24,10 +24,12 @@ SCHEMA_DIR = REPO_ROOT / "src" / "policyengine" / "data" / "schemas"
 os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from policyengine.provenance.ordered_scenario import OrderedScenarioPlan  # noqa: E402
 from policyengine.provenance.receipt import ExecutionReceipt  # noqa: E402
 
 SCHEMAS = {
     "execution_receipt.v1.schema.json": ExecutionReceipt.json_schema,
+    "ordered_scenario_plan.v1.schema.json": OrderedScenarioPlan.json_schema,
 }
 
 

@@ -203,23 +203,28 @@ class Simulation(BaseModel):
                 else None
             )
             return
+        # Run after leaving the except blocks. An error raised inside one
+        # would carry the handled load error as its context, and Python
+        # would print the load error's traceback before its own.
         try:
             self.tax_benefit_model_version.load(self)
         except FileNotFoundError:
-            self.run()
-            self.save()
+            needs_run = True
         except StaleOutputError as error:
             # An expected rerun, such as the first after an upgrade that
             # changes what saved outputs record.
             logger.info("Running simulation %s again: %s", self.id, error)
-            self.run()
-            self.save()
+            needs_run = True
         except Exception:
             logger.warning(
                 "Unexpected error loading simulation %s; falling back to run()",
                 self.id,
                 exc_info=True,
             )
+            needs_run = True
+        else:
+            needs_run = False
+        if needs_run:
             self.run()
             self.save()
 

@@ -1,3 +1,47 @@
+## [6.19.0] - 2026-11-13
+
+### Added
+
+- Added ordered UK Scenario plans that preserve modifier order and data-load phases, bind trusted callable sources, and support offline identity verification and worker rebinding.
+- Add optional household row filtering to US managed microsimulations while retaining every native projected year and the source dataset provenance.
+
+### Fixed
+
+- Preserve population-mode Medicaid, county and SPM behavior and live identifier inputs when US simulations are built from entity tables, including their baseline arms.
+
+
+## [6.18.0] - 2026-11-12
+
+### Added
+
+- Bind UK Scenario execution receipts to their actual before- and after-data-load phases, preserving existing single-phase digests and refusing phase flattening through older representations.
+
+
+## [6.17.2] - 2026-11-11
+
+### Changed
+
+- Test that each UK nation filter keeps exactly the households policyengine-uk's `country` formula assigns to that nation, for every value of its `Region` enum, so the registry's region lists and the model's mapping cannot drift apart unnoticed.
+
+
+## [6.17.1] - 2026-11-10
+
+### Fixed
+
+- `Simulation.ensure()` now runs and saves the simulation after leaving the handler for its saved-output lookup, so an exception raised by `run()` or `save()` no longer carries the handled `FileNotFoundError`, `StaleOutputError` or unexpected load error as its implicit context, and its traceback no longer begins with the lookup's. What `ensure()` loads, runs, saves, caches and logs is unchanged.
+
+
+## [6.17.0] - 2026-11-09
+
+### Added
+
+- `pe.us.calculate_household` accepts a list of groups for `marital_unit`, `family`, `spm_unit` and `tax_unit`. Each group is a mapping with `members`, a list of indexes into `people`, plus its own inputs, and each person belongs to exactly one group of the entity. An entity passed as a list comes back as a list of results in the same order, with one axis series per group under axes. A mapping still puts every person in one group, so existing calls return the same results. Callers can now give children and other adults their own marital units. With one marital unit for everyone, Medicaid's optional pathway for seniors and people with disabilities gave a single parent with one child the couple's income limit, and SSI added a child's earnings to the income of aged parents.
+
+### Changed
+
+- `calculate_household` now reads a list passed as `marital_unit`, `family`, `spm_unit` or `tax_unit` as a list of groups, so an empty list or a list of key-value pairs, which it used to turn into a mapping of inputs, now raises.
+
+
 ## [6.16.1] - 2026-11-09
 
 ### Changed

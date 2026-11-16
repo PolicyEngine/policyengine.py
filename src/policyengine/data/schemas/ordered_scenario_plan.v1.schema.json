@@ -1,0 +1,369 @@
+{
+  "$defs": {
+    "ModifierCodeRevision": {
+      "additionalProperties": false,
+      "description": "The same full repository/commit claim accepted by the Scenario binder.",
+      "properties": {
+        "git_sha": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "title": "Git Sha",
+          "type": "string"
+        },
+        "repository": {
+          "minLength": 1,
+          "title": "Repository",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "git_sha"
+      ],
+      "title": "ModifierCodeRevision",
+      "type": "object"
+    },
+    "ModifierLeafIdentity": {
+      "additionalProperties": false,
+      "description": "Inert provenance for one occurrence of an actual module-level modifier.",
+      "properties": {
+        "code_revision": {
+          "$ref": "#/$defs/ModifierCodeRevision"
+        },
+        "module": {
+          "pattern": "^[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*$",
+          "title": "Module",
+          "type": "string"
+        },
+        "module_defaults": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/TypedDefault"
+              },
+              "minProperties": 1,
+              "propertyNames": {
+                "minLength": 1
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "module_source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Module Source Sha256",
+          "type": "string"
+        },
+        "qualname": {
+          "pattern": "^[A-Za-z_]\\w*$",
+          "title": "Qualname",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "module",
+        "qualname",
+        "source_sha256",
+        "module_source_sha256",
+        "module_defaults",
+        "code_revision"
+      ],
+      "title": "ModifierLeafIdentity",
+      "type": "object"
+    },
+    "OrderedScenarioPhase": {
+      "additionalProperties": false,
+      "description": "The complete parameter map and ordered modifier occurrences of one phase.",
+      "properties": {
+        "modifier_leaves": {
+          "items": {
+            "$ref": "#/$defs/ModifierLeafIdentity"
+          },
+          "title": "Modifier Leaves",
+          "type": "array"
+        },
+        "parameter_changes": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "$nonfinite": {
+                        "enum": [
+                          "Infinity",
+                          "-Infinity"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "$nonfinite"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "$nonfinite": {
+                          "enum": [
+                            "Infinity",
+                            "-Infinity"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "$nonfinite"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "propertyNames": {
+                  "minLength": 1,
+                  "not": {
+                    "const": "$nonfinite"
+                  }
+                },
+                "type": "object"
+              }
+            ]
+          },
+          "propertyNames": {
+            "minLength": 1,
+            "not": {
+              "const": "$nonfinite"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "parameter_changes",
+        "modifier_leaves"
+      ],
+      "title": "OrderedScenarioPhase",
+      "type": "object"
+    },
+    "TypedDefault": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "none"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "bool"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "int"
+            },
+            "value": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "str"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "hex": {
+              "pattern": "^(?:-?inf|-?0x[0-9a-f]+\\.[0-9a-f]+p[+-][0-9]+)$",
+              "type": "string"
+            },
+            "type": {
+              "const": "float"
+            }
+          },
+          "required": [
+            "type",
+            "hex"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "$ref": "#/$defs/TypedDefault"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "list"
+            }
+          },
+          "required": [
+            "type",
+            "items"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "$ref": "#/$defs/TypedDefault"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "tuple"
+            }
+          },
+          "required": [
+            "type",
+            "items"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/TypedDefault"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "dict"
+            }
+          },
+          "required": [
+            "type",
+            "items"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$id": "https://policyengine.org/schemas/ordered_scenario_plan.v1.schema.json",
+  "additionalProperties": false,
+  "description": "An immutable JSON execution recipe; reading one executes no locators.",
+  "properties": {
+    "adapter_source_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Adapter Source Sha256",
+      "type": "string"
+    },
+    "after": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/OrderedScenarioPhase"
+        },
+        {
+          "properties": {
+            "parameter_changes": {
+              "const": {}
+            }
+          }
+        }
+      ]
+    },
+    "application": {
+      "const": "before_data_load_then_after_data_load",
+      "title": "Application",
+      "type": "string"
+    },
+    "before": {
+      "$ref": "#/$defs/OrderedScenarioPhase"
+    }
+  },
+  "required": [
+    "application",
+    "adapter_source_sha256",
+    "before",
+    "after"
+  ],
+  "title": "OrderedScenarioPlan",
+  "type": "object",
+  "x-policyengine-rules": [
+    "Canonicalization is RFC8785 with nulls retained; no locator is imported or executed.",
+    "Default float hex strings must equal float.fromhex(value).hex(); typed dictionary keys are unique and ordered.",
+    "Apply existing strict JSON/RFC8785 numeric-domain checks; JSON NaN and numeric Infinity are invalid. Only exact reserved objects encode parameter infinities.",
+    "Offline provenance is an assertion, not permission to execute. Rebind trusted actual leaf callables and compare the complete plan before runtime."
+  ]
+}
