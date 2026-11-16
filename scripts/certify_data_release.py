@@ -120,7 +120,7 @@ def main(argv=None) -> int:
         "--accept-regional-model-mismatch",
         metavar="REASON",
         help=(
-            "UK only: route regions to a regional release that does not cover "
+            "UK or US: route regions to a regional release that does not cover "
             "the pinned model, recording this reviewed reason in the bundle "
             "instead of refusing. Requires --regional-input-surface-evidence; "
             "dropped columns (defined by the regional build model, not by the "

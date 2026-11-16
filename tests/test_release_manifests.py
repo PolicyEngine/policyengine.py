@@ -44,22 +44,28 @@ POLICYENGINE_VERSION = re.search(
     PYPROJECT.read_text(),
     re.MULTILINE,
 ).group(1)
-US_MODEL_VERSION = "2.2.1"
+US_MODEL_VERSION = "2.2.2"
 US_BUILT_WITH_MODEL_VERSION = "2.2.1"
 US_DATA_RELEASE_VERSION = "0.1.0"
 US_DATA_RELEASE_ID = "populace-us-2024-spm-20260915"
-US_DATA_RELEASE_REVISION = US_DATA_RELEASE_ID
-US_DATA_RELEASE_PATH = f"releases/{US_DATA_RELEASE_ID}/release_manifest.json"
-US_DATA_ARTIFACT_REVISION = US_DATA_RELEASE_ID
+# populace-us publishes builds in their own release folders, read at the
+# commit that published them.
+US_DATA_RELEASE_REVISION = "0ff35303e4e5c10bf1cfb2da8f65c83d7dfa9ab3"
+US_DATA_RELEASE_FOLDER = f"releases/microcosm-us-2024-national/{US_DATA_RELEASE_ID}"
+US_DATA_RELEASE_PATH = f"{US_DATA_RELEASE_FOLDER}/release_manifest.json"
+US_DATA_ARTIFACT_REVISION = US_DATA_RELEASE_REVISION
 US_CERTIFICATION_SOURCE = "policyengine.py bundle certification"
 US_MANAGED_DATASET_URI = (
-    f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_ARTIFACT_REVISION}"
+    "hf://policyengine/populace-us/"
+    f"{US_DATA_RELEASE_FOLDER}/populace_us_2024.h5@{US_DATA_ARTIFACT_REVISION}"
 )
 US_CERTIFIED_DATASET_URI = (
-    f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
+    "hf://policyengine/populace-us/"
+    f"{US_DATA_RELEASE_FOLDER}/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
 US_RELEASE_MANIFEST_DATASET_URI = (
-    f"hf://policyengine/populace-us/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
+    "hf://policyengine/populace-us/"
+    f"{US_DATA_RELEASE_FOLDER}/populace_us_2024.h5@{US_DATA_RELEASE_REVISION}"
 )
 # Certified local-area dataset: a Populace US artifact published in its own
 # immutable release. It remains non-default nationally and is selected for
@@ -69,9 +75,13 @@ US_LOCAL_AREA_RELEASE_ID = "populace-us-2024-buildo-acs-local-766b7c7-20261017T0
 US_LOCAL_AREA_SHA256 = (
     "3ce781c440a7f933b1d952ff4e9d9f65f4698c64b94d2fad165af0c662838d6c"
 )
+US_LOCAL_AREA_REVISION = "28f355b8931d14fd9705ebe818554f578f1719d6"
+US_LOCAL_AREA_PATH = (
+    f"releases/microcosm-us-2024-local/{US_LOCAL_AREA_RELEASE_ID}/"
+    "populace_us_2024_acs_local.h5"
+)
 US_LOCAL_AREA_DATASET_URI = (
-    "hf://policyengine/populace-us/populace_us_2024_acs_local.h5"
-    f"@{US_LOCAL_AREA_RELEASE_ID}"
+    f"hf://policyengine/populace-us/{US_LOCAL_AREA_PATH}@{US_LOCAL_AREA_REVISION}"
 )
 UK_MODEL_VERSION = "2.174.1"
 UK_BUILT_WITH_MODEL_VERSION = "2.174.1"
@@ -269,7 +279,10 @@ class TestReleaseManifests:
         assert manifest.certified_data_artifact.uri == US_CERTIFIED_DATASET_URI
         assert manifest.certification is not None
         assert manifest.certification.data_build_id == US_DATA_RELEASE_ID
-        assert manifest.certification.compatibility_basis == "built_with_model_package"
+        # Built with 2.2.1; certified for 2.2.2 on the release's claim.
+        assert manifest.certification.compatibility_basis == (
+            "legacy_compatible_model_package"
+        )
         assert manifest.certification.certified_by == US_CERTIFICATION_SOURCE
         assert (
             manifest.certification.built_with_model_version
@@ -403,18 +416,16 @@ class TestReleaseManifests:
         assert resolve_managed_dataset_reference("us") == US_CERTIFIED_DATASET_URI
         assert resolve_managed_dataset_reference("us") != US_LOCAL_AREA_DATASET_URI
         assert manifest.region_datasets["national"].path_template == (
-            "populace_us_2024.h5"
+            f"{US_DATA_RELEASE_FOLDER}/populace_us_2024.h5"
         )
-        assert manifest.region_datasets["state"].path_template == (
-            "populace_us_2024_acs_local.h5"
-        )
+        assert manifest.region_datasets["state"].path_template == (US_LOCAL_AREA_PATH)
         assert (
             manifest.region_datasets["congressional_district"].path_template
-            == "populace_us_2024_acs_local.h5"
+            == US_LOCAL_AREA_PATH
         )
 
-    def test__given_local_area_name__then_resolves_to_its_immutable_tag(self):
-        """The local-area dataset resolves to its own immutable release tag."""
+    def test__given_local_area_name__then_resolves_to_its_build_folder(self):
+        """The local-area dataset resolves to its build folder at the publishing commit."""
         assert (
             resolve_dataset_reference("us", US_LOCAL_AREA_DATASET)
             == US_LOCAL_AREA_DATASET_URI
@@ -430,9 +441,9 @@ class TestReleaseManifests:
         manifest = get_release_manifest("us")
 
         reference = manifest.datasets[US_LOCAL_AREA_DATASET]
-        assert reference.path == "populace_us_2024_acs_local.h5"
+        assert reference.path == US_LOCAL_AREA_PATH
         assert reference.repo_id == "policyengine/populace-us"
-        assert reference.revision == US_LOCAL_AREA_RELEASE_ID
+        assert reference.revision == US_LOCAL_AREA_REVISION
         assert reference.sha256 == US_LOCAL_AREA_SHA256
         assert US_LOCAL_AREA_DATASET in resolve_default_datasets("us")
         assert US_LOCAL_AREA_DATASET != manifest.default_dataset
@@ -638,7 +649,7 @@ class TestReleaseManifests:
             "artifacts": {
                 "populace_us_2024": {
                     "kind": "microdata",
-                    "path": "populace_us_2024.h5",
+                    "path": f"{US_DATA_RELEASE_FOLDER}/populace_us_2024.h5",
                     "repo_id": "policyengine/populace-us",
                     "revision": US_DATA_RELEASE_VERSION,
                     "sha256": (

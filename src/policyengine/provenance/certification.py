@@ -729,6 +729,7 @@ def accepted_regional_mismatch(
             audit.input_aliases,
             build_model_variables=audit.build_model_variables,
             build_model_inputs=audit.build_model_inputs,
+            model_package=audit.model_package,
         )
     except ValueError as exc:
         raise CertificationError(
@@ -750,7 +751,8 @@ def accepted_regional_mismatch(
         )
     limitations = list(audit.limitations)
     try:
-        predates_vat_fix = (
+        # The VAT factor fix is policyengine-uk's (#2187).
+        predates_vat_fix = model_package == "policyengine-uk" and (
             Version(built_with) < Version("2.135.7") <= Version(model_version)
         )
     except InvalidVersion as exc:
@@ -1599,11 +1601,6 @@ class PopulaceDataProducerCertificationStrategy(DataProducerCertificationStrateg
                 "--accept-regional-model-mismatch applies to a regional release; "
                 "pass --regional-manifest-uri."
             )
-        if regional_model_mismatch_reason is not None and country != "uk":
-            raise CertificationError(
-                "--accept-regional-model-mismatch is only supported for the UK, "
-                "whose area receipts are uncertified."
-            )
         if regional_manifest_uri is not None:
             regional_manifest, regional_manifest_sha256, regional_uri_parts = (
                 fetch_release_manifest(regional_manifest_uri, token=token)
@@ -1812,7 +1809,7 @@ def certify_data_release(
     release only. While the bundle routes regions, a run without
     ``regional_manifest_uri`` is refused unless ``drop_regional_release``.
 
-    ``regional_model_mismatch_reason`` (UK only) requires
+    ``regional_model_mismatch_reason`` (UK or US) requires
     ``regional_input_surface_evidence`` (``scripts/audit_regional_input_surface.py``)
     bound to the regional manifest and artifact bytes, the regional build
     model and core, and the exact target model. Dropped columns, which the
