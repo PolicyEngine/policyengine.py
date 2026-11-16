@@ -69,7 +69,7 @@ def _patch_analysis_dependencies(
     monkeypatch.setattr(
         analysis_module,
         "_validate_program_statistics_config",
-        lambda baseline_simulation, reform_simulation: None,
+        lambda baseline_simulation, reform_simulation, *args: None,
     )
     monkeypatch.setattr(
         program_statistics_module, "ProgramStatistics", fake_program_statistics
