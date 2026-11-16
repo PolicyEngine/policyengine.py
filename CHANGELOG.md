@@ -1,3 +1,10 @@
+## [6.20.1] - 2026-11-16
+
+### Changed
+
+- Certify the Microcosm UK pair built on policyengine-uk 2.177.7 and policyengine-core 3.34.10 into the PolicyEngine bundle manifest. The national build is `uk-frs-calibration-attempt-20261115T104657Z-fcfac709` (`microcosm_uk_2024_25`, hub commit `ad84c060`). Constituency and local-authority regions route to the local-area build `uk-local-candidate-f100-s42-20261116T102715Z-e2745e59` (`microcosm_uk_2024_25_dense`, hub commit `4c594d72`). This is the first UK certificate read from Microcosm's build folders: each file is pinned at `releases/<release>/<build>/` and the commit that published it. The UK pin moves from 2.174.1 to 2.177.7, and the shared core pin from 3.33.3 to 3.34.10, which policyengine-uk 2.177.4 and later require.
+
+
 ## [6.20.0] - 2026-11-16
 
 ### Added
