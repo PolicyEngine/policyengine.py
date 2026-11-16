@@ -69,7 +69,12 @@ def test_bundle_manifest_carries_uk_data_release():
     assert release["data_package"]["name"] == "microcosm-data"
     assert release["data_package"]["repo_type"] == "dataset"
     assert release["default_dataset"] == "microcosm_uk_2024_25"
-    assert release["version"].startswith("microcosm-uk-2024-25-national-")
+    # A build-folder certificate names the build: its manifest sits in the
+    # build's own folder of the national release.
+    assert release["version"] == release["certification"]["data_build_id"]
+    assert release["data_package"]["release_manifest_path"] == (
+        f"releases/microcosm-uk-2024-25-national/{release['version']}/release_manifest.json"
+    )
     assert release["default_dataset_uri"].startswith(
         "hf://policyengine/populace-uk-private/"
     )
