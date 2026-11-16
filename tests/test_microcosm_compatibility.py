@@ -21,47 +21,47 @@ from policyengine.provenance.certification import (
         (
             "policyengine.tax_benefit_models.be",
             "MicrocosmBelgiumDataset",
-            "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.19.1
+            "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.20.1
         ),
         (
             "policyengine.tax_benefit_models.be.datasets",
             "MicrocosmBelgiumDataset",
-            "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.19.1
+            "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.20.1
         ),
         (
             "policyengine.tax_benefit_models.be.model",
             "MicrocosmBelgiumDataset",
-            "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.19.1
+            "PopulaceBelgiumDataset",  # compat: populace alias, remove after 6.20.1
         ),
         (
             "policyengine.provenance.certification",
             "MicrocosmDataProducerCertificationStrategy",
-            "PopulaceDataProducerCertificationStrategy",  # compat: populace alias, remove after 6.19.1
+            "PopulaceDataProducerCertificationStrategy",  # compat: populace alias, remove after 6.20.1
         ),
         (
             "policyengine.provenance.certification",
             "MICROCOSM_US_SOURCE_COVERAGE_FILE",
-            "POPULACE_US_SOURCE_COVERAGE_FILE",  # compat: populace alias, remove after 6.19.1
+            "POPULACE_US_SOURCE_COVERAGE_FILE",  # compat: populace alias, remove after 6.20.1
         ),
         (
             "policyengine.provenance.certification",
             "MICROCOSM_DATA_PACKAGES",
-            "POPULACE_DATA_PACKAGES",  # compat: populace alias, remove after 6.19.1
+            "POPULACE_DATA_PACKAGES",  # compat: populace alias, remove after 6.20.1
         ),
         (
             "policyengine.provenance.certification",
             "MICROCOSM_RELEASE_REPOS",
-            "POPULACE_RELEASE_REPOS",  # compat: populace alias, remove after 6.19.1
+            "POPULACE_RELEASE_REPOS",  # compat: populace alias, remove after 6.20.1
         ),
         (
             "policyengine.tax_benefit_models.us.legacy_spm.registry",
             "MICROCOSM_US_2024_ACS_LOCAL_BUILD_O",
-            "POPULACE_US_2024_ACS_LOCAL_BUILD_O",  # compat: populace alias, remove after 6.19.1
+            "POPULACE_US_2024_ACS_LOCAL_BUILD_O",  # compat: populace alias, remove after 6.20.1
         ),
         (
             "policyengine.tax_benefit_models.us.legacy_spm.registry",
             "MICROCOSM_US_2024_ACS_LOCAL_MICROCOSM_1263",
-            "POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263",  # compat: populace alias, remove after 6.19.1
+            "POPULACE_US_2024_ACS_LOCAL_MICROCOSM_1263",  # compat: populace alias, remove after 6.20.1
         ),
     ],
 )
@@ -100,7 +100,7 @@ def test_belgium_example_accepts_both_dataset_environment_names(
     be = import_module("policyengine.tax_benefit_models.be")
     simulation_module = import_module("policyengine.core.simulation")
     legacy_env_name = (
-        "POPULACE_BE_DATASET"  # compat: populace alias, remove after 6.19.1
+        "POPULACE_BE_DATASET"  # compat: populace alias, remove after 6.20.1
     )
     for name, value in (
         ("MICROCOSM_BE_DATASET", current_path),
@@ -139,7 +139,7 @@ def test_belgium_example_accepts_both_dataset_environment_names(
 def test_belgium_example_names_the_new_variable_when_neither_is_set(monkeypatch):
     for name in (
         "MICROCOSM_BE_DATASET",
-        "POPULACE_BE_DATASET",  # compat: populace alias, remove after 6.19.1
+        "POPULACE_BE_DATASET",  # compat: populace alias, remove after 6.20.1
     ):
         monkeypatch.delenv(name, raising=False)
 
