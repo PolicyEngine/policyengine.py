@@ -1,3 +1,15 @@
+## [6.20.0] - 2026-11-16
+
+### Added
+
+- `certify-data --accept-regional-model-mismatch` and `scripts/audit_regional_input_surface.py` now cover a US local-area release as well as a UK one. The audit reads the US file's entity tables (or PolicyEngine core's variable/period groups), compares them with the release's build policyengine-us and the installed target, and counts a stored legacy input as supplying its live input where .py renames it. The bundle records the accepted mismatch and its evidence; .py writes no US execution receipts.
+
+### Changed
+
+- Certify the US populace data release `populace-us-2024-spm-20260915` (populace_us_2024) for policyengine-us 2.2.2 with spm-calculator 1.1.0, whose SPM forecast covers 2022–2036 (`335e6755…`), read from its build folder in `policyengine/populace-us`. State and district regions keep the ACS-local release `populace-us-2024-buildo-acs-local-766b7c7-20261017T030317Z`, built with 2.2.1, on an audited accepted mismatch: policyengine-us 2.2.1 and 2.2.2 define the same variables and inputs, and no stored column is dropped.
+- Document and test the 2022–2036 SPM forecast horizon: 2036 joins the supported household years and 2037 becomes the out-of-horizon example.
+
+
 ## [6.19.0] - 2026-11-13
 
 ### Added
