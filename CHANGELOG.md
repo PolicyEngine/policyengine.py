@@ -1,3 +1,10 @@
+## [6.20.2] - 2026-11-16
+
+### Changed
+
+- Give the Belgian dataset class, the data-producer certification strategy and the certification and legacy-SPM constants Microcosm names, keeping the previous names as aliases.
+
+
 ## [6.20.1] - 2026-11-16
 
 ### Changed
