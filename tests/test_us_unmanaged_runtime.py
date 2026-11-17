@@ -5,6 +5,7 @@ The constructor tests use inert stubs and byte fixtures, not population data.
 
 import hashlib
 import importlib
+from contextlib import nullcontext
 from importlib import metadata
 from types import SimpleNamespace
 
@@ -199,3 +200,124 @@ def test_local_provenance_refuses_installed_loaded_drift(monkeypatch, tmp_path):
     source = materialization.DatasetSource(source_uri=str(path), path=str(path))
     with pytest.raises(ValueError, match="changed after import"):
         us_model._unmanaged_local_runtime_provenance(source)
+
+
+@pytest.mark.parametrize("period", [True, 2017, "2017-01", "２０17", "0000", "2017:2"])
+def test_native_clock_requires_one_canonical_annual_period(period):
+    with pytest.raises(ValueError, match="four-digit annual period"):
+        us_model.managed_microsimulation(native_input_period=period)
+
+
+@pytest.mark.parametrize(
+    "source", [None, "populace_us_2024", "hf://example/fixture.h5@v1"]
+)
+def test_native_clock_rejects_managed_and_remote_sources(source):
+    with pytest.raises(ValueError, match="explicit local unmanaged file"):
+        us_model.managed_microsimulation(
+            dataset=source, allow_unmanaged=True, native_input_period="2017"
+        )
+
+
+def test_native_clock_requires_existing_local_opt_in(tmp_path):
+    path = tmp_path / "fixture.bin"
+    with pytest.raises(ValueError, match="explicit local unmanaged file"):
+        us_model.managed_microsimulation(
+            dataset=str(path), allow_unmanaged=True, native_input_period="2017"
+        )
+    path.write_bytes(b"fixture")
+    with pytest.raises(ValueError, match="explicit local unmanaged file"):
+        us_model.managed_microsimulation(dataset=str(path), native_input_period="2017")
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"dataset_end_year": 2017},
+        {"scoping_strategy": object()},
+        {"default_input_period": "2015"},
+        {"default_calculation_period": "2015"},
+    ],
+)
+def test_native_clock_rejects_projection_scoping_and_conflicting_defaults(
+    tmp_path, options
+):
+    path = tmp_path / "fixture.bin"
+    path.write_bytes(b"fixture")
+    with pytest.raises(ValueError, match="cannot project or scope|must match"):
+        us_model.managed_microsimulation(
+            dataset=str(path),
+            allow_unmanaged=True,
+            native_input_period="2017",
+            **options,
+        )
+
+
+def test_native_descriptor_reaches_first_constructor_with_declared_clock(
+    monkeypatch, tmp_path
+):
+    import policyengine_us
+    from policyengine_core.data import Dataset as CoreDataset
+
+    path, expected = local_factory_fixture(monkeypatch, tmp_path)
+    arrays = {
+        "annual_lookback_fixture": {"2015": SimpleNamespace(shape=(1,))},
+        "monthly_fixture": {"2017-01": SimpleNamespace(shape=(1,))},
+    }
+    descriptor = SimpleNamespace(
+        data_format=CoreDataset.TIME_PERIOD_ARRAYS,
+        time_period="2015",
+        load=lambda: nullcontext(arrays),
+    )
+    monkeypatch.setattr(CoreDataset, "from_file", lambda path: descriptor)
+    calls = []
+
+    def constructor(**kwargs):
+        calls.append(kwargs)
+        assert kwargs["dataset"] is descriptor
+        assert descriptor.time_period == "2017"
+        assert kwargs["default_input_period"] == "2017"
+        assert kwargs["default_calculation_period"] == "2017"
+        return expected
+
+    monkeypatch.setattr(policyengine_us, "Microsimulation", constructor)
+    sim = us_model.managed_microsimulation(
+        dataset=str(path), allow_unmanaged=True, native_input_period="2017"
+    )
+    assert len(calls) == 1
+    assert sim.policyengine_bundle["native_input_period"] == "2017"
+    assert list(arrays["annual_lookback_fixture"]) == ["2015"]
+    assert list(arrays["monthly_fixture"]) == ["2017-01"]
+
+
+@pytest.mark.parametrize(
+    "data_format, arrays, message",
+    [
+        ("arrays", {}, "TIME_PERIOD_ARRAYS"),
+        ("time_period_arrays", {}, "cannot be empty"),
+        ("time_period_arrays", {"fixture": {}}, "period arrays"),
+        (
+            "time_period_arrays",
+            {"fixture": {"2017": SimpleNamespace(shape=())}},
+            "must be a vector",
+        ),
+        (
+            "time_period_arrays",
+            {"fixture": {"year:2017:2": SimpleNamespace(shape=(1,))}},
+            "Unsupported native input period",
+        ),
+    ],
+)
+def test_native_descriptor_rejects_other_layouts(
+    monkeypatch, data_format, arrays, message
+):
+    from policyengine_core.data import Dataset as CoreDataset
+
+    descriptor = SimpleNamespace(
+        data_format=data_format, time_period="2015", load=lambda: nullcontext(arrays)
+    )
+    monkeypatch.setattr(CoreDataset, "from_file", lambda path: descriptor)
+    with pytest.raises(ValueError, match=message):
+        us_model._native_local_dataset(
+            SimpleNamespace(path="inert-fixture.bin"), "2017"
+        )
+    assert descriptor.time_period == "2015"

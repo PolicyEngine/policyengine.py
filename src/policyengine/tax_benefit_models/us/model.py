@@ -11,6 +11,7 @@ from policyengine.core.scoping_strategy import RowFilterStrategy
 from policyengine.provenance.dataset_materialization import (
     materialize_dataset,
 )
+from policyengine.provenance.manifest import get_release_manifest
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
@@ -596,15 +597,44 @@ def _unmanaged_local_runtime_provenance(source):
     return provenance
 
 
+def _native_local_dataset(source, native_input_period):
+    """Set a native descriptor's clock before country input migrations."""
+    from policyengine_core.data import Dataset as CoreDataset
+    from policyengine_core.periods import ETERNITY, MONTH, YEAR, period
+
+    descriptor = CoreDataset.from_file(source.path)
+    if descriptor.data_format != CoreDataset.TIME_PERIOD_ARRAYS:
+        raise ValueError("native_input_period requires TIME_PERIOD_ARRAYS data")
+    # Core infers the clock from the first field. Inspect the native structure
+    # without reading vector payloads, then replace that inference explicitly.
+    with descriptor.load() as arrays:
+        if len(arrays) == 0:
+            raise ValueError("Native input data cannot be empty")
+        for name, values in arrays.items():
+            if not hasattr(values, "keys") or len(values) == 0:
+                raise ValueError(f"Native input {name!r} must contain period arrays")
+            for key, vector in values.items():
+                declared = period(key)
+                if declared.unit not in (YEAR, MONTH, ETERNITY) or (
+                    declared.unit != ETERNITY and declared.size != 1
+                ):
+                    raise ValueError(f"Unsupported native input period {key!r}")
+                if not hasattr(vector, "shape") or len(vector.shape) != 1:
+                    raise ValueError(f"Native input {name!r}/{key} must be a vector")
+    descriptor.time_period = native_input_period
+    return descriptor
+
+
 def managed_microsimulation(
     *,
     dataset: Optional[str] = None,
     allow_unmanaged: bool = False,
     spm: Optional[SPMSelection] = None,
     scoping_strategy: Optional[RowFilterStrategy] = None,
+    native_input_period: Optional[str] = None,
     **kwargs,
 ):
-    """Construct a country-package Microsimulation pinned to this bundle.
+    """Construct a US microsimulation from managed or explicit local data.
 
     By default this enforces the dataset selection from the bundled
     ``policyengine.py`` release manifest. Arbitrary dataset URIs require
@@ -618,6 +648,11 @@ def managed_microsimulation(
     household cohort from every native projected year before financial
     calculations. This retains earlier supplied income for lookbacks. The
     unscoped constructor continues to own projection and reform timing.
+
+    ``native_input_period="2017"`` binds the input clock before the first
+    country constructor for an explicit local TIME_PERIOD_ARRAYS file. It
+    preserves each array's period and does not project or rescope the file.
+    The caller still selects the tax-benefit system and structural start date.
     """
 
     from policyengine_us import Microsimulation
@@ -627,6 +662,34 @@ def managed_microsimulation(
             "Pass `dataset=` directly to managed_microsimulation, not through "
             "**kwargs, so policyengine.py can enforce the release bundle."
         )
+
+    if native_input_period is not None:
+        if (
+            type(native_input_period) is not str
+            or len(native_input_period) != 4
+            or not native_input_period.isascii()
+            or not native_input_period.isdigit()
+            or not 1 <= int(native_input_period) <= 9999
+        ):
+            raise ValueError("native_input_period must be a four-digit annual period")
+        if (
+            not allow_unmanaged
+            or type(dataset) is not str
+            or "://" in dataset
+            or dataset in get_release_manifest("us").datasets
+            or not Path(dataset).expanduser().is_file()
+        ):
+            raise ValueError(
+                "native_input_period requires an explicit local unmanaged file"
+            )
+        if scoping_strategy is not None or "dataset_end_year" in kwargs:
+            raise ValueError(
+                "native_input_period cannot project or scope its input data"
+            )
+        for option in ("default_input_period", "default_calculation_period"):
+            if option in kwargs and kwargs[option] != native_input_period:
+                raise ValueError(f"{option} must match native_input_period")
+            kwargs[option] = native_input_period
 
     selection = resolve_spm_selection(spm)
     source = materialize_dataset(
@@ -659,7 +722,15 @@ def managed_microsimulation(
     local_provenance = (
         _unmanaged_local_runtime_provenance(source) if explicit_local else None
     )
-    microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
+    constructor_dataset = source.path
+    if native_input_period is not None:
+        if not explicit_local:
+            raise ValueError(
+                "native_input_period requires an explicit local unmanaged file"
+            )
+        constructor_dataset = _native_local_dataset(source, native_input_period)
+        local_provenance["native_input_period"] = native_input_period
+    microsim = Microsimulation(dataset=constructor_dataset, spm=selection, **kwargs)
     scoping_record = None
     if scoping_strategy is not None:
         import gc
@@ -694,7 +765,10 @@ def managed_microsimulation(
             update={"model_mode": mode}
         ).model_dump(mode="json")
     if explicit_local:
-        if _unmanaged_local_runtime_provenance(source) != local_provenance:
+        after_provenance = _unmanaged_local_runtime_provenance(source)
+        if native_input_period is not None:
+            after_provenance["native_input_period"] = native_input_period
+        if after_provenance != local_provenance:
             raise ValueError(
                 "Unmanaged local data or runtime changed during construction"
             )

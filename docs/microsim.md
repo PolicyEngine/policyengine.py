@@ -414,7 +414,7 @@ These run in seconds and are fine for integration tests. Don't use them for prod
 
 ## Managed microsimulation
 
-`managed_microsimulation` constructs a country-package `Microsimulation` pinned to the `policyengine.py` release bundle (so the dataset selection is certified, not ad-hoc):
+`managed_microsimulation()` selects the certified default dataset when callers omit `dataset`:
 
 ```python
 from policyengine.tax_benefit_models.us import managed_microsimulation
@@ -426,6 +426,22 @@ sim = managed_microsimulation()
 Pass `allow_unmanaged=True` with a custom `dataset=` to opt out of the release
 bundle. Explicit local paths and Hugging Face URIs remain supported in this
 mode. GCS dataset URIs are not supported.
+
+An explicit local US file records its SHA-256 and the installed wrapper, country,
+Core and SPM versions in `sim.policyengine_bundle`. Its `compatibility_basis`
+records `unverified_explicit_local_unmanaged`, and `certified_by` records `None`.
+Importing the US wrapper and constructing this local simulation do not certify
+the unused default dataset. Bundled and named data, year-file caches, managed
+simulation runs and cached output loads retain their certification checks.
+
+For a local TIME_PERIOD_ARRAYS file, pass `native_input_period="2017"` to set the
+Core Dataset descriptor's annual clock before the first country constructor.
+The wrapper preserves stored period keys, including monthly inputs and earlier
+lookbacks. This option requires `allow_unmanaged=True`, an existing local file
+and a four-digit annual period. It rejects scoping, `dataset_end_year` and
+conflicting default input or calculation periods. The caller still selects the
+tax-benefit system and structural start date; this keyword selects the input
+clock.
 
 A UK managed microsimulation also records, in
 `sim.policyengine_bundle["capital_gains_responses"]`, the capital gains
