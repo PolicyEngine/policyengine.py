@@ -130,6 +130,9 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
     entity_variables: dict[str, list[str]] = {}
     """Variables to materialise per entity when writing output datasets."""
 
+    defer_data_certification: ClassVar[bool] = False
+    """US may certify bundled data when selected; other countries stay eager."""
+
     # --- Construction ------------------------------------------------------
     def __init__(self, **kwargs: Any) -> None:
         if not self.country_code or not self.package_name:
@@ -161,14 +164,16 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
                 stacklevel=2,
             )
 
-        model_build_metadata = self._get_runtime_data_build_metadata()
-        data_certification = certify_data_release_compatibility(
-            self.country_code,
-            runtime_model_version=installed_model_version,
-            runtime_data_build_fingerprint=model_build_metadata.get(
-                "data_build_fingerprint"
-            ),
-        )
+        data_certification = None
+        if not self.defer_data_certification:
+            model_build_metadata = self._get_runtime_data_build_metadata()
+            data_certification = certify_data_release_compatibility(
+                self.country_code,
+                runtime_model_version=installed_model_version,
+                runtime_data_build_fingerprint=model_build_metadata.get(
+                    "data_build_fingerprint"
+                ),
+            )
 
         super().__init__(**kwargs)
         self.release_manifest = manifest
@@ -183,6 +188,23 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
         self._populate_entities(system)
         self._populate_variables(system)
         self._populate_parameters(system)
+
+    def require_data_certification(self):
+        """Certify the bundled data against the loaded runtime before using it."""
+        from policyengine.provenance.loaded import loaded_versions
+
+        installed = metadata.version(self.package_name)
+        loaded = loaded_versions().get(self.package_name)
+        if loaded is not None and loaded != installed:
+            raise ValueError("Installed country version changed after import")
+        build = self._get_runtime_data_build_metadata()
+        certification = certify_data_release_compatibility(
+            self.country_code,
+            runtime_model_version=installed,
+            runtime_data_build_fingerprint=build.get("data_build_fingerprint"),
+        )
+        self.data_certification = certification
+        return certification
 
     # --- Hooks ------------------------------------------------------------
     @classmethod

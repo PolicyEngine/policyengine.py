@@ -1,6 +1,7 @@
 import datetime
+from importlib import metadata
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -65,6 +66,7 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
     country_code = "us"
     package_name = "policyengine-us"
     group_entities = US_GROUP_ENTITIES
+    defer_data_certification: ClassVar[bool] = True
 
     model: TaxBenefitModel = us_model
     version: str = None
@@ -148,6 +150,9 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         return get_data_build_metadata() or {}
 
     def _load_system(self):
+        from policyengine.provenance.loaded import record_loaded_versions
+
+        record_loaded_versions(("spm-calculator",))
         from policyengine_us.system import system
 
         return system
@@ -161,8 +166,20 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
     def _dataset_class(self):
         return PolicyEngineUSDataset
 
+    @property
+    def release_bundle(self):
+        # A bundle receipt must never borrow the configured certificate when
+        # this runtime has not been checked against its bundled data.
+        self.require_data_certification()
+        return super().release_bundle
+
+    def load(self, simulation):
+        self.require_data_certification()
+        return super().load(simulation)
+
     # --- run -------------------------------------------------------------
     def run(self, simulation: "Simulation") -> "Simulation":
+        self.require_data_certification()
         from policyengine_us import Microsimulation
 
         from policyengine.utils.parametric_reforms import (
@@ -553,6 +570,32 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         return apply_legacy_input_renames(microsim, {dataset.year: stored_tables})
 
 
+def _unmanaged_local_runtime_provenance(source):
+    """Bind local data and actual runtime; assert no bundle certification."""
+    from policyengine.provenance.loaded import loaded_versions
+    from policyengine.utils.hashing import sha256_file
+
+    names = ("policyengine", "policyengine-us", "policyengine-core", "spm-calculator")
+    versions = {name: metadata.version(name) for name in names}
+    loaded = loaded_versions()
+    if any(
+        name in loaded and loaded[name] != version for name, version in versions.items()
+    ):
+        raise ValueError("Installed runtime changed after import")
+    provenance = build_runtime_dataset_provenance(source.source_uri, source.path, None)
+    provenance.update(
+        data_selection="explicit_local_unmanaged",
+        compatibility_basis="unverified_explicit_local_unmanaged",
+        certified_by=None,
+        model_package="policyengine-us",
+        model_version=versions["policyengine-us"],
+        policyengine_version=versions["policyengine"],
+        runtime_packages=versions,
+        runtime_dataset_sha256=sha256_file(Path(source.path)),
+    )
+    return provenance
+
+
 def managed_microsimulation(
     *,
     dataset: Optional[str] = None,
@@ -606,6 +649,16 @@ def managed_microsimulation(
                 "Managed scoping does not support legacy SPM declarations."
             )
 
+    explicit_local = (
+        allow_unmanaged
+        and dataset is not None
+        and source.bundle_dataset is None
+        and "://" not in source.source_uri
+        and Path(source.path).is_file()
+    )
+    local_provenance = (
+        _unmanaged_local_runtime_provenance(source) if explicit_local else None
+    )
     microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
     scoping_record = None
     if scoping_strategy is not None:
@@ -640,14 +693,19 @@ def managed_microsimulation(
         legacy_spm_record = declarations.record.model_copy(
             update={"model_mode": mode}
         ).model_dump(mode="json")
-    microsim.policyengine_bundle = dict(us_latest.release_bundle)
-    microsim.policyengine_bundle.update(
-        build_runtime_dataset_provenance(
-            source.source_uri,
-            source.path,
-            source.bundle_dataset,
+    if explicit_local:
+        if _unmanaged_local_runtime_provenance(source) != local_provenance:
+            raise ValueError(
+                "Unmanaged local data or runtime changed during construction"
+            )
+        microsim.policyengine_bundle = local_provenance
+    else:
+        microsim.policyengine_bundle = dict(us_latest.release_bundle)
+        microsim.policyengine_bundle.update(
+            build_runtime_dataset_provenance(
+                source.source_uri, source.path, source.bundle_dataset
+            )
         )
-    )
     microsim.policyengine_bundle["spm"] = dict(microsim.spm_config)
     microsim.policyengine_bundle[RENAMES_RECORD_KEY] = dict(
         sorted(legacy_input_renames.items())
