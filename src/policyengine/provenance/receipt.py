@@ -4440,17 +4440,19 @@ def build_execution_receipt_for_microsimulation(
     outputs: Optional[Any] = None,
     **kwargs: Any,
 ) -> ExecutionReceipt:
-    """Receipt for a country Microsimulation built by ``managed_microsimulation``.
+    """Build a schema-v1 execution receipt for a managed UK Microsimulation.
 
-    Reads the dataset that was loaded from ``microsimulation.policyengine_bundle``.
-    The bytes on disk must still be the bytes verified when it was loaded
-    (``runtime_dataset_sha256``), and the receipt must name the dataset,
-    artifact URI, revision and package recorded at load time; otherwise the
-    receipt would describe a file that did not run, so it is refused. A
-    simulation loaded from an unmanaged file or URI recorded no load-time
-    hash and cannot be receipted. ``reform`` and ``baseline`` must describe
-    what the microsimulation was built with (``scenario_reform_identity`` or
-    ``reform_identity``); the microsimulation itself does not record them.
+    Read the dataset from ``microsimulation.policyengine_bundle``. Require
+    its current bytes to match the load-time ``runtime_dataset_sha256``.
+    The receipt must name the dataset, artifact URI, revision and package
+    from that load; otherwise it would describe a file that did not run.
+
+    Unmanaged UK file or URI loads record no load-time hash and cannot supply
+    this receipt. Explicit local US loads record a hash and unverified
+    provenance, but schema v1 still refuses US results. ``reform`` and
+    ``baseline`` must describe the microsimulation's construction
+    (``scenario_reform_identity`` or ``reform_identity``); the microsimulation
+    itself does not record them.
     """
 
     bundle_fields = getattr(microsimulation, "policyengine_bundle", None)

@@ -947,7 +947,7 @@ class TestReleaseManifests:
         assert certification.certified_for_model_version == "1.602.0"
         assert certification.certified_by == US_CERTIFICATION_SOURCE
 
-    def test__given_offline_hf__then_us_import_uses_bundled_certification(
+    def test__given_offline_hf__then_us_import_defers_until_certification(
         self,
         tmp_path,
     ):
@@ -979,6 +979,8 @@ class TestReleaseManifests:
                 "-c",
                 (
                     "import policyengine.tax_benefit_models.us as us; "
+                    "assert us.model.data_certification is None; "
+                    "us.model.require_data_certification(); "
                     "print(us.model.data_certification.certified_by)"
                 ),
             ],

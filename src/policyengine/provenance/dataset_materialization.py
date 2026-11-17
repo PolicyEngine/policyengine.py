@@ -152,6 +152,13 @@ def _resolve_bundle_dataset(
     )
 
 
+def _require_us_data_certification():
+    """US data entrypoints call this before selecting any bundled data."""
+    from policyengine.tax_benefit_models.us.model import us_latest
+
+    return us_latest.require_data_certification()
+
+
 def materialize_dataset(
     country_id: str,
     dataset: Optional[str] = None,
@@ -183,6 +190,8 @@ def materialize_dataset(
         allow_unmanaged=allow_unmanaged,
     )
     if source_uri.startswith("hf://"):
+        if country_id == "us":
+            _require_us_data_certification()
         return _download_hugging_face_dataset(source_uri, data_dir=data_dir)
     if "://" in source_uri:
         raise DatasetMaterializationError(
@@ -198,6 +207,8 @@ def _use_bundle_dataset(
     data_dir: Path,
     manifest: CountryReleaseManifest,
 ) -> DatasetSource:
+    if country_id == "us":
+        _require_us_data_certification()
     bundle_dataset = _reuse_or_download_bundle_files(
         _resolve_bundle_dataset(
             country_id,

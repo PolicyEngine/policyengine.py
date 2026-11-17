@@ -1,6 +1,7 @@
 import datetime
+from importlib import metadata
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional
 
 import pandas as pd
 from microdf import MicroDataFrame
@@ -10,6 +11,7 @@ from policyengine.core.scoping_strategy import RowFilterStrategy
 from policyengine.provenance.dataset_materialization import (
     materialize_dataset,
 )
+from policyengine.provenance.manifest import get_release_manifest
 from policyengine.tax_benefit_models.common import MicrosimulationModelVersion
 from policyengine.tax_benefit_models.common.model_version import (
     build_runtime_dataset_provenance,
@@ -62,9 +64,16 @@ us_model = PolicyEngineUS()
 
 
 class PolicyEngineUSLatest(MicrosimulationModelVersion):
+    """US runtime metadata with certification deferred until selected.
+
+    ``data_certification`` stays unset at import. Certified operations validate
+    the current runtime before exposing bundle provenance or using bundled data.
+    """
+
     country_code = "us"
     package_name = "policyengine-us"
     group_entities = US_GROUP_ENTITIES
+    defer_data_certification: ClassVar[bool] = True
 
     model: TaxBenefitModel = us_model
     version: str = None
@@ -136,6 +145,12 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         ],
     }
 
+    @property
+    def trace_tro(self) -> dict:
+        """Export bundle provenance only after current runtime certification."""
+        self.require_data_certification()
+        return super().trace_tro
+
     # --- Hooks -----------------------------------------------------------
     @classmethod
     def _get_runtime_data_build_metadata(cls) -> dict[str, Optional[str]]:
@@ -148,6 +163,9 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         return get_data_build_metadata() or {}
 
     def _load_system(self):
+        from policyengine.provenance.loaded import record_loaded_versions
+
+        record_loaded_versions(("spm-calculator",))
         from policyengine_us.system import system
 
         return system
@@ -161,8 +179,20 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
     def _dataset_class(self):
         return PolicyEngineUSDataset
 
+    @property
+    def release_bundle(self):
+        # A bundle receipt must never borrow the configured certificate when
+        # this runtime has not been checked against its bundled data.
+        self.require_data_certification()
+        return super().release_bundle
+
+    def load(self, simulation):
+        self.require_data_certification()
+        return super().load(simulation)
+
     # --- run -------------------------------------------------------------
     def run(self, simulation: "Simulation") -> "Simulation":
+        self.require_data_certification()
         from policyengine_us import Microsimulation
 
         from policyengine.utils.parametric_reforms import (
@@ -553,15 +583,76 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
         return apply_legacy_input_renames(microsim, {dataset.year: stored_tables})
 
 
+def _unmanaged_local_runtime_provenance(source):
+    """Bind local data and actual runtime; assert no bundle certification."""
+    from policyengine.provenance.loaded import loaded_versions
+    from policyengine.utils.hashing import sha256_file
+
+    names = ("policyengine", "policyengine-us", "policyengine-core", "spm-calculator")
+    versions = {name: metadata.version(name) for name in names}
+    loaded = loaded_versions()
+    if any(
+        name in loaded and loaded[name] != version for name, version in versions.items()
+    ):
+        raise ValueError("Installed runtime changed after import")
+    provenance = build_runtime_dataset_provenance(source.source_uri, source.path, None)
+    provenance.update(
+        data_selection="explicit_local_unmanaged",
+        compatibility_basis="unverified_explicit_local_unmanaged",
+        certified_by=None,
+        model_package="policyengine-us",
+        model_version=versions["policyengine-us"],
+        policyengine_version=versions["policyengine"],
+        runtime_packages=versions,
+        runtime_dataset_sha256=sha256_file(Path(source.path)),
+    )
+    return provenance
+
+
+def _native_local_dataset(source, native_input_period):
+    """Set a native descriptor's clock before country input migrations."""
+    from policyengine_core.data import Dataset as CoreDataset
+    from policyengine_core.periods import ETERNITY, MONTH, YEAR, period
+
+    if Path(source.path).suffix != ".h5":
+        raise ValueError("native_input_period requires a .h5 TIME_PERIOD_ARRAYS file")
+    try:
+        descriptor = CoreDataset.from_file(source.path)
+    except IndexError as error:
+        # Core probes the first H5 root key before returning a descriptor.
+        raise ValueError("Native input data cannot be empty") from error
+    if descriptor.data_format != CoreDataset.TIME_PERIOD_ARRAYS:
+        raise ValueError("native_input_period requires TIME_PERIOD_ARRAYS data")
+    # Core infers the clock from the first field. Inspect the native structure
+    # without reading vector payloads, then replace that inference explicitly.
+    with descriptor.load() as arrays:
+        if len(arrays) == 0:
+            raise ValueError("Native input data cannot be empty")
+        for name, values in arrays.items():
+            if not hasattr(values, "keys") or len(values) == 0:
+                raise ValueError(f"Native input {name!r} must contain period arrays")
+            for key, vector in values.items():
+                declared = period(key)
+                if declared.unit not in (YEAR, MONTH, ETERNITY) or (
+                    declared.unit != ETERNITY and declared.size != 1
+                ):
+                    raise ValueError(f"Unsupported native input period {key!r}")
+                if not hasattr(vector, "shape") or len(vector.shape) != 1:
+                    raise ValueError(f"Native input {name!r}/{key} must be a vector")
+    descriptor.time_period = native_input_period
+    return descriptor
+
+
 def managed_microsimulation(
     *,
     dataset: Optional[str] = None,
     allow_unmanaged: bool = False,
     spm: Optional[SPMSelection] = None,
     scoping_strategy: Optional[RowFilterStrategy] = None,
+    native_input_period: Optional[str] = None,
     **kwargs,
 ):
-    """Construct a country-package Microsimulation pinned to this bundle.
+    """Construct a US microsimulation from managed or explicit local data.
 
     By default this enforces the dataset selection from the bundled
     ``policyengine.py`` release manifest. Arbitrary dataset URIs require
@@ -575,6 +666,12 @@ def managed_microsimulation(
     household cohort from every native projected year before financial
     calculations. This retains earlier supplied income for lookbacks. The
     unscoped constructor continues to own projection and reform timing.
+
+    ``native_input_period="2017"`` binds both input and calculation defaults
+    before the first country constructor for an explicit local ``.h5``
+    TIME_PERIOD_ARRAYS file. It preserves each array's period and does not
+    project or rescope the file.
+    The caller still selects the tax-benefit system and structural start date.
     """
 
     from policyengine_us import Microsimulation
@@ -584,6 +681,34 @@ def managed_microsimulation(
             "Pass `dataset=` directly to managed_microsimulation, not through "
             "**kwargs, so policyengine.py can enforce the release bundle."
         )
+
+    if native_input_period is not None:
+        if (
+            type(native_input_period) is not str
+            or len(native_input_period) != 4
+            or not native_input_period.isascii()
+            or not native_input_period.isdigit()
+            or not 1 <= int(native_input_period) <= 9999
+        ):
+            raise ValueError("native_input_period must be a four-digit annual period")
+        if (
+            not allow_unmanaged
+            or type(dataset) is not str
+            or "://" in dataset
+            or dataset in get_release_manifest("us").datasets
+            or not Path(dataset).expanduser().is_file()
+        ):
+            raise ValueError(
+                "native_input_period requires an explicit local unmanaged file"
+            )
+        if scoping_strategy is not None or "dataset_end_year" in kwargs:
+            raise ValueError(
+                "native_input_period cannot project or scope its input data"
+            )
+        for option in ("default_input_period", "default_calculation_period"):
+            if option in kwargs and kwargs[option] != native_input_period:
+                raise ValueError(f"{option} must match native_input_period")
+            kwargs[option] = native_input_period
 
     selection = resolve_spm_selection(spm)
     source = materialize_dataset(
@@ -606,7 +731,25 @@ def managed_microsimulation(
                 "Managed scoping does not support legacy SPM declarations."
             )
 
-    microsim = Microsimulation(dataset=source.path, spm=selection, **kwargs)
+    explicit_local = (
+        allow_unmanaged
+        and dataset is not None
+        and source.bundle_dataset is None
+        and "://" not in source.source_uri
+        and Path(source.path).is_file()
+    )
+    local_provenance = (
+        _unmanaged_local_runtime_provenance(source) if explicit_local else None
+    )
+    constructor_dataset = source.path
+    if native_input_period is not None:
+        if not explicit_local:
+            raise ValueError(
+                "native_input_period requires an explicit local unmanaged file"
+            )
+        constructor_dataset = _native_local_dataset(source, native_input_period)
+        local_provenance["native_input_period"] = native_input_period
+    microsim = Microsimulation(dataset=constructor_dataset, spm=selection, **kwargs)
     scoping_record = None
     if scoping_strategy is not None:
         import gc
@@ -640,14 +783,22 @@ def managed_microsimulation(
         legacy_spm_record = declarations.record.model_copy(
             update={"model_mode": mode}
         ).model_dump(mode="json")
-    microsim.policyengine_bundle = dict(us_latest.release_bundle)
-    microsim.policyengine_bundle.update(
-        build_runtime_dataset_provenance(
-            source.source_uri,
-            source.path,
-            source.bundle_dataset,
+    if explicit_local:
+        after_provenance = _unmanaged_local_runtime_provenance(source)
+        if native_input_period is not None:
+            after_provenance["native_input_period"] = native_input_period
+        if after_provenance != local_provenance:
+            raise ValueError(
+                "Unmanaged local data or runtime changed during construction"
+            )
+        microsim.policyengine_bundle = local_provenance
+    else:
+        microsim.policyengine_bundle = dict(us_latest.release_bundle)
+        microsim.policyengine_bundle.update(
+            build_runtime_dataset_provenance(
+                source.source_uri, source.path, source.bundle_dataset
+            )
         )
-    )
     microsim.policyengine_bundle["spm"] = dict(microsim.spm_config)
     microsim.policyengine_bundle[RENAMES_RECORD_KEY] = dict(
         sorted(legacy_input_renames.items())
