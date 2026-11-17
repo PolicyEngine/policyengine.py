@@ -321,3 +321,80 @@ def test_native_descriptor_rejects_other_layouts(
             SimpleNamespace(path="inert-fixture.bin"), "2017"
         )
     assert descriptor.time_period == "2015"
+
+
+@pytest.mark.parametrize("cached_certification", [None, "old_test_certificate"])
+def test_trace_export_requires_current_certification_before_builder(
+    monkeypatch, cached_certification
+):
+    """A cached or absent certificate cannot substitute for runtime validation."""
+    from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+
+    model = us_model.PolicyEngineUSLatest.model_construct(
+        data_certification=cached_certification
+    )
+    calls = []
+
+    def refuse(self):
+        calls.append("certification")
+        raise ValueError("test incompatible current runtime")
+
+    def unexpected_builder(self):
+        pytest.fail("An uncertified export reached the bundle TRACE builder")
+
+    monkeypatch.setattr(
+        us_model.PolicyEngineUSLatest, "require_data_certification", refuse
+    )
+    monkeypatch.setattr(
+        TaxBenefitModelVersion, "trace_tro", property(unexpected_builder)
+    )
+    with pytest.raises(ValueError, match="incompatible current runtime"):
+        _ = model.trace_tro
+    assert calls == ["certification"]
+
+
+def test_trace_export_uses_newly_validated_certificate(monkeypatch):
+    """The builder receives the fresh synthetic certificate, not manifest fallback."""
+    from policyengine.core.tax_benefit_model_version import TaxBenefitModelVersion
+
+    model = us_model.PolicyEngineUSLatest.model_construct(data_certification=None)
+    fresh_test_certificate = object()
+    calls = []
+
+    def certify(self):
+        calls.append("certification")
+        self.data_certification = fresh_test_certificate
+        return fresh_test_certificate
+
+    def builder(self):
+        calls.append("TRACE")
+        assert self.data_certification is fresh_test_certificate
+        return {"synthetic_fixture_only": True}
+
+    monkeypatch.setattr(
+        us_model.PolicyEngineUSLatest, "require_data_certification", certify
+    )
+    monkeypatch.setattr(TaxBenefitModelVersion, "trace_tro", property(builder))
+    assert model.trace_tro == {"synthetic_fixture_only": True}
+    assert calls == ["certification", "TRACE"]
+
+
+def test_automatic_run_record_fallback_refuses_before_output_write(
+    monkeypatch, tmp_path
+):
+    """Automatic provenance lookup propagates refusal before recording anything."""
+    from policyengine.core.run_record import write_simulation_run_record
+
+    model = us_model.PolicyEngineUSLatest.model_construct(data_certification=None)
+
+    def refuse(self):
+        raise ValueError("test incompatible current runtime")
+
+    monkeypatch.setattr(
+        us_model.PolicyEngineUSLatest, "require_data_certification", refuse
+    )
+    output = tmp_path / "must-not-be-created"
+    simulation = SimpleNamespace(tax_benefit_model_version=model)
+    with pytest.raises(ValueError, match="incompatible current runtime"):
+        write_simulation_run_record(simulation, output)
+    assert not output.exists()

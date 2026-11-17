@@ -64,6 +64,12 @@ us_model = PolicyEngineUS()
 
 
 class PolicyEngineUSLatest(MicrosimulationModelVersion):
+    """US runtime metadata with certification deferred until selected.
+
+    ``data_certification`` stays unset at import. Certified operations validate
+    the current runtime before exposing bundle provenance or using bundled data.
+    """
+
     country_code = "us"
     package_name = "policyengine-us"
     group_entities = US_GROUP_ENTITIES
@@ -138,6 +144,12 @@ class PolicyEngineUSLatest(MicrosimulationModelVersion):
             "congressional_district_geoid",
         ],
     }
+
+    @property
+    def trace_tro(self) -> dict:
+        """Export bundle provenance only after current runtime certification."""
+        self.require_data_certification()
+        return super().trace_tro
 
     # --- Hooks -----------------------------------------------------------
     @classmethod
