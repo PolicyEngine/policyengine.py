@@ -434,14 +434,14 @@ Importing the US wrapper and constructing this local simulation do not certify
 the unused default dataset. Bundled and named data, year-file caches, managed
 simulation runs and cached output loads retain their certification checks.
 
-For a local TIME_PERIOD_ARRAYS file, pass `native_input_period="2017"` to set the
-Core Dataset descriptor's annual clock before the first country constructor.
-The wrapper preserves stored period keys, including monthly inputs and earlier
-lookbacks. This option requires `allow_unmanaged=True`, an existing local file
+For a local `.h5` TIME_PERIOD_ARRAYS file, pass `native_input_period="2017"` to
+set the Core Dataset descriptor's annual clock and both default input and
+calculation periods before the first country constructor. The wrapper preserves
+stored period keys, including monthly inputs and earlier lookbacks. This option
+requires `allow_unmanaged=True`, an existing nonempty file with the `.h5` suffix
 and a four-digit annual period. It rejects scoping, `dataset_end_year` and
 conflicting default input or calculation periods. The caller still selects the
-tax-benefit system and structural start date; this keyword selects the input
-clock.
+tax-benefit system and structural start date.
 
 A UK managed microsimulation also records, in
 `sim.policyengine_bundle["capital_gains_responses"]`, the capital gains
