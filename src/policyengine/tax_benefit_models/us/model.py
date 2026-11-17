@@ -614,7 +614,13 @@ def _native_local_dataset(source, native_input_period):
     from policyengine_core.data import Dataset as CoreDataset
     from policyengine_core.periods import ETERNITY, MONTH, YEAR, period
 
-    descriptor = CoreDataset.from_file(source.path)
+    if Path(source.path).suffix != ".h5":
+        raise ValueError("native_input_period requires a .h5 TIME_PERIOD_ARRAYS file")
+    try:
+        descriptor = CoreDataset.from_file(source.path)
+    except IndexError as error:
+        # Core probes the first H5 root key before returning a descriptor.
+        raise ValueError("Native input data cannot be empty") from error
     if descriptor.data_format != CoreDataset.TIME_PERIOD_ARRAYS:
         raise ValueError("native_input_period requires TIME_PERIOD_ARRAYS data")
     # Core infers the clock from the first field. Inspect the native structure
@@ -661,9 +667,10 @@ def managed_microsimulation(
     calculations. This retains earlier supplied income for lookbacks. The
     unscoped constructor continues to own projection and reform timing.
 
-    ``native_input_period="2017"`` binds the input clock before the first
-    country constructor for an explicit local TIME_PERIOD_ARRAYS file. It
-    preserves each array's period and does not project or rescope the file.
+    ``native_input_period="2017"`` binds both input and calculation defaults
+    before the first country constructor for an explicit local ``.h5``
+    TIME_PERIOD_ARRAYS file. It preserves each array's period and does not
+    project or rescope the file.
     The caller still selects the tax-benefit system and structural start date.
     """
 

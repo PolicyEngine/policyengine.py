@@ -129,11 +129,11 @@ def test_uk_initialization_keeps_eager_certification(monkeypatch):
         uk_model.PolicyEngineUKLatest()
 
 
-def local_factory_fixture(monkeypatch, tmp_path, *, mutate=False):
+def local_factory_fixture(monkeypatch, tmp_path, *, mutate=False, suffix=".bin"):
     """Return an explicit local source and a constructor that never loads it."""
     import policyengine_us
 
-    path = tmp_path / "inert-local-fixture.bin"
+    path = tmp_path / f"inert-local-fixture{suffix}"
     path.write_bytes(b"test source plumbing only")
     sim = SimpleNamespace(spm_config={})
 
@@ -258,7 +258,7 @@ def test_native_descriptor_reaches_first_constructor_with_declared_clock(
     import policyengine_us
     from policyengine_core.data import Dataset as CoreDataset
 
-    path, expected = local_factory_fixture(monkeypatch, tmp_path)
+    path, expected = local_factory_fixture(monkeypatch, tmp_path, suffix=".h5")
     arrays = {
         "annual_lookback_fixture": {"2015": SimpleNamespace(shape=(1,))},
         "monthly_fixture": {"2017-01": SimpleNamespace(shape=(1,))},
@@ -317,9 +317,7 @@ def test_native_descriptor_rejects_other_layouts(
     )
     monkeypatch.setattr(CoreDataset, "from_file", lambda path: descriptor)
     with pytest.raises(ValueError, match=message):
-        us_model._native_local_dataset(
-            SimpleNamespace(path="inert-fixture.bin"), "2017"
-        )
+        us_model._native_local_dataset(SimpleNamespace(path="inert-fixture.h5"), "2017")
     assert descriptor.time_period == "2015"
 
 
@@ -398,3 +396,47 @@ def test_automatic_run_record_fallback_refuses_before_output_write(
     with pytest.raises(ValueError, match="incompatible current runtime"):
         write_simulation_run_record(simulation, output)
     assert not output.exists()
+
+
+def test_native_descriptor_requires_h5_suffix_before_core_file_open(monkeypatch):
+    from policyengine_core.data import Dataset as CoreDataset
+
+    def unexpected_open(path):
+        pytest.fail("A non-H5 native path reached the Core file loader")
+
+    monkeypatch.setattr(CoreDataset, "from_file", unexpected_open)
+    with pytest.raises(ValueError, match=r"requires a \.h5 TIME_PERIOD_ARRAYS file"):
+        us_model._native_local_dataset(
+            SimpleNamespace(path="inert-fixture.bin"), "2017"
+        )
+
+
+def test_native_descriptor_translates_empty_h5_root_refusal(monkeypatch):
+    from policyengine_core.data import Dataset as CoreDataset
+
+    original = IndexError("list index out of range")
+    calls = []
+
+    def empty_root(path):
+        calls.append(path)
+        raise original
+
+    monkeypatch.setattr(CoreDataset, "from_file", empty_root)
+    with pytest.raises(ValueError, match="cannot be empty") as caught:
+        us_model._native_local_dataset(SimpleNamespace(path="inert-fixture.h5"), "2017")
+    assert calls == ["inert-fixture.h5"]
+    assert caught.value.__cause__ is original
+
+
+def test_native_descriptor_preserves_unrelated_core_io_failure(monkeypatch):
+    from policyengine_core.data import Dataset as CoreDataset
+
+    original = OSError("inert non-HDF5 fixture")
+
+    def io_failure(path):
+        raise original
+
+    monkeypatch.setattr(CoreDataset, "from_file", io_failure)
+    with pytest.raises(OSError) as caught:
+        us_model._native_local_dataset(SimpleNamespace(path="inert-fixture.h5"), "2017")
+    assert caught.value is original
