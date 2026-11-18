@@ -199,7 +199,7 @@ python scripts/bundle.py certify-data --country us \
 US Microcosm certification uses the Microcosm release manifest directly:
 
 ```bash
-python scripts/bundle.py certify-data --country us --data-producer populace \
+python scripts/bundle.py certify-data --country us --data-producer microcosm \
   --manifest-uri "hf://dataset/policyengine/populace-us@<tag>/releases/<tag>/release_manifest.json" \
   --regional-manifest-uri "hf://dataset/policyengine/populace-us@<local-area-tag>/releases/<local-area-tag>/release_manifest.json" \
   --model-version "<policyengine-us-version>"

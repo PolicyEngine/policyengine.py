@@ -17,7 +17,7 @@ exact pair.
 
     result = certify_data_release(
         country="uk",
-        data_producer="populace",
+        data_producer="microcosm",
         manifest_uri=(
             "hf://dataset/policyengine/populace-uk-private"
             "@microcosm-uk-2024-25-national-20261002T230158Z-5c6b3f68"
@@ -216,6 +216,10 @@ class CertificationResult:
     model_version: str
     warnings: list[str] = field(default_factory=list)
 
+    @property
+    def display_data_producer(self) -> str:
+        return "microcosm" if self.data_producer == "populace" else self.data_producer
+
     def summary(self) -> str:
         lines = [
             f"certified {self.country}: {self.default_dataset} "
@@ -223,7 +227,7 @@ class CertificationResult:
             f"  manifest: {self.manifest_uri}",
             f"  manifest sha256: {self.manifest_sha256}",
             f"  model: {self.model_package}=={self.model_version}",
-            f"  data-producer: {self.data_producer}",
+            f"  data-producer: {self.display_data_producer}",
             f"  wrote: {self.bundle_path}",
         ]
         for warning in self.warnings:
@@ -1769,8 +1773,8 @@ PopulaceDataProducerCertificationStrategy = (  # compat: populace alias, remove 
 def certification_strategy(
     country: str, data_producer: Optional[str] = None
 ) -> DataProducerCertificationStrategy:
-    producer = data_producer or ("populace" if country == "uk" else "legacy")
-    if producer == "populace":
+    producer = data_producer or ("microcosm" if country == "uk" else "legacy")
+    if producer in ("microcosm", "populace"):
         return MicrocosmDataProducerCertificationStrategy()
     if producer == "legacy":
         return LegacyDataProducerCertificationStrategy()

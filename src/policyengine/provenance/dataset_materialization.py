@@ -123,7 +123,9 @@ def _resolve_bundle_dataset(
     manifest: Optional[CountryReleaseManifest] = None,
 ) -> _BundleDatasetSpec:
     country_manifest = manifest or get_release_manifest(country_id)
-    dataset_name = dataset or country_manifest.default_dataset
+    dataset_name = country_manifest.bundled_dataset_key(
+        dataset or country_manifest.default_dataset
+    )
     reference = country_manifest.datasets.get(dataset_name)
     if reference is None:
         raise DatasetMaterializationError(
@@ -169,7 +171,7 @@ def materialize_dataset(
             data_dir=data_dir,
             manifest=manifest,
         )
-    if dataset in manifest.datasets:
+    if manifest.bundled_dataset_key(dataset) in manifest.datasets:
         return _use_bundle_dataset(
             country_id,
             dataset,

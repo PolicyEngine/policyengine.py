@@ -630,8 +630,9 @@ class TestMergeUSLocalAreaReleaseManifest:
 
 
 class TestCertifyDataRelease:
+    @pytest.mark.parametrize("data_producer", ["microcosm", "populace"])
     def test__given_fetched_microcosm_manifest__then_updates_bundle_manifest(
-        self, tmp_path
+        self, tmp_path, data_producer
     ):
         bundle_path = tmp_path / "manifest.json"
         bundle_path.write_text(json.dumps(_bundle_source_payload()) + "\n")
@@ -667,7 +668,7 @@ class TestCertifyDataRelease:
         ):
             result = certify_data_release(
                 country="uk",
-                data_producer="populace",
+                data_producer=data_producer,
                 manifest_uri=UK_MANIFEST_URI,
                 model_version="2.89.2",
                 bundle_path=bundle_path,
@@ -682,6 +683,7 @@ class TestCertifyDataRelease:
         assert release["source_manifest_uri"] == UK_MANIFEST_URI
         assert written["packages"]["policyengine-uk"]["version"] == "2.89.2"
         assert result.data_producer == "populace"
+        assert "data-producer: microcosm" in result.summary()
         assert result.dataset_count == 3
         assert result.build_id == UK_TAG
         assert result.bundle_path == bundle_path
@@ -771,8 +773,9 @@ class TestCertifyDataRelease:
                 bundle_path=bundle_path,
             )
 
+    @pytest.mark.parametrize("producer", ["populace", "microcosm"])
     def test__given_bundle_wrapper_regional_args__then_forwards_to_certifier(
-        self, monkeypatch
+        self, monkeypatch, producer
     ):
         bundle_script = _load_bundle_script(monkeypatch)
         captured: dict[str, list[str]] = {}
@@ -791,7 +794,7 @@ class TestCertifyDataRelease:
                 "--country",
                 "us",
                 "--data-producer",
-                "populace",
+                producer,
                 "--manifest-uri",
                 MANIFEST_URI,
                 "--regional-manifest-uri",
@@ -814,7 +817,7 @@ class TestCertifyDataRelease:
             "--manifest-uri",
             MANIFEST_URI,
             "--data-producer",
-            "populace",
+            producer,
             "--model-version",
             "1.723.0",
             "--regional-manifest-uri",
@@ -1634,8 +1637,9 @@ class TestUKRegionalCertification:
             == "regional-audit.json"
         )
 
+    @pytest.mark.parametrize("data_producer", ["microcosm", "populace"])
     def test__given_bundle_wrapper_empty_reason__then_certifier_refuses_it(
-        self, monkeypatch, tmp_path, capsys
+        self, monkeypatch, tmp_path, capsys, data_producer
     ):
         bundle_script = _load_bundle_script(monkeypatch)
         spec = importlib.util.spec_from_file_location(
@@ -1673,6 +1677,8 @@ class TestUKRegionalCertification:
                     "certify-data",
                     "--country",
                     "uk",
+                    "--data-producer",
+                    data_producer,
                     "--manifest-uri",
                     UK_NATIONAL_URI,
                     "--model-version",
@@ -1691,6 +1697,7 @@ class TestUKRegionalCertification:
         assert isinstance(error.value.__context__, CertificationError)
         assert "needs a reason" in str(error.value.__context__)
         assert capsys.readouterr().out == ""
+        assert captured["data_producer"] == data_producer
         assert captured["regional_model_mismatch_reason"] == ""
         assert bundle_path.read_bytes() == original_bundle
 

@@ -7,7 +7,7 @@ changelog fragment.
 
 Usage::
 
-    python scripts/bundle.py certify-data --country uk --data-producer populace \\
+    python scripts/bundle.py certify-data --country uk --data-producer microcosm \\
         --manifest-uri "hf://dataset/policyengine/populace-uk-private@<cut-tag>/releases/<release-id>/release_manifest.json"
 
 Pin the cut tag, never a branch: each cut rewrites ``releases/<release-id>/``.
@@ -47,8 +47,11 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--data-producer",
         default=None,
-        choices=["legacy", "populace"],
-        help="Data-producer strategy. Defaults to populace for UK, legacy otherwise.",
+        choices=["legacy", "microcosm", "populace"],
+        help=(
+            "Data-producer strategy. Defaults to microcosm for UK, legacy otherwise. "
+            "The previous name populace remains accepted."
+        ),
     )
     parser.add_argument(
         "--manifest-uri",
@@ -189,7 +192,7 @@ def main(argv=None) -> int:
             / f"certify-{args.country}-{result.build_id or 'data'}.changed.md"
         )
         fragment.write_text(
-            f"Certify the {args.country.upper()} {result.data_producer} "
+            f"Certify the {args.country.upper()} {result.display_data_producer} "
             f"data release `{result.build_id}` ({result.default_dataset}, "
             f"{result.model_package} {result.model_version}) into the "
             "PolicyEngine bundle manifest.\n"

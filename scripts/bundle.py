@@ -198,7 +198,7 @@ def _parser() -> argparse.ArgumentParser:
     certify.add_argument("--country", required=True, choices=["us", "uk"])
     certify.add_argument(
         "--data-producer",
-        choices=["legacy", "populace"],
+        choices=["legacy", "microcosm", "populace"],
         help="Data-producer strategy. Defaults to the certification script default.",
     )
     certify.add_argument(
