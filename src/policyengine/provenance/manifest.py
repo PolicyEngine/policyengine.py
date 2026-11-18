@@ -27,6 +27,14 @@ HF_REQUEST_TIMEOUT_SECONDS = 30
 PYPI_REQUEST_TIMEOUT_SECONDS = 30
 # Producer paths for these artifacts are relative to the release directory.
 RELEASE_SCOPED_ARTIFACT_KINDS = frozenset({"diagnostics", "evidence"})
+# Public selectors and their counterpart keys in earlier and newer bundles.
+# This index is for lookup only. The manifest records the actual artifact key.
+US_MICROCOSM_DATASET_ALIASES = {
+    "microcosm_us_2024": "populace_us_2024",
+    "populace_us_2024": "microcosm_us_2024",
+    "microcosm_us_2024_acs_local": "populace_us_2024_acs_local",
+    "populace_us_2024_acs_local": "microcosm_us_2024_acs_local",
+}
 
 #: Microcosm publishes each build once, in its own folder
 #: ``releases/<release>/<build>/``, and never changes it afterwards; a root
@@ -459,6 +467,14 @@ class CountryReleaseManifest(BaseModel):
     certification: Optional[DataCertification] = None
     source_sha256: Optional[str] = Field(default=None, exclude=True)
     """Byte sha256 of the bundled manifest before Pydantic normalization."""
+
+    def bundled_dataset_key(self, dataset: str) -> str:
+        """Resolve a public selector to the key recorded in this bundle."""
+        if self.country_id == "us" and dataset not in self.datasets:
+            alias = US_MICROCOSM_DATASET_ALIASES.get(dataset)
+            if alias is not None and alias in self.datasets:
+                return alias
+        return dataset
 
     @property
     def default_dataset_uri(self) -> str:
@@ -1330,7 +1346,7 @@ def resolve_dataset_reference(country_id: str, dataset: str) -> str:
         return dataset
 
     manifest = get_release_manifest(country_id)
-    path_reference = manifest.datasets.get(dataset)
+    path_reference = manifest.datasets.get(manifest.bundled_dataset_key(dataset))
     if path_reference is not None:
         return build_hf_uri(
             repo_id=path_reference.repo_id or manifest.data_package.repo_id,
@@ -1366,7 +1382,7 @@ def resolve_managed_dataset_reference(
     release manifest. Callers can:
 
     - omit `dataset` to use the certified default dataset for the bundle
-    - pass a logical dataset name present in the bundled/data-release manifests
+    - pass a logical dataset name in the bundle or its supported alias
 
     Direct URLs or raw Hugging Face references are treated as unmanaged unless
     `allow_unmanaged=True` is set explicitly.
@@ -1376,7 +1392,7 @@ def resolve_managed_dataset_reference(
     if dataset is None:
         return manifest.default_dataset_uri
 
-    if dataset in manifest.datasets:
+    if manifest.bundled_dataset_key(dataset) in manifest.datasets:
         return resolve_dataset_reference(country_id, dataset)
 
     local_path = Path(dataset).expanduser()

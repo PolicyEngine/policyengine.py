@@ -168,7 +168,7 @@ Ordinary `check` passes for the staged draft; this is metadata consistency only.
    coordinator; do not invent future versions to break that dependency.
    Refresh country and wrapper locks against real registry bytes.
 5. Certify the published data release through `scripts/bundle.py certify-data
-   --country us --data-producer populace --model-version
+   --country us --data-producer microcosm --model-version
    "$PUBLISHED_COUNTRY_VERSION" --manifest-uri "$PUBLISHED_RELEASE_MANIFEST_URI"`.
    The URI must identify the actual immutable producer release. This command
    updates the country pin and data metadata from real compatibility evidence.

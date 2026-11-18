@@ -51,7 +51,7 @@ package scaffold:
 ```python
 from policyengine.provenance import materialize_dataset
 
-result = materialize_dataset("us", "populace_us_2024")
+result = materialize_dataset("us", "microcosm_us_2024")
 print(result.path)
 print(result.bundle_dataset.sha256)
 ```
@@ -202,7 +202,7 @@ To certify a new data release from a data-producer manifest, run:
 ```bash
 python scripts/bundle.py certify-data \
   --country uk \
-  --data-producer populace \
+  --data-producer microcosm \
   --manifest-uri hf://dataset/policyengine/populace-uk-private@<release>/releases/<release>/release_manifest.json
 ```
 
@@ -211,7 +211,7 @@ For US Microcosm releases, certify the Microcosm release manifest directly:
 ```bash
 python scripts/bundle.py certify-data \
   --country us \
-  --data-producer populace \
+  --data-producer microcosm \
   --manifest-uri hf://dataset/policyengine/populace-us@<release>/releases/<release>/release_manifest.json \
   --regional-manifest-uri hf://dataset/policyengine/populace-us@<local-area-release>/releases/<local-area-release>/release_manifest.json \
   --model-version <policyengine-us-version>

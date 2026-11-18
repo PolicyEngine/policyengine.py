@@ -18,6 +18,7 @@ from policyengine.provenance.dataset_materialization import (
     materialize_dataset,
 )
 from policyengine.provenance.manifest import (
+    US_MICROCOSM_DATASET_ALIASES,
     dataset_logical_name,
     get_release_manifest,
     resolve_dataset_reference,
@@ -422,7 +423,8 @@ def create_datasets(
         data_folder: Directory to save the dataset files
 
     Returns:
-        Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
+        Datasets keyed by selector and year for named Microcosm US datasets,
+        or by artifact filename stem and year otherwise.
     """
     from policyengine_us import Microsimulation
 
@@ -438,6 +440,9 @@ def create_datasets(
             data_dir=Path(data_folder),
         )
         dataset_stem = source.name
+        result_stem = dataset_stem
+        if dataset is not None and dataset in US_MICROCOSM_DATASET_ALIASES:
+            result_stem = dataset
         sim = Microsimulation(dataset=source.path, spm=resolve_spm_selection())
         # The register the mapping below uses, stamped into each year file.
         stamp = year_file_stamp()
@@ -621,7 +626,7 @@ def create_datasets(
             # whose write stopped part-way has no stamp and is cut again.
             write_year_file_stamp(us_dataset.filepath, stamp)
 
-            dataset_key = f"{dataset_stem}_{year}"
+            dataset_key = f"{result_stem}_{year}"
             result[dataset_key] = us_dataset
 
     return result
@@ -657,8 +662,8 @@ def _managed_source_sha256(dataset: Optional[str]) -> Optional[str]:
     manifest = get_release_manifest("us")
     if dataset is None or dataset == manifest.default_dataset_uri:
         name: Optional[str] = manifest.default_dataset
-    elif dataset in manifest.datasets:
-        name = dataset
+    elif (key := manifest.bundled_dataset_key(dataset)) in manifest.datasets:
+        name = key
     else:
         name = next(
             (
@@ -699,13 +704,17 @@ def load_datasets(
         data_folder: Directory containing the dataset files
 
     Returns:
-        Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
+        Datasets keyed by selector and year for named Microcosm US datasets,
+        or by artifact filename stem and year otherwise.
     """
     datasets = datasets or [get_release_manifest("us").default_dataset]
     result = {}
     for dataset in datasets:
         resolved_dataset = resolve_dataset_reference("us", dataset)
         dataset_stem = dataset_logical_name(resolved_dataset)
+        result_stem = (
+            dataset if dataset in US_MICROCOSM_DATASET_ALIASES else dataset_stem
+        )
         for year in years:
             filepath = f"{data_folder}/{dataset_stem}_year_{year}.h5"
             if Path(filepath).exists():
@@ -735,7 +744,7 @@ def load_datasets(
             )
             us_dataset.load()
 
-            dataset_key = f"{dataset_stem}_{year}"
+            dataset_key = f"{result_stem}_{year}"
             result[dataset_key] = us_dataset
 
     return result
