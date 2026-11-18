@@ -47,6 +47,7 @@ if find_spec("policyengine_us") is not None:
         load_managed_long_term_datasets,
         validate_long_term_dataset_metadata,
     )
+    from .flat_file import flat_file_microsimulation, prepare_flat_file
     from .household import calculate_household
     from .model import (
         PolicyEngineUS,
@@ -81,6 +82,8 @@ if find_spec("policyengine_us") is not None:
         "model",
         "us_latest",
         "calculate_household",
+        "flat_file_microsimulation",
+        "prepare_flat_file",
         "SPMSelection",
         "SPMProvenance",
         "economic_impact_analysis",

@@ -34,6 +34,7 @@ website:
           - households.md
           - reforms.md
           - microsim.md
+          - simulated-instruments.md
       - section: "Analyse"
         contents:
           - impact-analysis.md
