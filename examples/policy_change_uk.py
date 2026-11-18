@@ -8,11 +8,10 @@ This script demonstrates:
 5. Using quantile filters for decile-based analysis
 6. Visualising results with Plotly
 
-Run: python examples/policy_change.py
+Run: python examples/policy_change_uk.py
 """
 
 import datetime
-from pathlib import Path
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -24,26 +23,23 @@ from policyengine.outputs.change_aggregate import (
 )
 from policyengine.tax_benefit_models.uk import (
     PolicyEngineUKDataset,
+    ensure_datasets,
     uk_latest,
 )
 
 
 def load_representative_data(year: int = 2026) -> PolicyEngineUKDataset:
-    """Load representative household microdata for a given year."""
-    dataset_path = Path(f"./data/enhanced_frs_2023_24_year_{year}.h5")
+    """Load the certified UK microdata (Microcosm UK 2024-25) for a given year.
 
-    if not dataset_path.exists():
-        raise FileNotFoundError(
-            f"Dataset not found at {dataset_path}. "
-            "Run create_datasets() from policyengine.tax_benefit_models.uk first."
-        )
-
-    dataset = PolicyEngineUKDataset(
-        name=f"Enhanced FRS {year}",
-        description=f"Representative household microdata for {year}",
-        filepath=str(dataset_path),
-        year=year,
+    The file is private: set HUGGING_FACE_TOKEN to a token from a Hugging Face
+    account with access (see docs/microsim.md).
+    """
+    datasets = ensure_datasets(
+        datasets=["microcosm_uk_2024_25"],
+        years=[year],
+        data_folder="./data",
     )
+    dataset = datasets[f"microcosm_uk_2024_25_{year}"]
     dataset.load()
     return dataset
 

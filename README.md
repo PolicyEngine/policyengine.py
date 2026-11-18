@@ -48,11 +48,11 @@ from policyengine.core import Simulation
 from policyengine.outputs.aggregate import Aggregate, AggregateType
 
 datasets = pe.uk.ensure_datasets(
-    datasets=["enhanced_frs_2023_24"],
+    datasets=["microcosm_uk_2024_25"],
     years=[2026],
     data_folder="./data",
 )
-dataset = datasets["enhanced_frs_2023_24_2026"]
+dataset = datasets["microcosm_uk_2024_25_2026"]
 
 simulation = Simulation(dataset=dataset, tax_benefit_model_version=pe.uk.model)
 simulation.run()
@@ -71,10 +71,19 @@ For baseline-vs-reform comparisons, see `pe.uk.economic_impact_analysis`
 and its US counterpart.
 
 UK population data is stored in private Hugging Face repositories: the
-Microcosm default in a dataset repository, and the enhanced FRS in a model
-repository. Set `HUGGING_FACE_TOKEN` to a token from an account with access
-before running UK population examples. To download the raw `.h5` file directly, see
+Microcosm default (`microcosm_uk_2024_25`) in a dataset repository, and the
+enhanced FRS in a model repository. Set `HUGGING_FACE_TOKEN` to a token from an
+account with access before running UK population examples. To download the raw
+`.h5` file directly, see
 [Microsimulation](docs/microsim.md#uk-private-data-and-raw-h5-access).
+
+The UK files derive from licensed UK Data Service surveys, so access is granted
+per Hugging Face account: email [contact@policyengine.org](mailto:contact@policyengine.org)
+with your Hugging Face username and enough information to verify your UK Data
+Service access. Without access, UK household calculations
+(`pe.uk.calculate_household`) still work, and US population data is public. See
+[Microsimulation](docs/microsim.md#working-without-uk-data-access) for what else
+works without access.
 
 ## Documentation
 
@@ -202,7 +211,9 @@ Use the pinned interpreter and the UK extra to run the checked-in paper repro:
 uv run --python 3.14 --extra uk python examples/paper_repro_uk.py
 ```
 
-On first run this will create `./data/enhanced_frs_2023_24_year_2026.h5`.
+On first run this will create `./data/enhanced_frs_2023_24_year_2026.h5`. The
+paper repro is pinned to the Enhanced FRS 2023-24 the paper used; new UK analysis
+should use the certified default, `microcosm_uk_2024_25`.
 
 ## Features
 
