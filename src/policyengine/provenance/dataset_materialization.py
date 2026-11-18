@@ -20,6 +20,7 @@ from .manifest import (
     dataset_logical_name,
     get_release_manifest,
     https_dataset_uri,
+    hugging_face_auth_failure,
     hugging_face_auth_headers,
     resolve_managed_dataset_reference,
 )
@@ -258,10 +259,7 @@ def _download_hugging_face_dataset(
             ) as response:
                 if response.status_code in {401, 403}:
                     raise DatasetMaterializationError(
-                        "Could not download explicit dataset "
-                        f"{dataset_uri!r}: Hugging Face rejected the configured "
-                        "credentials. Set HUGGING_FACE_TOKEN to a token with "
-                        "access to the repository."
+                        hugging_face_auth_failure(f"explicit dataset {dataset_uri!r}")
                     )
                 if response.status_code == 404:
                     if repo_type == "model":
@@ -336,9 +334,7 @@ def _reuse_or_download_bundle_files(
             ) as response:
                 if response.status_code in {401, 403}:
                     raise DatasetMaterializationError(
-                        f"Could not download {description}: Hugging Face rejected "
-                        "the configured credentials. Set HUGGING_FACE_TOKEN to a "
-                        "token with access to the repository."
+                        hugging_face_auth_failure(description)
                     )
                 if response.status_code == 404:
                     raise DatasetMaterializationError(
