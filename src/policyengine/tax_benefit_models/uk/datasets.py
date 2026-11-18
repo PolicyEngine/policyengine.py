@@ -29,6 +29,82 @@ DATA_YEAR_KEY = "data_year"
 DATA_YEAR_TABLE_PREFIX = "data_year_"
 
 
+def _require_columns(frame: pd.DataFrame, columns: list[str], context: str) -> None:
+    """Raise a clear error when join columns needed for weight derivation are absent."""
+    missing = [column for column in columns if column not in frame.columns]
+    if missing:
+        raise KeyError(
+            f"Cannot derive weights for {context}: the {context} frame is "
+            f"missing required column(s) {missing}. UK microdata carries only "
+            "`household_weight`, so person and benunit weights are derived by "
+            "joining on household identifiers."
+        )
+
+
+def derive_person_weight(
+    person_df: pd.DataFrame, household_df: pd.DataFrame
+) -> pd.DataFrame:
+    """Return ``person_df`` with a ``person_weight`` column.
+
+    Published UK microdata carries only ``household_weight`` at the household
+    level, so a person's weight is the weight of their household. If
+    ``person_weight`` is already present the frame is returned unchanged.
+    """
+    if "person_weight" in person_df.columns:
+        return person_df
+
+    _require_columns(person_df, ["person_household_id"], "person")
+    _require_columns(household_df, ["household_id", "household_weight"], "household")
+
+    person_df = person_df.merge(
+        household_df[["household_id", "household_weight"]],
+        left_on="person_household_id",
+        right_on="household_id",
+        how="left",
+    )
+    person_df = person_df.rename(columns={"household_weight": "person_weight"})
+    return person_df.drop(columns=["household_id"])
+
+
+def derive_benunit_weight(
+    benunit_df: pd.DataFrame,
+    person_df: pd.DataFrame,
+    household_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return ``benunit_df`` with a ``benunit_weight`` column.
+
+    Benefit units map to households via the person frame. If ``benunit_weight``
+    is already present the frame is returned unchanged.
+    """
+    if "benunit_weight" in benunit_df.columns:
+        return benunit_df
+
+    _require_columns(benunit_df, ["benunit_id"], "benunit")
+    _require_columns(person_df, ["person_benunit_id", "person_household_id"], "person")
+    _require_columns(household_df, ["household_id", "household_weight"], "household")
+
+    benunit_household_map = person_df[
+        ["person_benunit_id", "person_household_id"]
+    ].drop_duplicates()
+    benunit_df = benunit_df.merge(
+        benunit_household_map,
+        left_on="benunit_id",
+        right_on="person_benunit_id",
+        how="left",
+    )
+    benunit_df = benunit_df.merge(
+        household_df[["household_id", "household_weight"]],
+        left_on="person_household_id",
+        right_on="household_id",
+        how="left",
+    )
+    benunit_df = benunit_df.rename(columns={"household_weight": "benunit_weight"})
+    return benunit_df.drop(
+        columns=["person_benunit_id", "person_household_id", "household_id"],
+        errors="ignore",
+    )
+
+
 class UKYearData(YearData):
     """Entity-level data for a single year."""
 
@@ -212,12 +288,19 @@ def _put_year_data(store: pd.HDFStore, data: UKYearData, prefix: str = "") -> No
 
 def _read_year_data(store: pd.HDFStore, prefix: str = "") -> UKYearData:
     """Read one year's entity tables from an open HDF5 store."""
+    person_df = store[f"{prefix}person"]
+    benunit_df = store[f"{prefix}benunit"]
+    household_df = store[f"{prefix}household"]
+    # Published UK microdata carries only `household_weight`; derive the
+    # person and benunit weights when the file does not already have them,
+    # so a directly-supplied dataset behaves like one built by
+    # `create_datasets`.
+    benunit_df = derive_benunit_weight(benunit_df, person_df, household_df)
+    person_df = derive_person_weight(person_df, household_df)
     return UKYearData(
-        person=MicroDataFrame(store[f"{prefix}person"], weights="person_weight"),
-        benunit=MicroDataFrame(store[f"{prefix}benunit"], weights="benunit_weight"),
-        household=MicroDataFrame(
-            store[f"{prefix}household"], weights="household_weight"
-        ),
+        person=MicroDataFrame(person_df, weights="person_weight"),
+        benunit=MicroDataFrame(benunit_df, weights="benunit_weight"),
+        household=MicroDataFrame(household_df, weights="household_weight"),
     )
 
 
@@ -227,46 +310,11 @@ def _year_data_with_weights(year_dataset) -> UKYearData:
     policyengine-uk stores household weights only; each person and benefit
     unit takes its household's weight.
     """
-    # Convert to pandas DataFrames and add weight columns
     person_df = pd.DataFrame(year_dataset.person)
     benunit_df = pd.DataFrame(year_dataset.benunit)
     household_df = pd.DataFrame(year_dataset.household)
-
-    # Map household weights to person and benunit levels
-    person_df = person_df.merge(
-        household_df[["household_id", "household_weight"]],
-        left_on="person_household_id",
-        right_on="household_id",
-        how="left",
-    )
-    person_df = person_df.rename(columns={"household_weight": "person_weight"})
-    person_df = person_df.drop(columns=["household_id"])
-
-    # Get household_id for each benunit from person table
-    benunit_household_map = person_df[
-        ["person_benunit_id", "person_household_id"]
-    ].drop_duplicates()
-    benunit_df = benunit_df.merge(
-        benunit_household_map,
-        left_on="benunit_id",
-        right_on="person_benunit_id",
-        how="left",
-    )
-    benunit_df = benunit_df.merge(
-        household_df[["household_id", "household_weight"]],
-        left_on="person_household_id",
-        right_on="household_id",
-        how="left",
-    )
-    benunit_df = benunit_df.rename(columns={"household_weight": "benunit_weight"})
-    benunit_df = benunit_df.drop(
-        columns=[
-            "person_benunit_id",
-            "person_household_id",
-            "household_id",
-        ],
-        errors="ignore",
-    )
+    benunit_df = derive_benunit_weight(benunit_df, person_df, household_df)
+    person_df = derive_person_weight(person_df, household_df)
     return UKYearData(
         person=MicroDataFrame(person_df, weights="person_weight"),
         benunit=MicroDataFrame(benunit_df, weights="benunit_weight"),
