@@ -41,6 +41,31 @@ def test_populate_entities_records_key_plural_and_person_flag_in_order():
     assert model.basic_inputs == ["region", "employment_income", "age"]
 
 
+def test_populate_entities_publishes_only_the_person_entity_as_a_person():
+    # Core flags a root population with no members, such as the UK firm
+    # entity, as is_person. Only the system's person entity (the first one
+    # core flags) is a person entity downstream.
+    model = make_empty_model_version()
+    system = SimpleNamespace(
+        entities=[
+            _core_entity("person", "people", True),
+            _core_entity("benunit", "benunits", False),
+            _core_entity("household", "households", False),
+            _core_entity("firm", "firms", True),
+        ],
+        basic_inputs=[],
+    )
+
+    MicrosimulationModelVersion._populate_entities(model, system)
+
+    assert model.entities == [
+        Entity(key="person", plural="people", is_person=True),
+        Entity(key="benunit", plural="benunits", is_person=False),
+        Entity(key="household", plural="households", is_person=False),
+        Entity(key="firm", plural="firms", is_person=False),
+    ]
+
+
 def test_populate_entities_accepts_a_country_model_without_basic_inputs():
     model = make_empty_model_version()
     system = SimpleNamespace(
@@ -84,7 +109,7 @@ def test_country_models_publish_their_entities_and_basic_inputs(country_model):
     assert [
         (entity.key, entity.plural, entity.is_person) for entity in model.entities
     ] == [
-        (entity.key, entity.plural, bool(entity.is_person))
+        (entity.key, entity.plural, entity.key == country_system.person_entity.key)
         for entity in country_system.entities
     ]
     assert [entity.key for entity in model.entities if entity.is_person] == ["person"]
@@ -114,9 +139,24 @@ PINNED_ENTITIES = {
 }
 
 
+# Entities a country package may add after the pinned version. policyengine-uk
+# adds a firm entity (a root population with no members) that core flags as
+# is_person; it must be published as a non-person entity. Move the row into
+# PINNED_ENTITIES once the pin includes it.
+OPTIONAL_TRAILING_ENTITIES = {
+    "uk": [("firm", "firms", False)],
+    "us": [],
+}
+
+
 def test_country_models_publish_their_pinned_entities(country_model):
-    assert [
+    country_id = country_model.country_id
+    published = [
         (entity.key, entity.plural, entity.is_person)
         for entity in country_model.model_version.entities
-    ] == PINNED_ENTITIES[country_model.country_id]
+    ]
+    assert published in (
+        PINNED_ENTITIES[country_id],
+        PINNED_ENTITIES[country_id] + OPTIONAL_TRAILING_ENTITIES[country_id],
+    )
     assert {"employment_income", "age"} <= set(country_model.model_version.basic_inputs)
