@@ -205,12 +205,22 @@ class MicrosimulationModelVersion(TaxBenefitModelVersion):
 
     # --- Shared loading helpers ------------------------------------------
     def _populate_entities(self, system) -> None:
-        """Copy the entities and basic inputs the country package declares."""
+        """Copy the entities and basic inputs the country package declares.
+
+        Only the system's person entity is published with ``is_person=True``.
+        Core also flags root populations with no members (such as the UK
+        ``firm`` entity) as ``is_person``, and takes the first such entity as
+        the person entity. Compare keys rather than identity, because a cloned
+        core system copies its person entity.
+        """
+        person_key = next(
+            (entity.key for entity in system.entities if entity.is_person), None
+        )
         self.entities = [
             Entity(
                 key=core_entity.key,
                 plural=core_entity.plural,
-                is_person=bool(core_entity.is_person),
+                is_person=core_entity.key == person_key,
             )
             for core_entity in system.entities
         ]
