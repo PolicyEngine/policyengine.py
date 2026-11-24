@@ -1,3 +1,10 @@
+## [6.20.3] - 2026-11-24
+
+### Changed
+
+- Certify the UK populace data release `uk-frs-calibration-attempt-20261122T100732Z-b891aa69` (microcosm_uk_2024_25, policyengine-uk 2.179.2) into the PolicyEngine bundle manifest.
+
+
 ## [6.20.2] - 2026-11-16
 
 ### Changed
