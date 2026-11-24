@@ -14,9 +14,54 @@ from typing import Any
 
 from .trace import Derivation
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
-DEFAULT_MAX_TOKENS = 500
-DEFAULT_TEMPERATURE = 0.0
+DEFAULT_MODEL = "claude-sonnet-5-5"
+# Low effort plus a short narrative still needs room for thinking tokens.
+DEFAULT_MAX_TOKENS = 4096
+
+
+def _model_options(
+    model: str, temperature: float | None, *, litellm: Any
+) -> dict[str, Any]:
+    if model in (DEFAULT_MODEL, f"anthropic/{DEFAULT_MODEL}"):
+        if temperature is not None:
+            raise ValueError("Sonnet 5.5 narration does not support temperature.")
+        if getattr(litellm, "drop_params", False):
+            raise ValueError(
+                "LiteLLM would drop Sonnet 5.5's low-effort output_config. "
+                "Disable LITELLM_DROP_PARAMS and set litellm.drop_params=False "
+                "before requesting narration."
+            )
+        # LiteLLM merges global Anthropic defaults after request arguments.
+        config = litellm.AnthropicConfig.get_config()
+        sampling_parameters = [
+            name
+            for name in ("temperature", "top_p", "top_k")
+            if config.get(name) is not None
+        ]
+        if sampling_parameters:
+            raise ValueError(
+                "Sonnet 5.5 narration does not support LiteLLM AnthropicConfig "
+                f"sampling settings: {', '.join(sampling_parameters)}. "
+                "Clear these settings before requesting narration."
+            )
+        return {
+            "custom_llm_provider": "anthropic",
+            # Pass the native option: reasoning_effort can add legacy thinking
+            # parameters in LiteLLM's provider translation.
+            "output_config": {"effort": "low"},
+        }
+    return {} if temperature is None else {"temperature": temperature}
+
+
+def _response_text(response: Any) -> str:
+    choice = response.choices[0]
+    if choice.finish_reason in ("refusal", "content_filter"):
+        raise ValueError("The narration model refused the request.")
+    # LiteLLM combines Anthropic text blocks and keeps thinking separately.
+    content = choice.message.content
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("The narration model returned no text.")
+    return content.strip()
 
 
 def _build_prompt(
@@ -68,13 +113,19 @@ def narrate(
     extra_context: str | None = None,
     model: str = DEFAULT_MODEL,
     max_tokens: int = DEFAULT_MAX_TOKENS,
-    temperature: float = DEFAULT_TEMPERATURE,
+    temperature: float | None = None,
     trace_max_depth: int = 8,
 ) -> str:
     """Synchronously ask an LLM to narrate this derivation.
 
     Imports LiteLLM lazily so that ``import policyengine.derivations`` has no
-    LLM dependency. Returns the model's response text.
+    LLM dependency. Install ``policyengine[narration]`` to enable this feature.
+    Defaults to Sonnet 5.5 with low effort and a 4096-token total budget.
+    Temperature is omitted by default and only supported with other models.
+    Global LiteLLM AnthropicConfig sampling settings must also be unset.
+    LiteLLM's ``drop_params`` must remain false so it preserves low effort.
+    Returns the model's response text; raises ``ValueError`` on refusal, an
+    empty response, or incompatible Sonnet options.
     """
     import litellm  # noqa: PLC0415 — lazy import keeps the base module light
 
@@ -88,10 +139,10 @@ def narrate(
     response = litellm.completion(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
         max_tokens=max_tokens,
+        **_model_options(model, temperature, litellm=litellm),
     )
-    return response.choices[0].message.content.strip()
+    return _response_text(response)
 
 
 async def narrate_async(
@@ -102,7 +153,7 @@ async def narrate_async(
     extra_context: str | None = None,
     model: str = DEFAULT_MODEL,
     max_tokens: int = DEFAULT_MAX_TOKENS,
-    temperature: float = DEFAULT_TEMPERATURE,
+    temperature: float | None = None,
     trace_max_depth: int = 8,
 ) -> str:
     """Async variant of :func:`narrate` — same interface, awaitable result."""
@@ -118,7 +169,7 @@ async def narrate_async(
     response: Any = await litellm.acompletion(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
         max_tokens=max_tokens,
+        **_model_options(model, temperature, litellm=litellm),
     )
-    return response.choices[0].message.content.strip()
+    return _response_text(response)
