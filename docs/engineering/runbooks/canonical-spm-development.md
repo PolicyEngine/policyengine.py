@@ -48,12 +48,14 @@ reference-only. It records the real local wheel names, versions, file URIs and
 SHA-256 hashes. UK release metadata is retained unchanged. It refuses to
 overwrite the packaged manifest.
 
-Country model initialization requires a data compatibility receipt even for
-household-only tests. An explicitly enabled pytest plugin supplies the
-`unverified_development_fixture` receipt and disables remote data-manifest
-fetches for that test process. It does not add a compatibility claim, certify a
-dataset, or install a production environment-variable override. Its existing
-receipt field `certified_for_model_version` names the tested runtime; the
+US initialization defers data certification until code requests certification
+or uses bundled data. UK initialization continues to require a compatibility
+receipt. An explicitly enabled pytest plugin supplies the
+`unverified_development_fixture` receipt when those US entrypoints request
+certification and disables remote data-manifest fetches for that test process.
+It does not add a compatibility claim, certify a dataset, or install a production
+environment-variable override. Its existing receipt field
+`certified_for_model_version` names the tested runtime; the
 `unverified_development_fixture` basis explicitly denies certification.
 
 ```bash
@@ -90,16 +92,17 @@ development = activate_spm_development_manifest(
 import policyengine as pe
 
 assert development["development"]["promotion_status"] == "pending"
-assert pe.us.model.data_certification.compatibility_basis == (
-    "unverified_development_fixture"
-)
+certification = pe.us.model.require_data_certification()
+assert certification.compatibility_basis == "unverified_development_fixture"
 ```
 
 Run such a script from the wrapper worktree with the isolated interpreter and
 `uv run --python "$SPM_PYTHON" --no-sync`. The final acceptance worker can
 then call `pe.us.managed_microsimulation(dataset=LOCAL_H5,
-allow_unmanaged=True, spm={...})`, reporting the explicit development receipt.
-Only that worker is authorized for the heavy population process.
+allow_unmanaged=True, spm={...})`. That local-data call records
+`compatibility_basis="unverified_explicit_local_unmanaged"` and
+`certified_by=None`; it does not attach the development certificate to the local
+file. Only that worker is authorized for the heavy population process.
 
 Bundle-only tests avoid the country bootstrap entirely:
 

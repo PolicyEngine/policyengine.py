@@ -15,6 +15,7 @@ from pydantic import ConfigDict, Field
 from policyengine.core import Dataset, YearData
 from policyengine.provenance.dataset_materialization import (
     MaterializedDataset,
+    _require_us_data_certification,
     materialize_dataset,
 )
 from policyengine.provenance.manifest import (
@@ -424,6 +425,7 @@ def create_datasets(
     Returns:
         Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
     """
+    _require_us_data_certification()
     from policyengine_us import Microsimulation
 
     from policyengine.tax_benefit_models.us.spm import resolve_spm_selection
@@ -701,6 +703,7 @@ def load_datasets(
     Returns:
         Dictionary mapping dataset keys (e.g., "populace_us_2024") to PolicyEngineUSDataset objects
     """
+    _require_us_data_certification()
     datasets = datasets or [get_release_manifest("us").default_dataset]
     result = {}
     for dataset in datasets:
@@ -1194,6 +1197,7 @@ def load_long_term_datasets(
     artifacts with sidecar metadata validation, including optional checks that
     the installed ``policyengine-us`` runtime matches the H5 build metadata.
     """
+    _require_us_data_certification()
 
     result = {}
     root = Path(data_folder).expanduser()
@@ -1282,6 +1286,7 @@ def load_managed_long_term_datasets(
     bundle-certified Hugging Face artifact and its certified metadata sidecar
     are downloaded there.
     """
+    _require_us_data_certification()
 
     manifest = get_release_manifest("us")
     if required_policyengine_us_version is None:
@@ -1388,6 +1393,7 @@ def ensure_datasets(
     Returns:
         Dictionary mapping dataset keys to PolicyEngineUSDataset objects
     """
+    _require_us_data_certification()
     datasets = datasets or [get_release_manifest("us").default_dataset]
 
     # Check that every year file exists and is current. A year file cut

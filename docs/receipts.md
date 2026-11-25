@@ -46,7 +46,7 @@ print(receipt.certification_status, receipt.execution_identity_sha256)
 receipt_json = receipt.to_canonical_json()
 ```
 
-For a country `Microsimulation` built with `managed_microsimulation()`, call `build_execution_receipt_for_microsimulation(sim, years=..., reform=..., baseline=...)`. It reads the dataset that was loaded from `sim.policyengine_bundle`. The file must still hash to the SHA-256 verified when it was loaded, and the receipt must name the dataset, URI, revision and package recorded then; otherwise it is refused, because it would describe bytes that did not run. A simulation loaded from an unmanaged file or URI recorded no load-time hash, so it cannot be receipted. The microsimulation does not record its reform, so pass the reform you built it with.
+For a UK `Microsimulation` from `managed_microsimulation()`, call `build_execution_receipt_for_microsimulation(sim, years=..., reform=..., baseline=...)`. It reads the runtime dataset from `sim.policyengine_bundle`. The file must still match the SHA-256 that the wrapper verified at load time, and the receipt must name the same dataset, URI, revision and package. The builder refuses a UK simulation whose unmanaged source records no load-time hash. Pass the reform and baseline explicitly, since the microsimulation does not record them. Receipt schema v1 covers UK results only; a US local-runtime provenance record does not extend that schema or certify compatibility.
 
 With `POLICYENGINE_UK_DATA_MANIFEST_FILE` enabled, a packaged-bundle receipt
 rechecks runtime certification using the local file and records its distinct
