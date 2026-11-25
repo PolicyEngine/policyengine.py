@@ -1,17 +1,16 @@
 """Repository TRO generation must validate complete payloads before any writes."""
 
 import json
-import sys
 from importlib.resources import files
-from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator, ValidationError
 
 from policyengine.provenance.manifest import DataReleaseManifestUnavailableError
+from tests.fixtures.import_path import scripts_importable
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import generate_trace_tros as generator  # noqa: E402
+with scripts_importable():
+    import generate_trace_tros as generator
 
 
 @pytest.fixture

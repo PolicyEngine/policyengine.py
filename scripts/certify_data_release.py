@@ -30,8 +30,14 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT / "src"))
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+if __name__ == "__main__":
+    # Certify with this checkout's policyengine, whatever is installed, without
+    # importing the country models. Only the entry point sets this up, so
+    # importing this module (as tests do) leaves the import path and
+    # environment alone.
+    os.environ.setdefault("POLICYENGINE_SKIP_COUNTRY_IMPORTS", "1")
+    sys.path[:0] = [str(REPO_ROOT / "src"), str(REPO_ROOT / "scripts")]
 
 from generate_bundle_artifacts import generate  # noqa: E402
 

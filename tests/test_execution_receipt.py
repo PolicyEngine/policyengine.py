@@ -160,12 +160,12 @@ _REAL_PACKAGE_MODULES = {
 }
 
 
-#: The interpreter's import path when this module is collected. Release-script
-#: tests import scripts/bundle.py at module level, which puts the checkout's
-#: ``src`` first on sys.path. An editable build leaves
-#: ``src/policyengine.egg-info`` there, which then shadows the installed
-#: distribution's metadata (receipts rightly refuse that), so each receipt test
-#: runs with the import path as it was before those modules were collected.
+#: The interpreter's import path when this module is collected. An editable
+#: build leaves ``src/policyengine.egg-info`` in the checkout, which shadows the
+#: installed distribution's metadata (receipts rightly refuse that) whenever
+#: ``src`` comes first on sys.path. Release-script tests used to put it there
+#: (#623); tests/test_script_imports.py now guards against that, and each
+#: receipt test still runs with the import path as it was collected.
 _COLLECTION_SYS_PATH = list(sys.path)
 
 
