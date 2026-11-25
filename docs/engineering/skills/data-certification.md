@@ -22,7 +22,7 @@ Open the work on a fresh branch from current `main` (use a clean worktree if
 the checkout is dirty).
 
 ```bash
-python scripts/bundle.py certify-data --country uk --data-producer populace \
+python scripts/bundle.py certify-data --country uk --data-producer microcosm \
   --manifest-uri "hf://dataset/policyengine/populace-uk-private@<cut-tag>/releases/<release-id>/release_manifest.json"
 ```
 
@@ -46,7 +46,7 @@ its `release` and `build` as strings, for example
 its own folder, at the commit that published it:
 
 ```bash
-python scripts/bundle.py certify-data --country uk --data-producer populace \
+python scripts/bundle.py certify-data --country uk --data-producer microcosm \
   --manifest-uri "hf://dataset/policyengine/populace-uk-private@<commit>/releases/<release>/<build>/release_manifest.json"
 ```
 
@@ -104,7 +104,7 @@ Microcosm national release with one of:
   `dataset_role: non_default_local_area`, as for the US below.
 
   ```bash
-  python scripts/bundle.py certify-data --country uk --data-producer populace \
+  python scripts/bundle.py certify-data --country uk --data-producer microcosm \
     --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
     --regional-manifest-uri "hf://dataset/policyengine/populace-uk-private@<local-cut-tag>/releases/<local-release-id>/release_manifest.json" \
     --model-version "<policyengine-uk-version>"
@@ -118,7 +118,7 @@ Microcosm national release with one of:
   release whose households carry area codes:
 
   ```bash
-  python scripts/bundle.py certify-data --country uk --data-producer populace \
+  python scripts/bundle.py certify-data --country uk --data-producer microcosm \
     --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
     --regional-manifest-uri "hf://model/policyengine/policyengine-uk-data-private@<revision>/releases/<version>/release_manifest.json" \
     --regional-release-kind area_coded_national \
@@ -152,7 +152,7 @@ Microcosm national release with one of:
     --limitation "the dense cut's VAT predates the policyengine-uk VAT factor fix (#2187, 2.135.7); the dashboard holds a VAT limit" \
     --output regional-input-surface.json
 
-  .venv/bin/python scripts/bundle.py certify-data --country uk --data-producer populace \
+  .venv/bin/python scripts/bundle.py certify-data --country uk --data-producer microcosm \
     --manifest-uri "hf://dataset/policyengine/populace-uk-private@<national-cut-tag>/releases/microcosm-uk-2024-25-national/release_manifest.json" \
     --regional-manifest-uri "<the routed local-area release_manifest.json URI>" \
     --accept-regional-model-mismatch "<who accepted it and why>" \
@@ -320,7 +320,7 @@ folder (it has `releases.json`), so give each manifest's folder at the commit
 that published it:
 
 ```bash
-python scripts/bundle.py certify-data --country us --data-producer populace \
+python scripts/bundle.py certify-data --country us --data-producer microcosm \
   --manifest-uri "hf://dataset/policyengine/populace-us@<commit>/releases/microcosm-us-2024-national/<build>/release_manifest.json" \
   --regional-manifest-uri "hf://dataset/policyengine/populace-us@<commit>/releases/microcosm-us-2024-local/<build>/release_manifest.json" \
   --model-version "<policyengine-us-version>"
@@ -362,7 +362,7 @@ exact target installed, then certify with the reason and the evidence.
   --limitation "<what the build model and the target differ in>" \
   --output regional-input-surface.json
 
-.venv/bin/python scripts/bundle.py certify-data --country us --data-producer populace \
+.venv/bin/python scripts/bundle.py certify-data --country us --data-producer microcosm \
   --manifest-uri "hf://dataset/policyengine/populace-us@<commit>/releases/microcosm-us-2024-national/<build>/release_manifest.json" \
   --regional-manifest-uri "hf://dataset/policyengine/populace-us@<commit>/releases/microcosm-us-2024-local/<build>/release_manifest.json" \
   --accept-regional-model-mismatch "<who accepted it and why>" \

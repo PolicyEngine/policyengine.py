@@ -598,18 +598,24 @@ class SimpleSources:
         self.requests = requests
 
 
-def test_year_files_carry_the_declarations_for_every_year(tmp_path, legacy_files):
+@pytest.mark.parametrize(
+    "selector", ["populace_us_2024_acs_local", "microcosm_us_2024_acs_local"]
+)
+def test_year_files_carry_the_declarations_for_every_year(
+    tmp_path, legacy_files, selector
+):
     data_folder = str(tmp_path / "data")
     years = [2025, 2026, 2027]
-    created = create_datasets(
-        datasets=["populace_us_2024_acs_local"], years=years, data_folder=data_folder
-    )
+    created = create_datasets(datasets=[selector], years=years, data_folder=data_folder)
     assert legacy_files.requests == [
-        "populace_us_2024_acs_local",
+        selector,
         LIST_PIN.bundle_dataset,
     ]
     for year in years:
-        dataset = created[f"populace_us_2024_acs_local_{year}"]
+        dataset = created[f"{selector}_{year}"]
+        assert (
+            Path(dataset.filepath).name == f"populace_us_2024_acs_local_year_{year}.h5"
+        )
         spm_unit = pd.DataFrame(dataset.data.spm_unit).set_index("spm_unit_id")
         person = pd.DataFrame(dataset.data.person).set_index("person_id")
         assert spm_unit[UNIVERSE_VARIABLE].tolist() == [
@@ -630,9 +636,10 @@ def test_year_files_carry_the_declarations_for_every_year(tmp_path, legacy_files
         ]
         assert LegacySPMRecord.model_validate(dataset.metadata[RECORD_KEY]) == _record()
 
-    (loaded,) = load_datasets(
-        datasets=["populace_us_2024_acs_local"], years=[YEAR], data_folder=data_folder
-    ).values()
+    loaded = ensure_datasets(
+        datasets=[selector], years=[YEAR], data_folder=data_folder
+    )[f"{selector}_{YEAR}"]
+    assert legacy_files.requests == [selector, LIST_PIN.bundle_dataset]
     simulation = Simulation(dataset=loaded, tax_benefit_model_version=pe.us.model)
     simulation.run()
     spm_unit = _frame(simulation, "spm_unit")
@@ -728,10 +735,17 @@ def test_a_run_straight_over_a_legacy_source_derives_the_declarations(
     assert restored.output_dataset.metadata[RECORD_KEY]["model_mode"] == "override"
 
 
+@pytest.mark.parametrize(
+    "selector", ["populace_us_2024_acs_local", "microcosm_us_2024_acs_local"]
+)
 def test_a_managed_simulation_of_a_legacy_source_applies_the_declarations(
-    legacy_files,
+    legacy_files, selector
 ):
-    simulation = pe.us.managed_microsimulation(dataset="populace_us_2024_acs_local")
+    simulation = pe.us.managed_microsimulation(dataset=selector)
+    assert legacy_files.requests == [selector, LIST_PIN.bundle_dataset]
+    assert simulation.policyengine_bundle["runtime_dataset"] == (
+        "populace_us_2024_acs_local"
+    )
     thresholds = simulation.calculate("spm_unit_spm_threshold", YEAR).values
     assert np.isnan(thresholds[[1, 2]]).all()
     assert np.isfinite(thresholds[[0, 3, 4]]).all()

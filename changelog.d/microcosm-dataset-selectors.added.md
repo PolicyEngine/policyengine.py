@@ -1,0 +1,1 @@
+Add Microcosm selectors for the certified US national and local-area datasets and accept `--data-producer microcosm` in the release certification CLI. Existing selectors and certification metadata remain supported.

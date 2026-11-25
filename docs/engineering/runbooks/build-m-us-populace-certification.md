@@ -33,8 +33,8 @@ Set values from the two published release manifests rather than copying an
 older certification:
 
 ```
-NATIONAL_RELEASE_ID = populace-us-2024-<national-build>-<sha>-<timestamp>Z
-LOCAL_AREA_RELEASE_ID = populace-us-2024-<local-build>-<sha>-<timestamp>Z
+NATIONAL_RELEASE_ID = <published national release ID>
+LOCAL_AREA_RELEASE_ID = <published local-area release ID>
 MODEL_VERSION = <policyengine-us version declared by the national release>
 ```
 
@@ -47,7 +47,7 @@ artifact.
 ```bash
 python scripts/bundle.py certify-data \
   --country us \
-  --data-producer populace \
+  --data-producer microcosm \
   --model-version "$MODEL_VERSION" \
   --manifest-uri "hf://dataset/policyengine/populace-us@$NATIONAL_RELEASE_ID/releases/$NATIONAL_RELEASE_ID/release_manifest.json" \
   --regional-manifest-uri "hf://dataset/policyengine/populace-us@$LOCAL_AREA_RELEASE_ID/releases/$LOCAL_AREA_RELEASE_ID/release_manifest.json"

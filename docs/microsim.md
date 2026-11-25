@@ -128,10 +128,11 @@ Microdata is stored as HDF5 on Hugging Face. `ensure_datasets` downloads, caches
 
 ```python
 datasets = pe.us.ensure_datasets(
+    datasets=["microcosm_us_2024"],
     years=[2024, 2026],
     data_folder="./data",  # local cache directory
 )
-dataset = datasets["populace_us_2024_2026"]
+dataset = datasets["microcosm_us_2024_2026"]
 ```
 
 The default US dataset is **Microcosm US 2024** — a Microcosm-built dataset
@@ -144,7 +145,9 @@ remain available as named, non-default bundle datasets.
 
 PolicyEngine.py obtains the repository type, immutable revision, and SHA-256
 from the installed release bundle. An existing file in the configured data
-directory is reused only after hash verification.
+directory is reused only after hash verification. The original US selectors
+`populace_us_2024` and `populace_us_2024_acs_local` remain supported and select
+the same certified artifacts.
 
 List datasets already known to the country:
 
@@ -155,7 +158,7 @@ pe.us.load_datasets()  # or pe.uk.load_datasets()
 ### US local-area dataset
 
 Alongside the certified national default, the bundle registers a US dataset for
-finer geographic work: `populace_us_2024_acs_local`. It is a
+finer geographic work: `microcosm_us_2024_acs_local`. It is a
 Microcosm US 2024 build of roughly **1.6 million households** on an **ACS 2024
 multispine**, with each household **PUMA-assigned** to a 119th-Congress
 congressional district, county, and state, and calibrated to **state
@@ -170,14 +173,14 @@ Two-line load:
 ```python
 import policyengine as pe
 
-sim = pe.us.managed_microsimulation(dataset="populace_us_2024_acs_local")
+sim = pe.us.managed_microsimulation(dataset="microcosm_us_2024_acs_local")
 ```
 
 Or materialize it as a `PolicyEngineUSDataset` for `Simulation`:
 
 ```python
-datasets = pe.us.ensure_datasets(datasets=["populace_us_2024_acs_local"], years=[2024])
-dataset = datasets["populace_us_2024_acs_local_2024"]
+datasets = pe.us.ensure_datasets(datasets=["microcosm_us_2024_acs_local"], years=[2024])
+dataset = datasets["microcosm_us_2024_acs_local_2024"]
 ```
 
 Because this file carries PUMA-assigned district, county, and state identifiers
