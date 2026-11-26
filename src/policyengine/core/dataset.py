@@ -45,7 +45,8 @@ class YearData(BaseModel):
             target_entity (str): The target entity name.
             columns (list[str], optional): List of column names to map. If None, maps all columns.
             values (list, optional): List of values to use instead of column data.
-            how (str): Aggregation method ('sum' or 'first') when mapping to higher-level entities (default 'sum').
+            how (str): Aggregation method (default 'sum'). See the module-level
+                map_to_entity for the methods each direction accepts.
 
         Returns:
             MicroDataFrame: The mapped data at the target entity level.
@@ -120,8 +121,11 @@ def map_to_entity(
         values: List of values to use instead of column data. If provided, creates a single unnamed column
         how: Aggregation method (default 'sum')
             - For person → group: 'sum' (aggregate), 'first' (take first value)
-            - For group → person: 'project' (broadcast), 'divide' (split equally)
-            - For group → group: 'sum', 'first', 'project', 'divide'
+            - For group → person: 'project' (broadcast; the default 'sum' maps to
+              it), 'divide' (split equally)
+            - For group → group: 'sum', 'first', 'project', 'divide' (split
+              equally among the source's members, each share going to the
+              target group that member is in)
 
     Returns:
         MicroDataFrame: The mapped data at the target entity level
@@ -354,6 +358,9 @@ def map_to_entity(
                 # each row carries the shares of the members that pair holds:
                 # value * pair_count / source_count. A source's shares then
                 # add up to its value, whichever targets its members are in.
+                # A member with no target link keeps its share out of every
+                # target, and a source with no members adds nothing, as in
+                # group -> person divide followed by person -> group sum.
                 source_group_counts = (
                     person_df.groupby(source_link_key, as_index=False)
                     .size()
