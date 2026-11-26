@@ -348,23 +348,35 @@ def map_to_entity(
                     target_link_key, as_index=False
                 )[agg_cols].first()
             elif how == "divide":
-                # Count persons in each source group
+                # Split each source value equally among the source's members,
+                # then sum those per-person shares within each target group.
+                # source_with_target has one row per (source, target) pair, so
+                # each row carries the shares of the members that pair holds:
+                # value * pair_count / source_count. A source's shares then
+                # add up to its value, whichever targets its members are in.
                 source_group_counts = (
                     person_df.groupby(source_link_key, as_index=False)
                     .size()
                     .rename(columns={"size": "__source_count"})
                 )
+                pair_counts = (
+                    person_df.groupby(
+                        [source_link_key, target_link_key], as_index=False
+                    )
+                    .size()
+                    .rename(columns={"size": "__pair_count"})
+                )
                 source_with_target = source_with_target.merge(
                     source_group_counts, on=source_link_key, how="left"
-                )
+                ).merge(pair_counts, on=[source_link_key, target_link_key], how="left")
 
-                # Divide values by source group count (per-person share)
                 for col in agg_cols:
                     source_with_target[col] = (
-                        source_with_target[col] / source_with_target["__source_count"]
+                        source_with_target[col]
+                        * source_with_target["__pair_count"]
+                        / source_with_target["__source_count"]
                     )
 
-                # Now aggregate (sum of per-person shares) to target level
                 aggregated = source_with_target.groupby(
                     target_link_key, as_index=False
                 )[agg_cols].sum()
