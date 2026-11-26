@@ -353,39 +353,51 @@ def map_to_entity(
                 )[agg_cols].first()
             elif how == "divide":
                 # Split each source value equally among the source's members,
-                # then sum those per-person shares within each target group.
-                # source_with_target has one row per (source, target) pair, so
-                # each row carries the shares of the members that pair holds:
-                # value * pair_count / source_count. A source's shares then
-                # add up to its value, whichever targets its members are in.
-                # A member with no target link keeps its share out of every
+                # then give each target group the shares of the members it
+                # holds: value / source_count * pair_count for each (source,
+                # target) row of source_with_target. A source whose members
+                # all link to target groups passes on its whole value. A
+                # member with no target link keeps its share out of every
                 # target, and a source with no members adds nothing, as in
                 # group -> person divide followed by person -> group sum.
-                source_group_counts = (
-                    person_df.groupby(source_link_key, as_index=False)
-                    .size()
-                    .rename(columns={"size": "__source_count"})
-                )
+                # Rows without a target carry no share, so they drop out here
+                # and every remaining row has integer counts. Dividing before
+                # multiplying keeps large values finite, and integer counts
+                # keep Decimal and other object values working.
+                linked = source_with_target[source_with_target[target_link_key].notna()]
+                pair_keys = [source_link_key, target_link_key]
                 pair_counts = (
-                    person_df.groupby(
-                        [source_link_key, target_link_key], as_index=False
-                    )
+                    person_df.groupby(pair_keys, observed=True)
                     .size()
-                    .rename(columns={"size": "__pair_count"})
+                    .rename("__pair_count")
+                    .reset_index()
                 )
-                source_with_target = source_with_target.merge(
-                    source_group_counts, on=source_link_key, how="left"
-                ).merge(pair_counts, on=[source_link_key, target_link_key], how="left")
+                source_counts = (
+                    person_df.groupby(source_link_key, observed=True)
+                    .size()
+                    .rename("__source_count")
+                    .reset_index()
+                )
+                # Look the counts up on a frame of keys alone, so no source
+                # column can collide with the count names.
+                counts = (
+                    linked[pair_keys]
+                    .merge(pair_counts, on=pair_keys, how="left")
+                    .merge(source_counts, on=source_link_key, how="left")
+                )
+                source_n = pd.Series(
+                    counts["__source_count"].to_numpy(), index=linked.index
+                )
+                pair_n = pd.Series(
+                    counts["__pair_count"].to_numpy(), index=linked.index
+                )
 
+                shares = linked[[target_link_key]].copy()
                 for col in agg_cols:
-                    source_with_target[col] = (
-                        source_with_target[col]
-                        * source_with_target["__pair_count"]
-                        / source_with_target["__source_count"]
-                    )
+                    shares[col] = linked[col] / source_n * pair_n
 
-                aggregated = source_with_target.groupby(
-                    target_link_key, as_index=False
+                aggregated = shares.groupby(
+                    target_link_key, as_index=False, observed=True
                 )[agg_cols].sum()
             else:
                 raise ValueError(f"Unsupported aggregation method: {how}")

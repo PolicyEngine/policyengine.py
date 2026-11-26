@@ -14,6 +14,7 @@ without a country model under ``pytest --noconftest``.
 """
 
 from collections import Counter, namedtuple
+from decimal import Decimal
 from itertools import permutations
 
 import numpy as np
@@ -234,6 +235,24 @@ def test_divide_gives_each_target_its_members_shares(case):
             ), (source, target, column)
 
 
+@settings(max_examples=100, deadline=None)
+@given(entity_data(nested=False), st.randoms(use_true_random=False))
+def test_divide_counts_members_whatever_their_weights(case, rng):
+    """Divide splits by head count, so reweighting people changes no share."""
+    person = pd.DataFrame(case.data["person"]).copy()
+    person["person_weight"] = [rng.choice([0.5, 1.0, 3.0, 7.0]) for _ in person.index]
+    reweighted = {
+        **case.data,
+        "person": MicroDataFrame(person, weights="person_weight"),
+    }
+    for source, target in permutations(GROUPS, 2):
+        assert _mapped(
+            reweighted, source, target, "divide"
+        ).to_numpy() == pytest.approx(
+            _mapped(case.data, source, target, "divide").to_numpy(), abs=ABS
+        ), (source, target)
+
+
 @settings(max_examples=200, deadline=None)
 @given(entity_data(nested=False))
 def test_divide_matches_the_route_through_persons(case):
@@ -389,3 +408,100 @@ def test_divide_leaves_out_the_share_of_a_member_with_no_target_link():
     }
     mapped = _mapped(data, "tax_unit", "household", "divide", ["value"])
     assert mapped["value"].tolist() == [50.0]
+
+
+def _one_tax_unit(households, values: dict, weights=None) -> dict:
+    """Tables for tax unit 7, whose members link to ``households``.
+
+    ``values`` maps a column name to the tax unit's amount, kept as given so
+    integer, Decimal and other dtypes reach map_to_entity unchanged. A
+    household link of None leaves that member without a household.
+    """
+    person = pd.DataFrame(
+        {
+            "person_id": range(len(households)),
+            "household_id": list(households),
+            "tax_unit_id": [7] * len(households),
+            "person_weight": weights or [1.0] * len(households),
+        }
+    )
+    tax_unit = pd.DataFrame({"tax_unit_id": [7], "tax_unit_weight": 1.0})
+    for column, amount in values.items():
+        tax_unit[column] = pd.Series(
+            [amount], dtype=object if isinstance(amount, Decimal) else None
+        )
+    linked = sorted({h for h in households if h is not None})
+    household = pd.DataFrame({"household_id": linked, "household_weight": 1.0})
+    return {
+        "person": MicroDataFrame(person, weights="person_weight"),
+        "tax_unit": MicroDataFrame(tax_unit, weights="tax_unit_weight"),
+        "household": MicroDataFrame(household, weights="household_weight"),
+    }
+
+
+def test_divide_keeps_large_values_finite():
+    """Dividing before multiplying keeps the largest int64 and float64 values
+    in range: two members in one household pass on the whole amount."""
+    big_int = _mapped(
+        _one_tax_unit([1, 1], {"value": np.int64(2**62)}),
+        "tax_unit",
+        "household",
+        "divide",
+        ["value"],
+    )
+    assert big_int["value"].tolist() == pytest.approx([float(2**62)])
+    big_float = _mapped(
+        _one_tax_unit([1, 1], {"value": 1e308}),
+        "tax_unit",
+        "household",
+        "divide",
+        ["value"],
+    )
+    assert big_float["value"].tolist() == [1e308]
+
+
+def test_divide_maps_columns_named_like_its_counts():
+    """Source columns may share the names divide uses for its counts."""
+    data = _one_tax_unit([1], {"__pair_count": 100.0, "__source_count": 200.0})
+    mapped = _mapped(
+        data, "tax_unit", "household", "divide", ["__pair_count", "__source_count"]
+    )
+    assert mapped[["__pair_count", "__source_count"]].values.tolist() == [
+        [100.0, 200.0]
+    ]
+
+
+def test_divide_keeps_decimal_amounts_when_a_member_has_no_target():
+    """A Decimal $100.00 split between a linked and an unlinked member gives
+    the linked member's household Decimal $50.00."""
+    data = _one_tax_unit([1, None], {"value": Decimal("100.00")})
+    mapped = _mapped(data, "tax_unit", "household", "divide", ["value"])
+    assert mapped["value"].tolist() == [Decimal("50.00")]
+
+
+def test_divide_counts_members_not_their_weights():
+    """A $100 unit with one member in each of two households, weighted 1 and
+    3, gives each household $50."""
+    data = _one_tax_unit([1, 2], {"value": 100.0}, weights=[1.0, 3.0])
+    mapped = _mapped(data, "tax_unit", "household", "divide", ["value"])
+    assert dict(zip(mapped["household_id"], mapped["value"])) == {1: 50.0, 2: 50.0}
+
+
+@settings(max_examples=50, deadline=None)
+@given(entity_data(nested=False))
+def test_divide_with_categorical_links_matches_plain_links(case):
+    """Categorical person links give the same shares as plain ones."""
+    person = pd.DataFrame(case.data["person"]).copy()
+    for column in person.columns:
+        if column.endswith("_id") and column != "person_id":
+            person[column] = person[column].astype("category")
+    categorical = {
+        **case.data,
+        "person": MicroDataFrame(person, weights="person_weight"),
+    }
+    for source, target in permutations(GROUPS, 2):
+        assert _mapped(
+            categorical, source, target, "divide"
+        ).to_numpy() == pytest.approx(
+            _mapped(case.data, source, target, "divide").to_numpy(), abs=ABS
+        ), (source, target)
