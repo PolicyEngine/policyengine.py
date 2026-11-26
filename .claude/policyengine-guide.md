@@ -466,7 +466,7 @@ gov.usda.snap.normal_allotment.max[1]  # 1 person
 - `how='sum'`: Aggregate by summing (person → group default)
 - `how='first'`: Take first value in group
 - `how='project'`: Broadcast group value to members (group → person default)
-- `how='divide'`: Split equally among members
+- `how='divide'`: Split equally among members; between groups, each member's share goes to the target group that member is in
 
 ## Response patterns
 

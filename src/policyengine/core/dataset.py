@@ -45,7 +45,8 @@ class YearData(BaseModel):
             target_entity (str): The target entity name.
             columns (list[str], optional): List of column names to map. If None, maps all columns.
             values (list, optional): List of values to use instead of column data.
-            how (str): Aggregation method ('sum' or 'first') when mapping to higher-level entities (default 'sum').
+            how (str): Aggregation method (default 'sum'). See the module-level
+                map_to_entity for the methods each direction accepts.
 
         Returns:
             MicroDataFrame: The mapped data at the target entity level.
@@ -120,8 +121,11 @@ def map_to_entity(
         values: List of values to use instead of column data. If provided, creates a single unnamed column
         how: Aggregation method (default 'sum')
             - For person → group: 'sum' (aggregate), 'first' (take first value)
-            - For group → person: 'project' (broadcast), 'divide' (split equally)
-            - For group → group: 'sum', 'first', 'project', 'divide'
+            - For group → person: 'project' (broadcast; the default 'sum' maps to
+              it), 'divide' (split equally)
+            - For group → group: 'sum', 'first', 'project', 'divide' (split
+              equally among the source's members, each share going to the
+              target group that member is in)
 
     Returns:
         MicroDataFrame: The mapped data at the target entity level
@@ -348,25 +352,52 @@ def map_to_entity(
                     target_link_key, as_index=False
                 )[agg_cols].first()
             elif how == "divide":
-                # Count persons in each source group
-                source_group_counts = (
-                    person_df.groupby(source_link_key, as_index=False)
+                # Split each source value equally among the source's members,
+                # then give each target group the shares of the members it
+                # holds: value / source_count * pair_count for each (source,
+                # target) row of source_with_target. A source whose members
+                # all link to target groups passes on its whole value. A
+                # member with no target link keeps its share out of every
+                # target, and a source with no members adds nothing, as in
+                # group -> person divide followed by person -> group sum.
+                # Rows without a target carry no share, so they drop out here
+                # and every remaining row has integer counts. Dividing before
+                # multiplying keeps large values finite, and integer counts
+                # keep Decimal and other object values working.
+                linked = source_with_target[source_with_target[target_link_key].notna()]
+                pair_keys = [source_link_key, target_link_key]
+                pair_counts = (
+                    person_df.groupby(pair_keys, observed=True)
                     .size()
-                    .rename(columns={"size": "__source_count"})
+                    .rename("__pair_count")
+                    .reset_index()
                 )
-                source_with_target = source_with_target.merge(
-                    source_group_counts, on=source_link_key, how="left"
+                source_counts = (
+                    person_df.groupby(source_link_key, observed=True)
+                    .size()
+                    .rename("__source_count")
+                    .reset_index()
+                )
+                # Look the counts up on a frame of keys alone, so no source
+                # column can collide with the count names.
+                counts = (
+                    linked[pair_keys]
+                    .merge(pair_counts, on=pair_keys, how="left")
+                    .merge(source_counts, on=source_link_key, how="left")
+                )
+                source_n = pd.Series(
+                    counts["__source_count"].to_numpy(), index=linked.index
+                )
+                pair_n = pd.Series(
+                    counts["__pair_count"].to_numpy(), index=linked.index
                 )
 
-                # Divide values by source group count (per-person share)
+                shares = linked[[target_link_key]].copy()
                 for col in agg_cols:
-                    source_with_target[col] = (
-                        source_with_target[col] / source_with_target["__source_count"]
-                    )
+                    shares[col] = linked[col] / source_n * pair_n
 
-                # Now aggregate (sum of per-person shares) to target level
-                aggregated = source_with_target.groupby(
-                    target_link_key, as_index=False
+                aggregated = shares.groupby(
+                    target_link_key, as_index=False, observed=True
                 )[agg_cols].sum()
             else:
                 raise ValueError(f"Unsupported aggregation method: {how}")
