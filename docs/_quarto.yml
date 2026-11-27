@@ -58,6 +58,7 @@ website:
           - release-bundles.md
           - receipts.md
           - data-publishing-design.md
+          - weighted-module-design.md
           - examples.md
           - dev.md
 
