@@ -210,6 +210,12 @@ token from a Hugging Face account with access:
 export HUGGING_FACE_TOKEN=hf_...
 ```
 
+PolicyEngine grants access per Hugging Face account, not per token. To request
+it, email [contact@policyengine.org](mailto:contact@policyengine.org) with your
+Hugging Face username and enough information to verify your licensed access to
+the UK Data Service source data. Once access is granted, create a read token in
+your Hugging Face settings.
+
 For `policyengine.py` analyses, use the logical dataset name from the release
 bundle. `ensure_datasets` resolves it to the pinned private Hugging Face file,
 downloads it, caches it locally, and creates year-specific uprated datasets:
@@ -251,6 +257,22 @@ The bundle API uses the repository type recorded in the bundle, so callers do
 not need repository-specific download logic. Authentication or authorization
 failures are reported directly and do not cause a retry against another
 repository type.
+
+### Working without UK data access
+
+Without access to the private repositories:
+
+- UK household calculations (`pe.uk.calculate_household`) need no data and work
+  as normal.
+- US population data is public, so the US examples run without a token.
+- A UK population run fails with a `DatasetMaterializationError` from the
+  download. No public or synthetic UK population file is published.
+- `pe.uk.managed_microsimulation(dataset=path, allow_unmanaged=True)` runs on a
+  local `.h5` file in policyengine-uk's dataset format, for example one you
+  built yourself from your own licensed survey data. Such a file is not
+  certified: its results can differ from published PolicyEngine figures, and
+  `sim.policyengine_bundle` records the local path as the source with no
+  certified SHA-256.
 
 ### UK year files and the data year
 
